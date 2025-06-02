@@ -1,7 +1,8 @@
-from argparse import ArgumentParser, Namespace
 import os
+from argparse import ArgumentParser, Namespace
+from tempfile import mkdtemp
 
-from app import config
+from app import config, task_runner
 from app.tasks.usebench_task import UseBenchTask
 
 
@@ -43,14 +44,21 @@ def parse_args():
     return parser.parse_args(), subparser_dest_attr_name
 
 
-
 def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
     subcommand = getattr(args, subparser_dest_attr_name, None)
     if subcommand == "usebench":
-        pass
-        ## TODO: create UseBenchTask and run it
+        uid = args.task_id
+        local_path = mkdtemp(prefix=f"acr_usebench_{uid}")
+        usebench_task = UseBenchTask(
+            uid=uid,
+            project_path=local_path,
+        )
+
+        task_runner.run(usebench_task, args.output_dir)
+
     else:
         raise ValueError(f"Unknown command: {subcommand}")
+
 
 def main():
     args, subparser_dest_attr_name = parse_args()

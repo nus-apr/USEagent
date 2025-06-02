@@ -1,46 +1,13 @@
-from dataclasses import dataclass
 
+
+import docker
+from docker.models.containers import Container
 from usebench.api import runner as usebench_runner
 from usebench.api.datatypes.UnifiedBenchmarkEntry import UnifiedBenchmarkEntry
 from usebench.api.utilities.id_management import lookup_uid_from_dataset
 
-from docker.models.containers import Container
 
-from subprocess import DEVNULL, CalledProcessError
-
-from utils import cd, run_command
-
-
-class GitRepository:
-    """
-    Encapsulates everything related to a code respository (must be git).
-    """
-
-    local_path: str
-
-    def __init__(self, local_path: str):
-        self.local_path = local_path
-        self._configure_git()
-
-    def _configure_git(self) -> None:
-        """
-        Configure git user name and email for the repository.
-        This is necessary for committing changes.
-        """
-        run_command(["git", "config", "--global", "user.name", "USEagent"])
-        run_command(
-            ["git", "config", "--global", "user.email", "useagent@useagent.com"]
-        )
-
-    def repo_clean_changes(self) -> None:
-        """
-        Reset repo to HEAD. Basically clean active changes and untracked files on top of HEAD.
-        """
-        with cd(self.local_path):
-            reset_cmd = ["git", "reset", "--hard"]
-            clean_cmd = ["git", "clean", "-fd"]
-            run_command(reset_cmd, stdout=DEVNULL, stderr=DEVNULL)
-            run_command(clean_cmd, stdout=DEVNULL, stderr=DEVNULL)
+from app.state.git_repo import GitRepository
 
 
 _DEFAULT_DATASET_PATH: str = (
@@ -60,6 +27,7 @@ class UseBenchTask:
         self.uid = uid
         # Initialize the git repository for the project
         self.git_repo = GitRepository(local_path=project_path)
+        self.setup_project()
 
     def execute_command(
         self, command: str, timeout: int | None = None
@@ -116,9 +84,50 @@ class UseBenchTask:
         entry = self._lookup_benchmark_entry()
         stmt = entry.full_task_statement
 
+        # TODO: this should be added in the benchmark code.
         if "repotest" in self.uid:
             stmt = (
                 "I want to add new tests to a new function that was just implemented. Very likely there is no existing tests for this function in the codebase, so I want you to add new tests for it.\n"
                 + stmt
             )
         return stmt
+
+
+    def setup_project(self) -> None:
+        """
+        Obtain a clean container from the benchmark, mount a volume for source code, and set
+        appropriate permissions on the source code directory.
+        The local path is self.project_path.
+        """
+        # Initialize Docker client
+        client = docker.from_env()
+
+        # Get the container by name
+        container = usebench_runner.get_new_container_with_source_volume(
+            uid=self.uid,
+            outside_path=self.git_repo.local_path,
+            docker_client=client,
+            dataset_path_or_name=_DEFAULT_DATASET_PATH,
+        )
+
+        if container is None:
+            raise ValueError(
+                f"Failed to get container for uid {self.uid} from USE-bench."
+            )
+
+        # TODO: should this be run in the benchmark instead?
+        cmd = "git config --global --add safe.directory /testbed"
+        usebench_runner.run_command(
+            uid=self.uid,
+            command=cmd,
+            dataset_path_or_name=_DEFAULT_DATASET_PATH,
+        )
+
+        install_cmd = "pip install pytest"
+        usebench_runner.run_command(
+            uid=self.uid,
+            command=install_cmd,
+            dataset_path_or_name=_DEFAULT_DATASET_PATH,
+        )
+
+        self.container = container
