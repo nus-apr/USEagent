@@ -7,7 +7,9 @@ from pathlib import Path
 
 from loguru import logger
 
+from app.state.state import TaskState
 from app.tasks.usebench_task import UseBenchTask
+from app.agents.meta.agent import agent_loop
 
 
 def run(task: UseBenchTask, output_dir: str):
@@ -36,4 +38,13 @@ def _run(task: UseBenchTask, task_output_dir: Path):
 
     start_time = datetime.now()
 
+    # construct task state
+    task_state = TaskState(
+        task=task,
+        git_repo=task.git_repo,
+    )
 
+    # start main agent loop
+    result = agent_loop(task_state)
+
+    logger.info(f"Task {task.uid} completed with result: {result}")

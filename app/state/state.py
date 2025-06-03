@@ -5,6 +5,7 @@ Persistent state for task, which is shared between MetaAgent and actions.
 from dataclasses import dataclass, field
 
 from app.state.git_repo import GitRepository
+from app.tasks.usebench_task import UseBenchTask
 
 
 @dataclass
@@ -29,6 +30,8 @@ class DiffStore:
 
 @dataclass
 class TaskState:
+    # TODO: generalize to other types of tasks
+    task: UseBenchTask
     git_repo: GitRepository
 
     code_locations: list[Location] = field(default_factory=list)
@@ -38,3 +41,14 @@ class TaskState:
 
     # stores any additional knowledge to remember
     additional_knowledge: dict[str, str] = field(default_factory=dict)
+
+    def to_model_repr(self) -> str:
+        """Return a string representation of the task state."""
+        res = ""
+        res += f"Code Locations: {self.code_locations}\n"
+        res += f"Test Locations: {self.test_locations}\n"
+        res += f"Diff Store: {self.diff_store.id_to_diff}\n"
+
+        res += f"Additional Knowledge: {self.additional_knowledge}\n"
+
+        return res

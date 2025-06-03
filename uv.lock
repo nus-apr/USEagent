@@ -1774,7 +1774,7 @@ dependencies = [
 requires-dist = [
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "pydantic-ai", extras = ["logfire"], specifier = ">=0.2.12" },
-    { name = "usebench", git = "ssh://****@github.com/nus-apr/use-bench.git?rev=f2cf19e" },
+    { name = "usebench", git = "ssh://git@github.com/nus-apr/use-bench.git?rev=f2cf19e" },
 ]
 
 [[package]]
