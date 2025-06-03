@@ -8,10 +8,8 @@ RUN apt-get update && \
     ca-certificates \
     curl \
     git \
-    gnupg2 \
     lsb-release \
-    openssh-client \
-    vim && \
+    openssh-client && \
     rm -rf /var/lib/apt/lists/*
 
 # install uv
