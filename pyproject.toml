@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "usebench @ git+ssh://git@github.com/nus-apr/use-bench.git@f2cf19e",
     "loguru>=0.7.3",
     "pydantic-ai[logfire]>=0.2.12",
 ]
