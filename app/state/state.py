@@ -11,10 +11,10 @@ from app.tasks.usebench_task import UseBenchTask
 @dataclass
 class Location:
     rel_file_path: str
-    abs_file_path: str
-    # line numbers are 1-based
-    start: int | None
-    end: int | None
+    start_line: int
+    end_line: int
+    code_content: str
+    reason_why_relevant: str
 
 
 @dataclass
@@ -41,6 +41,10 @@ class TaskState:
 
     # stores any additional knowledge to remember
     additional_knowledge: dict[str, str] = field(default_factory=dict)
+
+    def __init__(self, task: UseBenchTask, git_repo: GitRepository):
+        self.task = task
+        self.git_repo = git_repo
 
     def to_model_repr(self) -> str:
         """Return a string representation of the task state."""

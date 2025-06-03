@@ -4,7 +4,9 @@ Bash tool.
 
 import asyncio
 import os
-from typing import Any, Literal
+from typing import Any, Literal, Callable
+
+from loguru import logger
 
 from app.tools.base import CLIResult, ToolError, ToolResult
 
@@ -24,7 +26,7 @@ class _BashSession:
         self._started = False
         self._timed_out = False
 
-    async def start(self):
+    async def start(self, init_dir: str | None = None):
         if self._started:
             return
 
@@ -33,6 +35,7 @@ class _BashSession:
             preexec_fn=os.setsid,
             shell=True,
             bufsize=0,
+            cwd=init_dir,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -116,8 +119,20 @@ class BashTool:
 
     _session: _BashSession | None
 
-    def __init__(self):
+    """Default working directory for the bash session."""
+    default_working_dir: str
+
+    """A function that transforms the command before it is executed."""
+    command_transformer: Callable[[str], str]
+
+    def __init__(
+        self,
+        default_working_dir: str,
+        command_transformer: Callable[[str], str] = lambda x: x,
+    ):
         self._session = None
+        self.default_working_dir = default_working_dir
+        self.command_transformer = command_transformer
 
     async def __call__(
         self, command: str | None = None, restart: bool = False, **kwargs
@@ -126,21 +141,30 @@ class BashTool:
             if self._session:
                 self._session.stop()
             self._session = _BashSession()
-            await self._session.start()
+            await self._session.start(self.default_working_dir)
 
             return ToolResult(system="tool has been restarted.")
 
         if self._session is None:
             self._session = _BashSession()
-            await self._session.start()
+            await self._session.start(self.default_working_dir)
 
         if command is not None:
-            return await self._session.run(command)
+            transformed_command = self.command_transformer(command)
+            return await self._session.run(transformed_command)
 
         raise ToolError("no command provided.")
 
 
-bash_tool_instance = BashTool()
+_bash_tool_instance: BashTool | None = None
+
+
+def init_bash_tool(
+    default_working_dir: str, command_transformer: Callable[[str], str] = lambda x: x
+) -> None:
+    """Initialize a bash tool instance. Must be called before registering any bash tool to any agent."""
+    global _bash_tool_instance
+    _bash_tool_instance = BashTool(default_working_dir, command_transformer)
 
 
 async def bash_tool(command: str) -> ToolResult:
@@ -152,4 +176,17 @@ async def bash_tool(command: str) -> ToolResult:
     Returns:
         ToolResult: The result of the command execution.
     """
-    return await bash_tool_instance(command)
+    logger.info(f"[Tool] Invoked bash_tool with command: {command}")
+
+    assert _bash_tool_instance is not None, (
+        "bash_tool_instance is not initialized. "
+        "Call init_bash_tool() before using the bash tool."
+    )
+
+    result = await _bash_tool_instance(command)
+
+    logger.info(
+        f"[Tool] bash_tool result: output={result.output}, error={result.error}"
+    )
+
+    return result

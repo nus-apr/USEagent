@@ -45,6 +45,7 @@ def _run(task: UseBenchTask, task_output_dir: Path):
     )
 
     # start main agent loop
+    logger.info(f"Starting main agent loop")
     result = agent_loop(task_state)
 
     logger.info(f"Task {task.uid} completed with result: {result}")

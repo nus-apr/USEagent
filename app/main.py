@@ -54,6 +54,7 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
             project_path=local_path,
         )
 
+        print(f"Running UseBench task with ID: {usebench_task.uid}")
         task_runner.run(usebench_task, args.output_dir)
 
     else:
@@ -68,3 +69,7 @@ def main():
         config.output_dir = os.path.abspath(config.output_dir)
 
     handle_command(args, subparser_dest_attr_name)
+
+
+if __name__ == "__main__":
+    main()

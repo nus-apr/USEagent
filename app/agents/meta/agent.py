@@ -1,20 +1,23 @@
 ## NOTE: implment MeteAgent with agent delegation
 
+from pathlib import Path
 from string import Template
+
+from loguru import logger
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.usage import UsageLimits
-from pathlib import Path
 
 from app import config
-
-from app.state.state import TaskState, Location
-
 from app.agents.search_code.agent import search_code_agent
+from app.state.state import Location, TaskState
+from app.tools.bash import init_bash_tool
 
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 # TODO: define the output type
-meta_agent = Agent(config.model, instructions=SYSTEM_PROMPT, deps_type=TaskState, output_type=str)
+meta_agent = Agent(
+    config.model, instructions=SYSTEM_PROMPT, deps_type=TaskState, output_type=str
+)
 
 
 ## This adds the task description to instructions (SYSTEM prompt).
@@ -36,13 +39,23 @@ async def search_code(ctx: RunContext[TaskState], instruction: str) -> list[Loca
     """Search for relevant locations in the codebase. Only search in source code files, not test files.
 
     Args:
-        instruction (str): Instruction on what to search for in the codebase.
+        instruction (str): Comprehensive instruction for the search, including keywords, file types, and other criteria. Give as many details as possible to improve the search results.
 
     Returns:
         list[Location]: List of locations in the codebase that match the search criteria.
     """
+    logger.info(f"[MetaAgent] Invoked search_code with instruction: {instruction}")
     r = await search_code_agent.run(instruction, deps=ctx.deps)
-    return r.output
+    res = r.output
+    logger.info(f"[MetaAgent] search_code result: {res}")
+
+    # update task state with the found code locations
+    ctx.deps.code_locations.extend(res)
+
+    return res
+
+
+### Action definitions END
 
 
 @meta_agent.tool
@@ -53,13 +66,23 @@ async def view_task_state(ctx: RunContext[TaskState]) -> str:
     Returns:
         str: The string representation of the current task state.
     """
-    return ctx.deps.to_model_repr()
+    logger.info("[MetaAgent] Invoked view_task_state")
+    res = ctx.deps.to_model_repr()
+    logger.info(f"[MetaAgent] view_task_state result: {res}")
+    return res
 
 
 def agent_loop(task_state: TaskState):
     """
     Main agent loop.
     """
-    result = meta_agent.run_sync("Invoke tools to complete the task", deps=task_state)
+    # first initialize some of the tools based on the task.
+    init_bash_tool(
+        task_state.task.project_path,
+        command_transformer=task_state.task.command_transformer,
+    )
+
+    # actually running the agent
+    result = meta_agent.run_sync("Invoke tools to complete the task.", deps=task_state)
 
     return result.output
