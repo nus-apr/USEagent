@@ -5,7 +5,7 @@
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.usage import UsageLimits
 
-from app.config import model
+from app import config
 
 from app.state.state import TaskState, Location
 
@@ -13,7 +13,7 @@ SYSTEM_PROMPT = (
 
 )
 
-meta_agent = Agent(model, system_prompt=SYSTEM_PROMPT, deps_type=TaskState)
+meta_agent = Agent(config.model, system_prompt=SYSTEM_PROMPT, deps_type=TaskState)
 
 
 
@@ -29,3 +29,4 @@ async def search_code(ctx: RunContext[TaskState], instruction: str) -> list[Loca
     Returns:
         list[Location]: List of locations in the codebase that match the search criteria.
     """
+    pass
