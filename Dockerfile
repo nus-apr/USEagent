@@ -16,8 +16,12 @@ RUN apt-get update && \
 # install uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-WORKDIR /app
+WORKDIR /useagent
 
-COPY . /app/
+COPY . /useagent/
 
+# install all dependencies including usebench
 RUN uv sync
+
+# usebench data migration
+RUN uv run usebench-migration /useagent/data
