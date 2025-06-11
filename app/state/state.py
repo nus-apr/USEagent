@@ -27,6 +27,12 @@ class DiffEntry:
 class DiffStore:
     id_to_diff: dict[str, DiffEntry] = field(default_factory=dict)
 
+    def add_entry(self, entry: DiffEntry) -> str:
+        """Add an existing diff entry and return its ID."""
+        diff_id = f"diff_{len(self.id_to_diff)}"
+        self.id_to_diff[diff_id] = entry
+        return diff_id
+
 
 @dataclass
 class TaskState:
@@ -45,6 +51,10 @@ class TaskState:
     def __init__(self, task: UseBenchTask, git_repo: GitRepository):
         self.task = task
         self.git_repo = git_repo
+        self.code_locations = []
+        self.test_locations = []
+        self.diff_store = DiffStore()
+        self.additional_knowledge = {}
 
     def to_model_repr(self) -> str:
         """Return a string representation of the task state."""

@@ -1,4 +1,4 @@
-
+## Set up
 
 ```
 # install dependencies, including usebench
@@ -27,6 +27,12 @@ DOCKER_BUILDKIT=1 docker build --build-arg BASE_IMAGE=usebench.sweb.eval.x86_64.
 
 
 ## Run
+
+Start a container:
+
+```
+docker run -it --name test useagent
+```
 
 Run agent in the container. Assuming at path `/useagent`:
 

@@ -4,7 +4,7 @@ Bash tool.
 
 import asyncio
 import os
-from typing import Any, Literal, Callable
+from typing import Callable
 
 from loguru import logger
 
