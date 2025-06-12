@@ -8,6 +8,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.usage import UsageLimits
 
 from app import config
+from app.config import ConfigSingleton 
 from app.agents.edit_code.agent import edit_code_agent
 from app.agents.search_code.agent import search_code_agent
 from app.state.state import DiffEntry, Location, TaskState
@@ -17,7 +18,7 @@ from app.tools.edit import init_edit_tools
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 # TODO: define the output type
 meta_agent = Agent(
-    config.model, instructions=SYSTEM_PROMPT, deps_type=TaskState, output_type=str
+    ConfigSingleton.config.model, instructions=SYSTEM_PROMPT, deps_type=TaskState, output_type=str
 )
 
 
