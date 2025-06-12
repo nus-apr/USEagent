@@ -64,3 +64,19 @@ docker rm useagent-turbo-test && docker image rm useagent-turbo:dev
 | 'anthropic:claude-3-5-sonnet-latest' | `ANTHROPIC_API_KEY` |
 
 See more [at pydantic API Documentation](https://ai.pydantic.dev/models/)
+
+**Locally Hosted OLLama** _(assuming there is one running)_, 
+see more examples [at the pydantic OpenAI documentation](https://ai.pydantic.dev/models/openai/)
+
+```shell
+docker run -it --network=host --name useagent-turbo-test useagent-turbo:dev
+```
+
+*Linux*
+```shell
+PYTHONPATH=. uv run python app/main.py usebench --model llama3.3:70b  --provider-url http://localhost:11434/v1 --task-id swe_django__django-10914 --output-dir /output
+```
+*Macos*
+```shell
+PYTHONPATH=. uv run python app/main.py usebench --model llama3.2 --provider-url http://host.docker.internal:11434 --task-id swe_django__django-10914 --output-dir /output
+```

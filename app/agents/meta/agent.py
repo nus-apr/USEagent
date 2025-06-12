@@ -18,8 +18,18 @@ from app.tools.edit import init_edit_tools
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 # TODO: define the output type
 def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
+    # For locally hosted URLs
+    provider_kwargs = (
+        {"provider": OpenAIProvider(base_url=config.provider_url, api_key="ollama-dummy")}
+        if config.provider_url
+        else {}
+    )
     meta_agent = Agent(
-        ConfigSingleton.config.model, instructions=SYSTEM_PROMPT, deps_type=TaskState, output_type=str
+        ConfigSingleton.config.model, 
+        instructions=SYSTEM_PROMPT, 
+        deps_type=TaskState, 
+        output_type=str,
+        **provider_kwargs
     )
 
     ## This adds the task description to instructions (SYSTEM prompt).

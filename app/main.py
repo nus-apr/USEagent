@@ -21,6 +21,13 @@ def add_common_args(parser: ArgumentParser) -> None:
     )
 
     parser.add_argument(
+        "--provider-url",
+        type=str,
+        default=None,
+        help="URL for locally hosted instances like Ollama.",
+    )
+
+    parser.add_argument(
         "--task-id",
         type=str,
         help="Unique identifier for the task run.",
@@ -73,7 +80,8 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
 
 def build_and_register_config(args: Namespace) -> AppConfig:
     output_dir = os.path.abspath(args.output_dir) if args.output_dir else None
-    ConfigSingleton.init(model=args.model, output_dir=output_dir)
+    ollama_kwargs = {} if not args.provider_url else {"provider_url" : args.provider_url }
+    ConfigSingleton.init(model=args.model, output_dir=output_dir, **ollama_kwargs)
     return ConfigSingleton.config
 
 

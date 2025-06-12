@@ -5,6 +5,7 @@ from dataclasses import dataclass
 @dataclass
 class AppConfig:
     model: str
+    provider_url: Optional[str] = None # Used for Local Ollama Models and other self-hosted entities, not needed for commercial APIs
     output_dir: Optional[str] = None
 
 
@@ -22,7 +23,7 @@ class ConfigSingleton:
     config = _LazyProxy()  # public interface
 
     @classmethod
-    def init(cls, model: str, output_dir: Optional[str] = None):
+    def init(cls, model: str, output_dir: Optional[str] = None, provider_url: Optional[str] = None):
         if cls._instance is not None:
             raise RuntimeError("Config already initialized")
         cls._instance = AppConfig(model=model, output_dir=output_dir)

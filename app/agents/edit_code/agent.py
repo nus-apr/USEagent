@@ -12,6 +12,12 @@ from app.tools.edit import view, create, str_replace, insert, extract_diff
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
 def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
+    # For locally hosted URLs
+    provider_kwargs = (
+        {"provider": OpenAIProvider(base_url=config.provider_url, api_key="ollama-dummy")}
+        if config.provider_url
+        else {}
+    )
     return Agent(
         config.model,
         instructions=SYSTEM_PROMPT,
@@ -24,4 +30,5 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
             Tool(insert),
             Tool(extract_diff),
         ],
+        **provider_kwargs
     )
