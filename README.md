@@ -13,6 +13,7 @@ uv run usebench-migration ./data
 
 ## Docker
 
+((the ssh key is necessary for now, due to usebench being private))
 Build image with just the agent:
 
 ```shell
