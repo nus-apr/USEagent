@@ -12,7 +12,7 @@ from app.tools.bash import bash_tool
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
 def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
-    return Agent(
+    search_code_agent =  Agent(
         config.model,
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
@@ -20,30 +20,16 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         tools=[Tool(bash_tool)],
     )
 
-# TODO: Where is this added / Used? Do we have to reintroduce it?
+    @search_code_agent.instructions
+    def add_task_description(ctx: RunContext[TaskState]) -> str:
+        """Add a task description to the TaskState.
 
-#@search_code_agent.instructions
-#def add_task_description(ctx: RunContext[TaskState]) -> str:
-#    """Add a task description to the TaskState.
-#
-#    Args:
-#        ctx (RunContext[TaskState]): The context containing the task state.
-#
-#    Returns:
-#        str: The issue statement of the task.
-#    """
-#    return ctx.deps.task.get_issue_statement()
+        Args:
+            ctx (RunContext[TaskState]): The context containing the task state.
 
-
-# def init_agent(task_state: TaskState) -> Agent[GitRepository, list[Location]]:
-#     sys_prompt = Template(SYSTEM_PROMPT).substitute(
-#         task=task_state.task.get_issue_statement()
-#     )
-#     search_code_agent = Agent(
-#         config.model,
-#         instructions=sys_prompt,
-#         deps_type=GitRepository,
-#         output_type=list[Location],
-#         tools=[Tool(bash_tool)],
-#     )
-#     return search_code_agent
+        Returns:
+            str: The issue statement of the task.
+        """
+        return ctx.deps.task.get_issue_statement()
+    
+    return search_code_agent
