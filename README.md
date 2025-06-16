@@ -10,6 +10,8 @@ uv sync
 uv run usebench-migration ./data
 ```
 
+*Note*: USEBench is used to provide docker-images and texts - its docker-using APIs are not used. 
+The full work will be done on-top of the buggy usebench image. 
 
 ## Docker
 
@@ -18,7 +20,7 @@ Build image with just the agent:
 
 ```shell
 eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/github_id_ed25519
+ssh-add ~/.ssh/id_ed25519
 
 DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
 ```

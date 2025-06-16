@@ -25,7 +25,7 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         else {}
     )
     meta_agent = Agent(
-        ConfigSingleton.config.model, 
+        config.model, 
         instructions=SYSTEM_PROMPT, 
         deps_type=TaskState, 
         output_type=str,

@@ -4,7 +4,7 @@ from tempfile import mkdtemp
 
 from app.config import AppConfig, ConfigSingleton
 from app.tasks.usebench_task import UseBenchTask
-
+from app import task_runner
 
 def add_common_args(parser: ArgumentParser) -> None:
     parser.add_argument(
@@ -61,7 +61,6 @@ def parse_args():
 
 
 def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
-    from app import task_runner
     subcommand = getattr(args, subparser_dest_attr_name, None)
     if subcommand == "usebench":
         uid = args.task_id
