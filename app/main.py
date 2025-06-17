@@ -2,9 +2,9 @@ import os
 from argparse import ArgumentParser, Namespace
 from tempfile import mkdtemp
 
-from app import config, task_runner
+from app.config import AppConfig, ConfigSingleton
 from app.tasks.usebench_task import UseBenchTask
-
+from app import task_runner
 
 def add_common_args(parser: ArgumentParser) -> None:
     parser.add_argument(
@@ -14,7 +14,23 @@ def add_common_args(parser: ArgumentParser) -> None:
     )
 
     parser.add_argument(
-        "--task-id", type=str, help="Unique identifier for the task run."
+        "--model",
+        type=str,
+        default="google-gla:gemini-2.0-flash",
+        help="Model identifier to use.",
+    )
+
+    parser.add_argument(
+        "--provider-url",
+        type=str,
+        default=None,
+        help="URL for locally hosted instances like Ollama.",
+    )
+
+    parser.add_argument(
+        "--task-id",
+        type=str,
+        help="Unique identifier for the task run.",
     )
 
 
@@ -61,15 +77,17 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
         raise ValueError(f"Unknown command: {subcommand}")
 
 
+def build_and_register_config(args: Namespace) -> AppConfig:
+    output_dir = os.path.abspath(args.output_dir) if args.output_dir else None
+    ollama_kwargs = {} if not args.provider_url else {"provider_url" : args.provider_url }
+    ConfigSingleton.init(model=args.model, output_dir=output_dir, **ollama_kwargs)
+    return ConfigSingleton.config
+
+
 def main():
     args, subparser_dest_attr_name = parse_args()
-
-    config.output_dir = args.output_dir
-    if config.output_dir is not None:
-        config.output_dir = os.path.abspath(config.output_dir)
-
+    config = build_and_register_config(args)
     handle_command(args, subparser_dest_attr_name)
-
 
 if __name__ == "__main__":
     main()
