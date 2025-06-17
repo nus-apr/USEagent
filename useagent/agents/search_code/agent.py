@@ -4,10 +4,10 @@ from string import Template
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.tools import Tool
 
-from app.config import ConfigSingleton, AppConfig
-from app.state.git_repo import GitRepository
-from app.state.state import Location, TaskState
-from app.tools.bash import bash_tool
+from useagent.config import ConfigSingleton, AppConfig
+from useagent.state.git_repo import GitRepository
+from useagent.state.state import Location, TaskState
+from useagent.tools.bash import bash_tool
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 

@@ -9,3 +9,12 @@ dependencies = [
     "loguru>=0.7.3",
     "pydantic-ai[logfire]>=0.2.12",
 ]
+
+[tool.setuptools]
+packages = ["useagent"]
+
+[tool.setuptools.package-dir]
+useagent = "useagent"
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"

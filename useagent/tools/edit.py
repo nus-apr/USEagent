@@ -1,9 +1,9 @@
 import os
 from pathlib import Path
 
-from app.tools.base import CLIResult, ToolError, ToolResult
-from app.tools.run import maybe_truncate, run
-from app.utils import cd
+from useagent.tools.base import CLIResult, ToolError, ToolResult
+from useagent.tools.run import maybe_truncate, run
+from useagent.utils import cd
 
 SNIPPET_LINES: int = 4
 

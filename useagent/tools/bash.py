@@ -8,7 +8,7 @@ from typing import Callable
 
 from loguru import logger
 
-from app.tools.base import CLIResult, ToolError, ToolResult
+from useagent.tools.base import CLIResult, ToolError, ToolResult
 
 
 class _BashSession:
