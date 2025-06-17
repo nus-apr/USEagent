@@ -3,9 +3,7 @@ from pathlib import Path
 from useagent.tools.edit import view
 from useagent.tools.base import ToolError,CLIResult
 
-pytestmark = pytest.mark.asyncio
-
-
+@pytest.mark.asyncio
 async def test_view_file_entire_content(tmp_path: Path):
     file = tmp_path / "example.txt"
     content = "line1\nline2\nline3"
@@ -16,7 +14,7 @@ async def test_view_file_entire_content(tmp_path: Path):
     assert "line1" in result.output
     assert "line3" in result.output
 
-
+@pytest.mark.asyncio
 async def test_view_file_with_valid_range(tmp_path: Path):
     file = tmp_path / "example.txt"
     file.write_text("a\nb\nc\nd\ne")
@@ -28,6 +26,7 @@ async def test_view_file_with_valid_range(tmp_path: Path):
     assert "e" not in result.output
 
 
+@pytest.mark.asyncio
 async def test_view_file_with_open_ended_range(tmp_path: Path):
     file = tmp_path / "example.txt"
     file.write_text("a\nb\nc\nd")
@@ -38,6 +37,7 @@ async def test_view_file_with_open_ended_range(tmp_path: Path):
     assert "a" not in result.output
 
 
+@pytest.mark.asyncio
 async def test_view_file_invalid_range_length(tmp_path: Path):
     file = tmp_path / "bad_range.txt"
     file.write_text("x\ny\nz")
@@ -46,6 +46,7 @@ async def test_view_file_invalid_range_length(tmp_path: Path):
         await view(str(file), [1])
 
 
+@pytest.mark.asyncio
 async def test_view_file_invalid_range_order(tmp_path: Path):
     file = tmp_path / "bad_order.txt"
     file.write_text("x\ny\nz")
@@ -54,6 +55,7 @@ async def test_view_file_invalid_range_order(tmp_path: Path):
         await view(str(file), [3, 1])
 
 
+@pytest.mark.asyncio
 async def test_view_file_invalid_range_start(tmp_path: Path):
     file = tmp_path / "bad_start.txt"
     file.write_text("x\ny\nz")
@@ -62,6 +64,7 @@ async def test_view_file_invalid_range_start(tmp_path: Path):
         await view(str(file), [0, 2])
 
 
+@pytest.mark.asyncio
 async def test_view_file_invalid_range_end(tmp_path: Path):
     file = tmp_path / "bad_end.txt"
     file.write_text("x\ny\nz")
@@ -70,6 +73,7 @@ async def test_view_file_invalid_range_end(tmp_path: Path):
         await view(str(file), [1, 10])
 
 
+@pytest.mark.asyncio
 async def test_view_directory_listing(tmp_path: Path):
     subdir = tmp_path / "subdir"
     subdir.mkdir()
@@ -82,6 +86,7 @@ async def test_view_directory_listing(tmp_path: Path):
     assert "file2.txt" in result.output
 
 
+@pytest.mark.asyncio
 async def test_view_directory_with_range_fails(tmp_path: Path):
     tmp_path.mkdir()
 

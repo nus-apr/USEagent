@@ -10,6 +10,12 @@ dependencies = [
     "pydantic-ai[logfire]>=0.2.12",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio"
+]
+
 [tool.setuptools]
 packages = ["useagent"]
 
