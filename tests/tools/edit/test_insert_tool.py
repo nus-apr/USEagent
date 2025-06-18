@@ -86,7 +86,7 @@ async def test_insert_tabs_are_handled(tmp_path: Path):
     assert isinstance(result, CLIResult)
     
     # Check that tab was expanded
-    # The tab will fill the space up to 8 spaces, but see the second test for more exaples
+    # The tab will fill the space up to 8 spaces, but see the second test for more examples
     assert "a       b" in file.read_text()  # Assuming default tab = 8 spaces
 
 
