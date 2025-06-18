@@ -8,7 +8,7 @@ from useagent.utils import cd
 SNIPPET_LINES: int = 4
 
 
-_project_dir: Path
+_project_dir: Path = Path(".")
 
 
 def init_edit_tools(project_dir: str):
@@ -245,14 +245,14 @@ async def insert(file_path: str, insert_line: int, new_str: str):
     return CLIResult(output=success_msg)
 
 
-async def extract_diff():
+async def extract_diff(project_dir: Path | str = _project_dir):
     """
     Extract the diff of the current state of the repository.
 
     Returns:
         ToolResult: The result of the diff extraction, containing the output or error.
     """
-    with cd(_project_dir):
+    with cd(project_dir):
         _, stdout, stderr = await run("git diff")
         if stderr:
             raise ToolError(f"Failed to extract diff: {stderr}")
