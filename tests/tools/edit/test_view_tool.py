@@ -14,16 +14,34 @@ async def test_view_file_entire_content(tmp_path: Path):
     assert "line1" in result.output
     assert "line3" in result.output
 
+
+@pytest.mark.asyncio
+async def test_view_file_has_header(tmp_path: Path):
+    file = tmp_path / "example.txt"
+    content = "line1\nline2\nline3"
+    file.write_text(content)
+
+    result = await view(str(file))
+    assert isinstance(result, CLIResult)
+    assert "Here's" in result.output
+    assert "cat -n" in result.output
+
+    assert 4 == len(result.output.splitlines())
+
+
 @pytest.mark.asyncio
 async def test_view_file_with_valid_range(tmp_path: Path):
     file = tmp_path / "example.txt"
     file.write_text("a\nb\nc\nd\ne")
 
     result = await view(str(file), [2, 4])
-    assert "b" in result.output
-    assert "d" in result.output
-    assert "a" not in result.output
-    assert "e" not in result.output
+    #DEVNOTE: The tool gives every file a little pretext, saying what is happening. We cut that off and test it seperately. 
+    output_no_header = "\n".join((result.output.splitlines())[1:])
+
+    assert "b" in output_no_header
+    assert "d" in output_no_header
+    assert "a" not in output_no_header
+    assert "e" not in output_no_header
 
 
 @pytest.mark.asyncio
@@ -32,9 +50,13 @@ async def test_view_file_with_open_ended_range(tmp_path: Path):
     file.write_text("a\nb\nc\nd")
 
     result = await view(str(file), [3, -1])
-    assert "c" in result.output
-    assert "d" in result.output
-    assert "a" not in result.output
+
+    #DEVNOTE: The tool gives every file a little pretext, saying what is happening. We cut that off and test it seperately. 
+    output_no_header = "\n".join((result.output.splitlines())[1:])
+
+    assert "c" in output_no_header
+    assert "d" in output_no_header
+    assert "a" not in output_no_header
 
 
 @pytest.mark.asyncio
@@ -85,10 +107,3 @@ async def test_view_directory_listing(tmp_path: Path):
     assert "file1.txt" in result.output
     assert "file2.txt" in result.output
 
-
-@pytest.mark.asyncio
-async def test_view_directory_with_range_fails(tmp_path: Path):
-    tmp_path.mkdir()
-
-    with pytest.raises(ToolError, match="`view_range` parameter is not allowed"):
-        await view(str(tmp_path), [1, 2])

@@ -74,7 +74,7 @@ async def view(file_path: str, view_range: list[int] | None = None):
         view_range (list[int] | None): A list of two integers specifying the range of lines to view. Only applicable to files, not directories.
 
     Returns:
-        ToolResult: The result of the view operation, containing the output.
+        ToolResult: The result of the view operation, containing the output and a short header summarizing the used command.
     """
     path = _make_path_absolute(file_path)
 
