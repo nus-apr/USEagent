@@ -37,7 +37,7 @@ async def test_view_file_with_valid_range(tmp_path: Path):
     file.write_text("a\nb\nc\nd\ne")
 
     result = await view(str(file), [2, 4])
-    #DEVNOTE: The tool gives every file a little pretext, saying what is happening. We cut that off and test it seperately. 
+    #DEVNOTE: The tool gives every file a little pretext, saying what is happening. We cut that off and test it separately. 
     output_no_header = "\n".join((result.output.splitlines())[1:])
 
     assert "b" in output_no_header
