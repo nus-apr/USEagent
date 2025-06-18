@@ -3,6 +3,7 @@ from pathlib import Path
 from useagent.tools.edit import insert
 from useagent.tools.base import ToolError, CLIResult
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_basic_insertion(tmp_path: Path):
     file = tmp_path / "basic.txt"
@@ -16,6 +17,7 @@ async def test_insert_basic_insertion(tmp_path: Path):
     assert "inserted" in result.output
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_multiline_insertion(tmp_path: Path):
     file = tmp_path / "multi.txt"
@@ -30,6 +32,7 @@ async def test_insert_multiline_insertion(tmp_path: Path):
     assert "new2" in result.output
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_top_of_file(tmp_path: Path):
     file = tmp_path / "top.txt"
@@ -40,6 +43,7 @@ async def test_insert_top_of_file(tmp_path: Path):
     assert file.read_text().splitlines()[0] == "header"
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_bottom_of_file(tmp_path: Path):
     file = tmp_path / "bottom.txt"
@@ -51,6 +55,7 @@ async def test_insert_bottom_of_file(tmp_path: Path):
     assert file.read_text().splitlines()[-1] == "appended"
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_invalid_negative_line(tmp_path: Path):
     file = tmp_path / "negative.txt"
@@ -60,6 +65,7 @@ async def test_insert_invalid_negative_line(tmp_path: Path):
         await insert(str(file), -1, "invalid")
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_invalid_too_large_line(tmp_path: Path):
     file = tmp_path / "toolarge.txt"
@@ -69,6 +75,7 @@ async def test_insert_invalid_too_large_line(tmp_path: Path):
         await insert(str(file), 3, "invalid")  # Only 2 lines, max valid index = 2
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_tabs_are_handled(tmp_path: Path):
     file = tmp_path / "tabs.txt"
@@ -83,6 +90,7 @@ async def test_insert_tabs_are_handled(tmp_path: Path):
     assert "a       b" in file.read_text()  # Assuming default tab = 8 spaces
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_tabs_are_handled_2(tmp_path: Path):
     file = tmp_path / "tabs.txt"

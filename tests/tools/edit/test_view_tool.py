@@ -3,6 +3,7 @@ from pathlib import Path
 from useagent.tools.edit import view
 from useagent.tools.base import ToolError,CLIResult
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_view_file_entire_content(tmp_path: Path):
     file = tmp_path / "example.txt"
@@ -15,6 +16,7 @@ async def test_view_file_entire_content(tmp_path: Path):
     assert "line3" in result.output
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_view_file_has_header(tmp_path: Path):
     file = tmp_path / "example.txt"

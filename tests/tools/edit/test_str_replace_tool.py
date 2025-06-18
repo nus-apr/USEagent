@@ -3,6 +3,7 @@ from pathlib import Path
 from useagent.tools.edit import str_replace
 from useagent.tools.base import ToolError, CLIResult
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_success(tmp_path: Path):
     file = tmp_path / "sample.txt"
@@ -15,6 +16,7 @@ async def test_str_replace_success(tmp_path: Path):
     assert "hello" not in file.read_text()
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_no_occurrence(tmp_path: Path):
     file = tmp_path / "no_match.txt"
@@ -24,6 +26,7 @@ async def test_str_replace_no_occurrence(tmp_path: Path):
         await str_replace(str(file), "nomatch", "replace")
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_multiple_occurrences(tmp_path: Path):
     file = tmp_path / "multiple.txt"
@@ -33,6 +36,7 @@ async def test_str_replace_multiple_occurrences(tmp_path: Path):
         await str_replace(str(file), "repeat", "once")
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_tabs_handled(tmp_path: Path):
     file = tmp_path / "tabs.txt"
@@ -45,6 +49,7 @@ async def test_str_replace_tabs_handled(tmp_path: Path):
     assert "a" not in file.read_text()
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_multiline_new_string(tmp_path: Path):
     file = tmp_path / "multiline.txt"
@@ -61,6 +66,7 @@ async def test_str_replace_multiline_new_string(tmp_path: Path):
     assert "snippet" in result.output
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_edge_case_empty_file(tmp_path: Path):
     file = tmp_path / "empty.txt"
@@ -70,6 +76,7 @@ async def test_str_replace_edge_case_empty_file(tmp_path: Path):
         await str_replace(str(file), "anything", "nothing")
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_exact_line_match(tmp_path: Path):
     file = tmp_path / "line_match.txt"

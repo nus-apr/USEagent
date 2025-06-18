@@ -3,6 +3,7 @@ from pathlib import Path
 from useagent.tools.edit import create
 from useagent.tools.base import ToolError, ToolResult
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_create_file_success(tmp_path: Path):
     file = tmp_path / "new_file.txt"
@@ -16,6 +17,7 @@ async def test_create_file_success(tmp_path: Path):
     assert file.read_text() == content
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_create_file_already_exists(tmp_path: Path):
     file = tmp_path / "existing.txt"
@@ -25,6 +27,7 @@ async def test_create_file_already_exists(tmp_path: Path):
         await create(str(file), "New content")
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_create_empty_file(tmp_path: Path):
     file = tmp_path / "empty.txt"
@@ -36,6 +39,7 @@ async def test_create_empty_file(tmp_path: Path):
     assert file.read_text() == ""
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_create_file_nested_directory(tmp_path: Path):
     nested_dir = tmp_path / "dir1" / "dir2"
@@ -51,6 +55,7 @@ async def test_create_file_nested_directory(tmp_path: Path):
     assert file.read_text() == content
 
 
+@pytest.mark.tool
 @pytest.mark.asyncio
 async def test_create_file_path_is_directory(tmp_path: Path):
     dir_path = tmp_path / "not_a_file"
