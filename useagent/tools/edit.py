@@ -8,10 +8,12 @@ from useagent.utils import cd
 SNIPPET_LINES: int = 4
 
 
-_project_dir: Path = Path(".")
+_project_dir: Path = None
 
 
 def init_edit_tools(project_dir: str):
+    if not project_dir or (isinstance(project_dir,str) and not (project_dir.strip())):
+        raise ValueError("Cannot initialize edit-tool without a valid project dir - was given `None` or empty string.")
     global _project_dir
     _project_dir = Path(project_dir)
 
