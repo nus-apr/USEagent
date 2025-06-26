@@ -1,17 +1,19 @@
 import os
 from pathlib import Path
 
-from app.tools.base import CLIResult, ToolError, ToolResult
-from app.tools.run import maybe_truncate, run
-from app.utils import cd
+from useagent.tools.base import CLIResult, ToolError, ToolResult
+from useagent.tools.run import maybe_truncate, run
+from useagent.utils import cd
 
 SNIPPET_LINES: int = 4
 
 
-_project_dir: Path
+_project_dir: Path = None
 
 
 def init_edit_tools(project_dir: str):
+    if not project_dir or (isinstance(project_dir,str) and not (project_dir.strip())):
+        raise ValueError("Cannot initialize edit-tool without a valid project dir - was given `None` or empty string.")
     global _project_dir
     _project_dir = Path(project_dir)
 
@@ -74,7 +76,7 @@ async def view(file_path: str, view_range: list[int] | None = None):
         view_range (list[int] | None): A list of two integers specifying the range of lines to view. Only applicable to files, not directories.
 
     Returns:
-        ToolResult: The result of the view operation, containing the output.
+        ToolResult: The result of the view operation, containing the output and a short header summarizing the used command.
     """
     path = _make_path_absolute(file_path)
 
@@ -245,14 +247,14 @@ async def insert(file_path: str, insert_line: int, new_str: str):
     return CLIResult(output=success_msg)
 
 
-async def extract_diff():
+async def extract_diff(project_dir: Path | str = _project_dir):
     """
     Extract the diff of the current state of the repository.
 
     Returns:
         ToolResult: The result of the diff extraction, containing the output or error.
     """
-    with cd(_project_dir):
+    with cd(project_dir):
         _, stdout, stderr = await run("git diff")
         if stderr:
             raise ToolError(f"Failed to extract diff: {stderr}")

@@ -3,7 +3,7 @@ import subprocess
 from usebench.api.datatypes.UnifiedBenchmarkEntry import UnifiedBenchmarkEntry
 from usebench.api.utilities.id_management import lookup_uid_from_dataset
 
-from app.state.git_repo import GitRepository
+from useagent.state.git_repo import GitRepository
 
 _DEFAULT_DATASET_PATH: str = "/useagent/data"  # default path in container
 

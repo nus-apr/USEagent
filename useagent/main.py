@@ -2,9 +2,9 @@ import os
 from argparse import ArgumentParser, Namespace
 from tempfile import mkdtemp
 
-from app.config import AppConfig, ConfigSingleton
-from app.tasks.usebench_task import UseBenchTask
-from app import task_runner
+from useagent.config import AppConfig, ConfigSingleton
+from useagent.tasks.usebench_task import UseBenchTask
+from useagent import task_runner
 
 def add_common_args(parser: ArgumentParser) -> None:
     parser.add_argument(

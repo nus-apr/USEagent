@@ -7,13 +7,13 @@ from loguru import logger
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.usage import UsageLimits
 
-from app import config
-from app.config import ConfigSingleton, AppConfig
-from app.agents.edit_code.agent import init_agent as init_edit_code_agent
-from app.agents.search_code.agent import init_agent as init_search_code_agent
-from app.state.state import DiffEntry, Location, TaskState
-from app.tools.bash import init_bash_tool
-from app.tools.edit import init_edit_tools
+from useagent import config
+from useagent.config import ConfigSingleton, AppConfig
+from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
+from useagent.agents.search_code.agent import init_agent as init_search_code_agent
+from useagent.state.state import DiffEntry, Location, TaskState
+from useagent.tools.bash import init_bash_tool
+from useagent.tools.edit import init_edit_tools
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 # TODO: define the output type

@@ -7,9 +7,9 @@ from pathlib import Path
 
 from loguru import logger
 
-from app.state.state import TaskState
-from app.tasks.usebench_task import UseBenchTask
-from app.agents.meta.agent import agent_loop
+from useagent.state.state import TaskState
+from useagent.tasks.usebench_task import UseBenchTask
+from useagent.agents.meta.agent import agent_loop
 
 
 def run(task: UseBenchTask, output_dir: str):

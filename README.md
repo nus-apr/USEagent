@@ -82,3 +82,13 @@ PYTHONPATH=. uv run python app/main.py usebench --model llama3.3:70b  --provider
 ```shell
 PYTHONPATH=. uv run python app/main.py usebench --model llama3.2 --provider-url http://host.docker.internal:11434 --task-id swe_django__django-10914 --output-dir /output
 ```
+
+## Tests
+
+```shell
+uv venv
+source .venv/bin/activate  # On macOS/Linux
+# OR on Windows: .venv\Scripts\activate
+uv pip install -e ".[dev]"
+uv run pytest tests
+```
