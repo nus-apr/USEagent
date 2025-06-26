@@ -77,7 +77,7 @@ async def test_insert_invalid_too_large_line(tmp_path: Path):
 
 @pytest.mark.tool
 @pytest.mark.asyncio
-async def test_insert_tabs_are_handled(tmp_path: Path):
+async def test_insert_tabs_fill_whitespace_up_to_fixed_point(tmp_path: Path):
     file = tmp_path / "tabs.txt"
     file.write_text("line1")
 
@@ -92,7 +92,7 @@ async def test_insert_tabs_are_handled(tmp_path: Path):
 
 @pytest.mark.tool
 @pytest.mark.asyncio
-async def test_insert_tabs_are_handled_2(tmp_path: Path):
+async def test_insert_tabs_fill_whitespace_up_to_fixed_point_longer_initial_string_will_add_less_whitespace(tmp_path: Path):
     file = tmp_path / "tabs.txt"
     file.write_text("line1")
 

@@ -13,7 +13,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
-    "pytest-asyncio"
+    "pytest-asyncio",
+    "pytest-random-order"
 ]
 
 [tool.setuptools]
