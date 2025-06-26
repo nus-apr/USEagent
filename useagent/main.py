@@ -1,9 +1,12 @@
 import os
 from argparse import ArgumentParser, Namespace
 from tempfile import mkdtemp
+from pathlib import Path
+
 
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.tasks.usebench_task import UseBenchTask
+from useagent.tasks.local_task import LocalTask
 from useagent import task_runner
 
 def add_common_args(parser: ArgumentParser) -> None:
@@ -43,6 +46,23 @@ def set_usebench_parser_args(parser: ArgumentParser) -> None:
         help="Path to the file that contains all tasks ids to be run.",
     )
 
+def set_local_parser_args(parser: ArgumentParser) -> None:
+    add_common_args(parser)
+
+    parser.add_argument('--project-directory', type=Path, help="Path to the folder containing the project to operate on.")
+
+    task_group = parser.add_mutually_exclusive_group(required=True)
+    task_group.add_argument('--task-description', type=str, help="Verbatim description of what should be done.")
+    task_group.add_argument('--task-file', type=Path, help="A path to a markdown or text file containing the task.")
+
+
+
+def _get_task_description(args: Namespace) -> str:
+    if args.task_description:
+        return args.task_description
+    if args.task_file and args.task_file.is_file():
+        return args.task_file.read_text()
+    raise ValueError("Invalid task file")
 
 def parse_args():
     parser = ArgumentParser()
@@ -57,6 +77,11 @@ def parse_args():
     )
     set_usebench_parser_args(usebench_parser)
 
+    local_parser = subparsers.add_parser(
+        "local", help="Run a task from a description or file."
+    )
+    set_local_parser_args(local_parser)
+
     return parser.parse_args(), subparser_dest_attr_name
 
 
@@ -69,9 +94,15 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
             uid=uid,
             project_path=local_path,
         )
-
-        print(f"Running UseBench task with ID: {usebench_task.uid}")
         task_runner.run(usebench_task, args.output_dir)
+        
+    elif subcommand == "local":
+        local_path = args.project_directory
+        task_desc = _get_task_description(args)
+        local_task = LocalTask(
+            issue_statement=task_desc, 
+            project_path=local_path)
+        task_runner.run(local_task, args.output_dir)
 
     else:
         raise ValueError(f"Unknown command: {subcommand}")

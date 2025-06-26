@@ -110,13 +110,11 @@ def agent_loop(task_state: TaskState):
     """
     # first initialize some of the tools based on the task.
     init_bash_tool(
-        task_state.task.project_path,
+        task_state.task.get_working_directory(),
         command_transformer=task_state.task.command_transformer,
     )
-    init_edit_tools(task_state.task.project_path)
-
+    init_edit_tools(task_state.task.get_working_directory())
     meta_agent = init_agent()
-
     # actually running the agent
     result = meta_agent.run_sync("Invoke tools to complete the task.", deps=task_state)
 

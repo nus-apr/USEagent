@@ -8,11 +8,11 @@ from pathlib import Path
 from loguru import logger
 
 from useagent.state.state import TaskState
-from useagent.tasks.usebench_task import UseBenchTask
+from useagent.tasks.task import Task
 from useagent.agents.meta.agent import agent_loop
 
 
-def run(task: UseBenchTask, output_dir: str):
+def run(task: Task, output_dir: str):
     start_time_s = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     task_output_dir = Path(output_dir) / f"{task.uid}_{start_time_s}"
@@ -24,8 +24,7 @@ def run(task: UseBenchTask, output_dir: str):
         logger.error(f"Error running task {task.uid}: {e}")
 
 
-def _run(task: UseBenchTask, task_output_dir: Path):
-
+def _run(task: Task, task_output_dir: Path):
     logfile = Path(task_output_dir) / "info.log"
     logger.add(
         logfile,
@@ -47,5 +46,4 @@ def _run(task: UseBenchTask, task_output_dir: Path):
     # start main agent loop
     logger.info(f"Starting main agent loop")
     result = agent_loop(task_state)
-
-    logger.info(f"Task {task.uid} completed with result: {result}")
+    logger.info(f"Task {task} completed with result: {result}")
