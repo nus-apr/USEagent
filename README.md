@@ -75,6 +75,20 @@ docker run --rm \
   /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py local --model google-gla:gemini-2.0-flash --task-description 'write a shell file that prints a vegan tiramisu recipe' --output-dir /output --project-directory /input"
 ```
 
+### Github
+
+Example will checkout the repository:
+
+```shell
+
+docker run --rm \
+  --name useagent-turbo-test \
+  -e GEMINI_API_KEY=YOUR_KEY_GOES_HERE \
+  -v ./useagent-turbo-tmp-out:/output \
+  useagent-turbo:dev \
+  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py github --model google-gla:gemini-2.0-flash --task-description 'write a shell file that prints a vegan tiramisu recipe' --repo-url https://github.com/octocat/Hello-World.git --output-dir /output"
+```
+
 ### CONFIGURATION
 
 **Supported `--model`s:**

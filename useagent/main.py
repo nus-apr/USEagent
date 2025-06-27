@@ -7,6 +7,7 @@ from pathlib import Path
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.tasks.usebench_task import UseBenchTask
 from useagent.tasks.local_task import LocalTask
+from useagent.tasks.github_task import GithubTask
 from useagent import task_runner
 
 def add_common_args(parser: ArgumentParser) -> None:
@@ -55,6 +56,14 @@ def set_local_parser_args(parser: ArgumentParser) -> None:
     task_group.add_argument('--task-description', type=str, help="Verbatim description of what should be done.")
     task_group.add_argument('--task-file', type=Path, help="A path to a markdown or text file containing the task.")
 
+def set_github_parser_args(parser: ArgumentParser) -> None:
+    add_common_args(parser)
+    parser.add_argument('--repo-url', type=str, required=True, help="Git repository to clone (SSH or HTTPS).")
+    parser.add_argument('--working-dir', type=Path, default=Path("/tmp/working_dir"), help="Target directory to clone into and work on (within Docker Container).")
+
+    task_group = parser.add_mutually_exclusive_group(required=True)
+    task_group.add_argument('--task-description', type=str, help="Verbatim description of what should be done.")
+    task_group.add_argument('--task-file', type=Path, help="A path to a markdown or text file containing the task.")
 
 
 def _get_task_description(args: Namespace) -> str:
@@ -82,6 +91,11 @@ def parse_args():
     )
     set_local_parser_args(local_parser)
 
+    github_parser = subparsers.add_parser(
+        "github", help="Run a task on a GitHub repository, from a provided URL."
+    )
+    set_github_parser_args(github_parser)
+
     return parser.parse_args(), subparser_dest_attr_name
 
 
@@ -95,7 +109,7 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
             project_path=local_path,
         )
         task_runner.run(usebench_task, args.output_dir)
-        
+
     elif subcommand == "local":
         local_path = args.project_directory
         task_desc = _get_task_description(args)
@@ -104,6 +118,15 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
             project_path=local_path)
         task_runner.run(local_task, args.output_dir)
 
+    elif subcommand == "github":
+        task_desc = _get_task_description(args)
+        task = GithubTask(
+            issue_statement=task_desc,
+            repo_url=args.repo_url,
+            working_dir=args.working_dir,
+        )
+        task_runner.run(task, args.output_dir)
+        
     else:
         raise ValueError(f"Unknown command: {subcommand}")
 
