@@ -15,8 +15,11 @@ class GithubTask(Task):
     issue_statement: str = None
     uid: str = None
     _working_dir: Path
+    commit: str = None
+    _default_branch_name: str = 'useagent'
 
-    def __init__(self, issue_statement: str, repo_url: str, working_dir: Path = Path("/tmp/working_dir")):
+
+    def __init__(self, issue_statement: str, repo_url: str, working_dir: Path = Path("/tmp/working_dir"),commit: str = None):
         if not issue_statement or not issue_statement.strip():
             raise ValueError("issue_statement must be a non-empty string")
         if not repo_url or not repo_url.strip():
@@ -25,10 +28,15 @@ class GithubTask(Task):
             raise ValueError("repo_url must be a valid SSH, HTTPS, or file Git URL")
         if not working_dir:
             raise ValueError("working_dir must be a valid Path instance")
+        if commit is not None:
+            if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-fA-F]{7,40}", commit):
+                raise ValueError("commit must be a valid git SHA (7-40 hex characters)")
 
         logger.info(f"[Setup] Setting up Github Task, cloning {repo_url} into {working_dir}")
 
         self.repo_url = repo_url
+        self.commit = commit
+
         self.issue_statement = issue_statement
         self._working_dir = working_dir
         self.uid = self._derive_uid_from_url(repo_url)
@@ -46,6 +54,15 @@ class GithubTask(Task):
         if self._working_dir.exists():
             subprocess.run(["rm", "-rf", str(self._working_dir)], check=True)
         subprocess.run(["git", "clone", self.repo_url, str(self._working_dir)], check=True)
+
+    def setup_project(self) -> None:
+        super().setup_project()
+
+        if self.commit:
+            logger.info("[SETUP] Commit was specified for {self.uid}, checking out {self.commit} and branching into {self._default_branch_name} ")
+            subprocess.run(["git", "checkout", self.commit], check=True, cwd=self._working_dir)
+            subprocess.run(["git", "checkout", "-b", self._default_branch_name], check=True, cwd=self._working_dir)
+
     
     @classmethod
     def _derive_uid_from_url(cls, url: str) -> str:

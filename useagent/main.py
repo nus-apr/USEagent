@@ -60,6 +60,7 @@ def set_github_parser_args(parser: ArgumentParser) -> None:
     add_common_args(parser)
     parser.add_argument('--repo-url', type=str, required=True, help="Git repository to clone (SSH or HTTPS).")
     parser.add_argument('--working-dir', type=Path, default=Path("/tmp/working_dir"), help="Target directory to clone into and work on (within Docker Container).")
+    parser.add_argument('--commit', type=str, required=False, help="Commit SHA to checkout and branch from.")
 
     task_group = parser.add_mutually_exclusive_group(required=True)
     task_group.add_argument('--task-description', type=str, help="Verbatim description of what should be done.")
@@ -124,6 +125,7 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
             issue_statement=task_desc,
             repo_url=args.repo_url,
             working_dir=args.working_dir,
+            commit=args.commit,
         )
         task_runner.run(task, args.output_dir)
         
