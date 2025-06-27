@@ -13,7 +13,7 @@ class GitRepository:
     local_path: str
 
     def __init__(self, local_path: str):
-        logger.info(f"Setting up a Git Repository at {local_path}")
+        logger.info(f"[Setup] Setting up a Git Repository at {local_path}")
         self.local_path = local_path
         with cd(self.local_path):
             self._configure_git()
@@ -38,7 +38,7 @@ class GitRepository:
             self._configure_git()
             run_command(["git", "add", "."])
             run_command(["git", "commit", "-m", "Initial commit"], stdout=DEVNULL, stderr=DEVNULL)
-            logger.info(f"{self.local_path} was NOT a git repository - initialized a repository and made an initial commit.")
+            logger.info(f"[Setup] {self.local_path} was NOT a git repository - initialized a repository and made an initial commit.")
 
     def repo_clean_changes(self) -> None:
         """

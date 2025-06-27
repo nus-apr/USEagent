@@ -69,13 +69,7 @@ class UseBenchTask(Task):
 
         Assume we are in a container with both the agent and the target project.
         """
-        git_cmd = f"git config --global --add safe.directory {self.project_path}"
-        subprocess.run(
-            git_cmd,
-            shell=True,
-            check=True,
-            cwd=self.project_path,
-        )
+        super().setup_project()
         pytest_install_cmd = "pip install pytest"
         subprocess.run(
             self.command_transformer(pytest_install_cmd),

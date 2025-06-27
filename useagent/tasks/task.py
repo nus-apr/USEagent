@@ -1,5 +1,6 @@
 from pathlib import Path
 from useagent.state.git_repo import GitRepository
+import subprocess
 
 
 class Task:
@@ -11,8 +12,15 @@ class Task:
 
     git_repo: GitRepository
 
-    def setup_project(self):
-        raise NotImplementedError("Subclasses need to implement this")
+    def setup_project(self) -> None:
+        git_cmd = f"git config --global --add safe.directory {self.get_working_directory()}"
+        subprocess.run(
+            git_cmd,
+            shell=True,
+            check=True,
+            cwd=self.get_working_directory(),
+        )
+        # Subclasses might want to add more logic
 
     def reset_project(self):
         self.git_repo.repo_clean_changes()
