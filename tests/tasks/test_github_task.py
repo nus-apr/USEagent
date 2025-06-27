@@ -51,6 +51,7 @@ def test_get_working_directory_returns_correct_path(tmp_path):
     task = GithubTask("Issue", f"file://{repo_path}", dest)
     assert task.get_working_directory() == dest
 
+@pytest.mark.online
 @pytest.mark.parametrize("url", [
     "https://github.com/octocat/Hello-World.git",
     "git@github.com:octocat/Hello-World.git"
@@ -61,6 +62,7 @@ def test_clone_public_github_repo(tmp_path, url):
     assert (dest / "README").exists() or (dest / "README.md").exists()
     assert (dest / ".git").exists()
 
+@pytest.mark.online
 @pytest.mark.parametrize("url", [
     "https://github.com/octocat/Hello-World.git",
     "git@github.com:octocat/Hello-World.git"
@@ -71,6 +73,7 @@ def test_public_github_repo_git_log(tmp_path, url):
     result = subprocess.run(["git", "log"], cwd=dest, stdout=subprocess.PIPE, check=True)
     assert b"commit" in result.stdout
 
+@pytest.mark.online
 @pytest.mark.parametrize("url", [
     "https://github.com/octocat/Hello-World.git",
     "git@github.com:octocat/Hello-World.git"
@@ -116,6 +119,7 @@ def test_checkout_commit_and_create_branch(tmp_path):
     assert current_branch == "useagent"
     assert current_commit == sha
 
+@pytest.mark.online
 @pytest.mark.parametrize("commit", ["7fd1a60", "7629413", "553c207"])
 def test_checkout_known_octocat_commit(tmp_path, commit):
     '''
