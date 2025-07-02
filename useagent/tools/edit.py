@@ -131,7 +131,7 @@ async def view(file_path: str, view_range: list[int] | None = None):
 async def create(file_path: str, file_text: str):
     """
     Create a new file at the specified path with the given text content.
-    Text content can empty. 
+    Text content can be empty. 
     Path must be a valid path that does not exist, path cannot be empty or 'None'.
 
     Args:
