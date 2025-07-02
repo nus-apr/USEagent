@@ -16,9 +16,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - uses: jakebailey/python-test-action@v1
+      - uses: rcmdnk/python-action@v1
         with:
           python-version: '3.12'
           package-manager: uv
           install-args: '-e .[dev]'
-          test-command: 'pytest tests'
+          pytest-tests-path	: 'tests'
+          coverage: True
