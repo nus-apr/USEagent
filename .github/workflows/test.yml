@@ -20,6 +20,23 @@ jobs:
       - name: Install uv
         run: curl -Ls https://astral.sh/uv/install.sh | bash
 
+        # Below Step is necessary to get the currently private usebench
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GH_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+        
+        # Below is necessary due to some tests needing git 
+      - name: Ensure git is installed & Configured
+        run: |
+          sudo apt-get update && sudo apt-get install -y git
+          git config --global user.name "CI Bot"
+          git config --global user.email "ci@example.com"
+
       - name: Set up virtualenv
         run: |
           uv venv
@@ -29,4 +46,4 @@ jobs:
       - name: Run tests with coverage
         run: |
           source .venv/bin/activate
-          uv run pytest --cov=your_package_name --cov-report=term --cov-report=xml tests
+          uv run pytest --cov=useagent --cov-report=term --cov-report=xml tests
