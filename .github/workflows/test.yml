@@ -9,13 +9,24 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: rcmdnk/python-action@v1
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          setup-type: uv
-         # install-args: '-e .[dev]'
-         # pytest-tests-path: 'tests'
-          coverage: True
+
+      - name: Install uv
+        run: curl -Ls https://astral.sh/uv/install.sh | bash
+
+      - name: Set up virtualenv
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install -e ".[dev]"
+
+      - name: Run tests with coverage
+        run: |
+          source .venv/bin/activate
+          uv run pytest --cov=your_package_name --cov-report=term --cov-report=xml tests
