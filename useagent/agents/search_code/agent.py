@@ -9,7 +9,7 @@ from useagent.config import ConfigSingleton, AppConfig
 from useagent.state.git_repo import GitRepository
 from useagent.state.state import Location, TaskState
 from useagent.tools.bash import bash_tool
-from useagent.microagents.management import alias_for_microagents
+from useagent.microagents.decorators import alias_for_microagents
 
 from typing import Final
 AGENT_ID: Final[str] = "SEARCH"

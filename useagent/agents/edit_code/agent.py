@@ -8,7 +8,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from useagent.config import ConfigSingleton, AppConfig
 from useagent.state.state import Location, TaskState, DiffEntry
 from useagent.tools.edit import view, create, str_replace, insert, extract_diff
-from useagent.microagents.management import alias_for_microagents
+from useagent.microagents.decorators import alias_for_microagents
 
 from typing import Final
 AGENT_ID: Final[str] = "EDIT"

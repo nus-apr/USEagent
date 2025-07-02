@@ -1,7 +1,7 @@
 import pytest
 from typing import List
 
-from useagent.microagents.management import alias_for_microagents, conditional_microagents_triggers
+from useagent.microagents.decorators import alias_for_microagents, conditional_microagents_triggers
 from useagent.microagents.microagent import MicroAgent
 from useagent.config import AppConfig
 

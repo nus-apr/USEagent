@@ -15,7 +15,7 @@ from useagent.agents.search_code.agent import init_agent as init_search_code_age
 from useagent.state.state import DiffEntry, Location, TaskState
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
-from useagent.microagents.management import alias_for_microagents
+from useagent.microagents.decorators import alias_for_microagents
 
 from typing import Final
 AGENT_ID: Final[str] = "META"

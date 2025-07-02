@@ -3,7 +3,8 @@ import pytest
 from useagent.agents.edit_code.agent import init_agent as init_edit_agent
 from useagent.agents.meta.agent import init_agent as init_meta_agent
 from useagent.agents.search_code.agent import init_agent as init_search_agent
-from useagent.microagents.management import alias_for_microagents
+
+from useagent.microagents.decorators import alias_for_microagents
 
 from useagent.config import AppConfig
 
