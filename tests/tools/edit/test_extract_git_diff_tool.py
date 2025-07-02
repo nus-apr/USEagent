@@ -64,6 +64,7 @@ async def test_extract_diff_git_not_initialized(tmp_path):
     with pytest.raises(ToolError, match="Failed to extract diff"):
         await extract_diff(project_dir=tmp_path)
 
+
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_extract_diff_single_file_edit(tmp_path):
@@ -81,19 +82,24 @@ async def test_extract_diff_single_file_edit(tmp_path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_extract_diff_respects_gitignore(tmp_path):
-    _setup_git_repo_with_change(tmp_path)
+    (tmp_path / ".gitignore").write_text("ignored.txt\n")
+    (tmp_path / "tracked.txt").write_text("t\n")
+    
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "tracked.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", ".gitignore"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
 
-    # Create a .gitignore and ignored file
-    gitignore = tmp_path / ".gitignore"
-    gitignore.write_text("ignored.txt\n")
-
-    ignored_file = tmp_path / "ignored.txt"
-    ignored_file.write_text("should be ignored\n")
+    # Now create ignored file
+    (tmp_path / "ignored.txt").write_text("ignore me\n")
+    (tmp_path / "tracked.txt").write_text("t2\n")
 
     result = await extract_diff(project_dir=tmp_path)
-
     assert "ignored.txt" not in result.output
-    assert "diff --git" in result.output
+    assert "tracked.txt" in result.output
+
 
 @pytest.mark.tool
 @pytest.mark.asyncio
@@ -148,3 +154,53 @@ async def test_extract_diff_nested_file(tmp_path):
 
     assert "diff --git a/nested/nested.txt" in result.output
     assert "+modified" in result.output
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_untracked_file_is_not_included(tmp_path: Path):
+    # DevNote: 
+    # This tests for the case that a completely new file was added, not a change but a `create`
+    # These do NOT appear in a git diff, unless there was a git add (they were not added to the index)
+    (tmp_path / "tracked.txt").write_text("initial\n")
+
+    # Initialize repo and commit
+    import subprocess
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "tracked.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
+
+    # Create untracked file
+    (tmp_path / "untracked.txt").write_text("should not appear\n")
+
+    result = await extract_diff(project_dir=tmp_path)
+    assert isinstance(result, ToolResult)
+    assert "untracked.txt" in result.output
+    assert not result.output.strip() == "No changes detected in the repository."
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_tracked_file_change_included_untracked_ignored(tmp_path: Path):
+    # DevNote: 
+    # This tests for the case that a completely new file was added, not a change but a `create`
+    # These do NOT appear in a git diff, unless there was a git add (they were not added to the index)
+    (tmp_path / "a.txt").write_text("a\n")
+    import subprocess
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "a.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
+
+    # Modify tracked file and add untracked file
+    (tmp_path / "a.txt").write_text("a changed\n")
+    (tmp_path / "new.txt").write_text("untracked\n")
+
+    result = await extract_diff(project_dir=tmp_path)
+    assert "diff --git a/a.txt" in result.output
+    assert "new.txt" in result.output

@@ -4,13 +4,16 @@ from usebench.api.datatypes.UnifiedBenchmarkEntry import UnifiedBenchmarkEntry
 from usebench.api.utilities.id_management import lookup_uid_from_dataset
 
 from useagent.state.git_repo import GitRepository
+from useagent.tasks.task import Task
+
+from pathlib import Path
+
 
 _DEFAULT_DATASET_PATH: str = "/useagent/data"  # default path in container
 
 
-class UseBenchTask:
+class UseBenchTask(Task):
     uid: str
-    git_repo: GitRepository
     project_path = "/testbed"  # default path in usebench container
 
     def __init__(self, uid: str, project_path: str):
@@ -19,8 +22,6 @@ class UseBenchTask:
         self.git_repo = GitRepository(local_path=project_path)
         self.setup_project()
 
-    def reset_project(self):
-        self.git_repo.repo_clean_changes()
 
     def _lookup_benchmark_entry(self) -> UnifiedBenchmarkEntry:
         """
@@ -68,13 +69,7 @@ class UseBenchTask:
 
         Assume we are in a container with both the agent and the target project.
         """
-        git_cmd = f"git config --global --add safe.directory {self.project_path}"
-        subprocess.run(
-            git_cmd,
-            shell=True,
-            check=True,
-            cwd=self.project_path,
-        )
+        super().setup_project()
         pytest_install_cmd = "pip install pytest"
         subprocess.run(
             self.command_transformer(pytest_install_cmd),
@@ -82,3 +77,6 @@ class UseBenchTask:
             check=True,
             cwd=self.project_path,
         )
+
+    def get_working_directory(self) -> Path:
+        return Path(self.project_path)

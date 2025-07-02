@@ -1,9 +1,11 @@
 import os
 from pathlib import Path
+from loguru import logger
 
 from useagent.tools.base import CLIResult, ToolError, ToolResult
 from useagent.tools.run import maybe_truncate, run
 from useagent.utils import cd
+
 
 SNIPPET_LINES: int = 4
 
@@ -78,8 +80,12 @@ async def view(file_path: str, view_range: list[int] | None = None):
     Returns:
         ToolResult: The result of the view operation, containing the output and a short header summarizing the used command.
     """
+    logger.info(f"[Tool] Invoked edit_tool `view`. Viewing {file_path}, range {view_range}")
+
     path = _make_path_absolute(file_path)
 
+    if not path.exists():
+        raise ToolError(f"Filepath {file_path} does not exist.")
     if path.is_dir():
         if view_range:
             raise ToolError(
@@ -125,6 +131,8 @@ async def view(file_path: str, view_range: list[int] | None = None):
 async def create(file_path: str, file_text: str):
     """
     Create a new file at the specified path with the given text content.
+    Text content can be empty. 
+    Path must be a valid path that does not exist, path cannot be empty or 'None'.
 
     Args:
         file_path (str): The path where the new file will be created.
@@ -133,6 +141,11 @@ async def create(file_path: str, file_text: str):
     Returns:
         ToolResult: The result of the create operation, indicating success or failure.
     """
+    logger.info(f"[Tool] Invoked edit_tool `create`. Creating {file_path}, content preview: {file_text[:15]} ...")
+
+    if not file_path or not file_path.strip():
+        raise ToolError("Received an None or Empty file_path argument.")
+
     path = _make_path_absolute(file_path)
 
     if path.exists():
@@ -156,8 +169,15 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
     Returns:
         ToolResult: The result of the str_replace operation, containing the output or error.
     """
+    logger.info(f"[Tool] Invoked edit_tool `str_replace`. Replacing {old_str} for {new_str} in {file_path}")
+
     # Read the file content
     path = _make_path_absolute(file_path)
+    
+    if not path.exists():
+        raise ToolError(f"Filepath {file_path} does not exist, it has to be created first. `str_replace` only works for existing files.")
+    if path.exists() and path.is_dir():
+        raise ToolError(f"Filepath {file_path} is a directory - `str_replace` can only be applied to files.")
 
     file_content = _read_file(path).expandtabs()
     old_str = old_str.expandtabs()
@@ -210,7 +230,14 @@ async def insert(file_path: str, insert_line: int, new_str: str):
     Returns:
         ToolResult: The result of the insert operation, containing the output or error.
     """
+    logger.info(f"[Tool] Invoked edit_tool `insert`. Inserting {new_str} at L{insert_line} in {file_path}")
+
     path = _make_path_absolute(file_path)
+
+    if not path.exists():
+        raise ToolError(f"Filepath {file_path} does not exist, it has to be created first. `insert` only works for existing files.")
+    if path.exists() and path.is_dir():
+        raise ToolError(f"Filepath {file_path} is a directory - `insert` can only be applied to files.")
 
     file_text = _read_file(path).expandtabs()
     new_str = new_str.expandtabs()
@@ -247,17 +274,26 @@ async def insert(file_path: str, insert_line: int, new_str: str):
     return CLIResult(output=success_msg)
 
 
-async def extract_diff(project_dir: Path | str = _project_dir):
+async def extract_diff(project_dir: Path | str = None):
     """
     Extract the diff of the current state of the repository.
 
     Returns:
         ToolResult: The result of the diff extraction, containing the output or error.
     """
+    project_dir = project_dir or _project_dir
+    logger.info(f"[Tool] Invoked edit_tool `extract_diff`. Extracting a patch from {project_dir} (type: {type(project_dir)})")
+
     with cd(project_dir):
-        _, stdout, stderr = await run("git diff")
-        if stderr:
-            raise ToolError(f"Failed to extract diff: {stderr}")
-        if not stdout:
+        await run("git add .") # Git Add is necessary to see changes to newly created files
+        _, cached_out, stderr_1 = await run("git diff --cached")
+        _, working_out, stderr_2 = await run("git diff")
+        stdout = cached_out + working_out
+
+        if stderr_1 or stderr_2:
+            raise ToolError(f"Failed to extract diff: {stderr_1 + stderr_2}")
+        if not stdout or not stdout.strip():
+            logger.debug(f"[Tool] edit_tool `extract_diff`: Received empty Diff")
             return ToolResult(output="No changes detected in the repository.")
+        logger.debug(f"[Tool] edit_tool `extract_diff`: Received {stdout[:25]} ... from {project_dir}")
         return ToolResult(output=f"Here's the diff of the current state:\n{stdout}")

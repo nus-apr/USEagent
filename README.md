@@ -36,6 +36,8 @@ DOCKER_BUILDKIT=1 docker build --build-arg BASE_IMAGE=usebench.sweb.eval.x86_64.
 
 Start a container:
 
+### USEBENCH
+
 ```shell
 docker run -it --name useagent-turbo-test useagent-turbo:dev
 ```
@@ -56,6 +58,38 @@ Cleanup:
 ```shell
 docker rm useagent-turbo-test && docker image rm useagent-turbo:dev
 ```
+
+### LOCAL
+
+Example run in a (fresh) local folder:
+
+```shell
+mkdir ./useagent-turbo-tmp
+echo "Hi, this is a simple file" > ./useagent-turbo-tmp/README.md
+
+docker run --rm \
+  --name useagent-turbo-test \
+  -e GEMINI_API_KEY=YOUR_KEY_GOES_HERE \
+  -v ./useagent-turbo-tmp:/input \
+  useagent-turbo:dev \
+  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py local --model google-gla:gemini-2.0-flash --task-description 'write a shell file that prints a vegan tiramisu recipe' --output-dir /output --project-directory /input"
+```
+
+### Github
+
+Example will checkout the repository:
+
+```shell
+
+docker run --rm \
+  --name useagent-turbo-test \
+  -e GEMINI_API_KEY=YOUR_KEY_GOES_HERE \
+  -v ./useagent-turbo-tmp-out:/output \
+  useagent-turbo:dev \
+  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py github --model google-gla:gemini-2.0-flash --task-description 'write a shell file that prints a vegan tiramisu recipe' --repo-url https://github.com/octocat/Hello-World.git --output-dir /output"
+```
+
+### CONFIGURATION
 
 **Supported `--model`s:**
 
