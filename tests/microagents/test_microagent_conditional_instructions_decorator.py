@@ -210,3 +210,49 @@ async def test_conditional_microagents_triggered_but_agent_id_not_matching(confi
         m.instructions is None or "X" not in m.instructions
         for m in history if isinstance(m, ModelRequest)
     )
+
+@pytest.mark.agent
+@pytest.mark.asyncio
+async def test_conditional_microagents_agent_id_case_insensitive(config):
+    microagents = [
+        MicroAgent("test_microagent", "1.0.0", ["my_agent"], ["trigger_a"], "foo")
+    ]
+
+    @conditional_microagents_triggers(microagents)
+    @alias_for_microagents("MY_AGENT")  # different casing
+    def init_agent(config: AppConfig) -> Agent:
+        return Agent(model=config.model, output_type=str)
+
+    agent = init_agent(config)
+
+    with capture_run_messages() as history:
+        await agent.run("trigger_a in the prompt")
+
+    assert any(
+        isinstance(m, ModelRequest) and m.instructions and "foo" in m.instructions
+        for m in history
+    )
+
+
+@pytest.mark.agent
+@pytest.mark.asyncio
+async def test_conditional_microagents_agent_id_case_insensitive_in_field(config):
+    microagents = [
+        MicroAgent("test_microagent", "1.0.0", ["MY_AGENT"], ["trigger_a"], "foo")
+    ]
+
+    @conditional_microagents_triggers(microagents)
+    def init_agent(config: AppConfig) -> Agent:
+        agent = Agent(model=config.model, output_type=str)
+        agent.agent_id = "my_agent"  # lowercase
+        return agent
+
+    agent = init_agent(config)
+
+    with capture_run_messages() as history:
+        await agent.run("trigger_a in the prompt")
+
+    assert any(
+        isinstance(m, ModelRequest) and m.instructions and "foo" in m.instructions
+        for m in history
+    )

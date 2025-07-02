@@ -8,14 +8,13 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from useagent.config import ConfigSingleton, AppConfig
 from useagent.state.state import Location, TaskState, DiffEntry
 from useagent.tools.edit import view, create, str_replace, insert, extract_diff
-from useagent.microagents.decorators import alias_for_microagents
-
-from typing import Final
-AGENT_ID: Final[str] = "EDIT"
+from useagent.microagents.decorators import alias_for_microagents,conditional_microagents_triggers
+from useagent.microagents.management import load_microagents_from_project_dir
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
-@alias_for_microagents(AGENT_ID)
+@conditional_microagents_triggers(load_microagents_from_project_dir())
+@alias_for_microagents("EDIT")
 def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
     agent = Agent(
         config.model,

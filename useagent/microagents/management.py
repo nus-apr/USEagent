@@ -19,11 +19,6 @@ def load_microagents(dir_path: str) -> List[MicroAgent]:
             results.append(load_microagent(path))
     return results
 
-
-# Example: __file__ is /some/path/a/b/c/module.py
-# parents[0] = c, [1] = b, [2] = a, [3] = project root
-
-if __name__ == "__main__":
-    microagent_dir = _get_default_microagent_directory()
-    microagents = load_microagents(microagent_dir)
-    print("Found",len(microagents), " Microagents")
+@staticmethod
+def load_microagents_from_project_dir() -> List[MicroAgent]:
+    return load_microagents(_get_default_microagent_directory())

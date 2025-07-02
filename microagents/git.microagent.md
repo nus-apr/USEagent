@@ -2,7 +2,7 @@
 name: Git Microagent
 version: 1.0.0
 agents:
-  - edit
+  - EDIT
 triggers:
   - git
   - diff

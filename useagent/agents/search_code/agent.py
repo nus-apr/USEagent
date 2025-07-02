@@ -9,13 +9,13 @@ from useagent.config import ConfigSingleton, AppConfig
 from useagent.state.git_repo import GitRepository
 from useagent.state.state import Location, TaskState
 from useagent.tools.bash import bash_tool
-from useagent.microagents.decorators import alias_for_microagents
+from useagent.microagents.decorators import alias_for_microagents,conditional_microagents_triggers
+from useagent.microagents.management import load_microagents_from_project_dir
 
-from typing import Final
-AGENT_ID: Final[str] = "SEARCH"
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
-@alias_for_microagents(AGENT_ID)
+@conditional_microagents_triggers(load_microagents_from_project_dir())
+@alias_for_microagents("SEARCH")
 def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
     search_code_agent =  Agent(
         config.model,

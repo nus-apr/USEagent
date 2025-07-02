@@ -15,15 +15,14 @@ from useagent.agents.search_code.agent import init_agent as init_search_code_age
 from useagent.state.state import DiffEntry, Location, TaskState
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
-from useagent.microagents.decorators import alias_for_microagents
-
-from typing import Final
-AGENT_ID: Final[str] = "META"
+from useagent.microagents.decorators import alias_for_microagents,conditional_microagents_triggers
+from useagent.microagents.management import load_microagents_from_project_dir
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 # TODO: define the output type
 
-@alias_for_microagents(AGENT_ID)
+@conditional_microagents_triggers(load_microagents_from_project_dir())
+@alias_for_microagents("META")
 def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
     meta_agent = Agent(
         config.model, 

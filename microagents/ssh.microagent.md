@@ -2,7 +2,7 @@
 name: SSH Microagent
 version: 1.0.0
 agents:
-  - meta
+  - META
 triggers:
   - ssh
   - remote server
