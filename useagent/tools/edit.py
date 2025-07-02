@@ -81,6 +81,8 @@ async def view(file_path: str, view_range: list[int] | None = None):
         ToolResult: The result of the view operation, containing the output and a short header summarizing the used command.
     """
     logger.info(f"[Tool] Invoked edit_tool `view`. Viewing {file_path}, range {view_range}")
+    if not file_path or not file_path.strip():
+        raise ToolError(f"Received an empty or None file_path")
 
     path = _make_path_absolute(file_path)
 

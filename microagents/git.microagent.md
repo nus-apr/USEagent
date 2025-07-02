@@ -1,5 +1,6 @@
 ---
 name: Git Microagent
+version: 1.0.0
 agents:
   - edit
 triggers:

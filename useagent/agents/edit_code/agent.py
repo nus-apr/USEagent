@@ -17,7 +17,7 @@ SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
 @alias_for_microagents(AGENT_ID)
 def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
-    return Agent(
+    agent = Agent(
         config.model,
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
@@ -30,3 +30,4 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
             Tool(extract_diff),
         ]
     )
+    return agent

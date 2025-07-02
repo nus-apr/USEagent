@@ -49,12 +49,3 @@ class LocalTask(Task):
         if self._working_dir.exists():
             shutil.rmtree(self._working_dir)
         shutil.copytree(self.project_path, self._working_dir)
-
-    def setup_project(self) -> None:
-        git_cmd = f"git config --global --add safe.directory {self._working_dir}"
-        subprocess.run(
-            git_cmd,
-            shell=True,
-            check=True,
-            cwd=self._working_dir,
-        )
