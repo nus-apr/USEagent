@@ -12,14 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - uses: rcmdnk/python-action@v1
         with:
           python-version: '3.12'
-          package-manager: uv
-          install-args: '-e .[dev]'
-          pytest-tests-path	: 'tests'
+          setup-type: uv
+         # install-args: '-e .[dev]'
+         # pytest-tests-path: 'tests'
           coverage: True
