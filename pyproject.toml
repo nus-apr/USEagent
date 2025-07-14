@@ -14,7 +14,8 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-asyncio",
-    "pytest-random-order"
+    "pytest-random-order",
+    "pytest-cov"
 ]
 
 [tool.setuptools]
