@@ -5,6 +5,7 @@ import re
 import pytest
 from useagent.tasks.task import Task
 from useagent.state.git_repo import GitRepository
+import shutil
 
 
 class GithubTask(Task):
@@ -51,8 +52,15 @@ class GithubTask(Task):
         return self._working_dir
 
     def clone_repo_to_working_dir(self) -> None:
+        #if self._working_dir.exists():
+        #    subprocess.run(["rm", "-rf", str(self._working_dir)], check=True)
         if self._working_dir.exists():
-            subprocess.run(["rm", "-rf", str(self._working_dir)], check=True)
+            for item in self._working_dir.iterdir():
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+
         subprocess.run(["git", "clone", self.repo_url, str(self._working_dir)], check=True)
 
     def setup_project(self) -> None:

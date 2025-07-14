@@ -1,4 +1,4 @@
-## NOTE: implment MeteAgent with agent delegation
+## NOTE: implment MetaAgent with agent delegation
 
 from pathlib import Path
 from string import Template
@@ -6,6 +6,7 @@ from string import Template
 from loguru import logger
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.usage import UsageLimits
+from pydantic_ai.providers.openai import OpenAIProvider
 
 from useagent import config
 from useagent.config import ConfigSingleton, AppConfig
@@ -14,22 +15,20 @@ from useagent.agents.search_code.agent import init_agent as init_search_code_age
 from useagent.state.state import DiffEntry, Location, TaskState
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
+from useagent.microagents.decorators import alias_for_microagents,conditional_microagents_triggers
+from useagent.microagents.management import load_microagents_from_project_dir
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 # TODO: define the output type
+
+@conditional_microagents_triggers(load_microagents_from_project_dir())
+@alias_for_microagents("META")
 def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
-    # For locally hosted URLs
-    provider_kwargs = (
-        {"provider": OpenAIProvider(base_url=config.provider_url, api_key="ollama-dummy")}
-        if config.provider_url
-        else {}
-    )
     meta_agent = Agent(
         config.model, 
         instructions=SYSTEM_PROMPT, 
         deps_type=TaskState, 
-        output_type=str,
-        **provider_kwargs
+        output_type=str
     )
 
     ## This adds the task description to instructions (SYSTEM prompt).
