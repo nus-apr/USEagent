@@ -43,7 +43,7 @@ def test_edit_agent_has_instructions_prompts():
 
 
 @pytest.mark.asyncio
-async def test_edit_agent_direct_output_no_tool_calls__example_scaffold_test():
+async def test_edit_agent_direct_output_no_tool_calls__example_scaffold_test(tmp_path):
     """
     DevNote: This is a *very simple* test that just ignores all tool calls. 
     It is to be a an example to easily copy paste for other agents and show how to access the history. 
@@ -57,7 +57,8 @@ async def test_edit_agent_direct_output_no_tool_calls__example_scaffold_test():
 
     state = TaskState(
         task=TestTask(root=".", issue_statement="Fix bug in foo.py"),
-        git_repo=GitRepository(local_path="."),
+         #Note Issue#1: I had `.` here and it replaced my git user name in the repository level upon running tests. 
+        git_repo=GitRepository(local_path=tmp_path),
     )
 
     with capture_run_messages() as history:

@@ -78,3 +78,52 @@ def test_git_history_copied(temp_project_dir, tmp_path):
 
     result = subprocess.run(["git", "log"], cwd=dest, stdout=subprocess.PIPE, check=True)
     assert b"initial commit" in result.stdout
+
+def test_git_user_config_set(temp_project_dir, tmp_path):
+    # Tests that we can initialize and set a git user, as done by the tasks downstream, and we get the right user there. 
+    subprocess.run(["git", "init"], cwd=temp_project_dir, check=True)
+    (temp_project_dir / "file.txt").write_text("commit content")
+    subprocess.run(["git", "add", "file.txt"], cwd=temp_project_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "initial commit"], cwd=temp_project_dir, check=True)#
+
+    dest = tmp_path / "copy_repo"
+    task = LocalTask("Issue", str(temp_project_dir), dest)#
+
+    name = subprocess.run(["git", "config", "user.name"], cwd=dest, stdout=subprocess.PIPE, check=True).stdout.strip()
+    email = subprocess.run(["git", "config", "user.email"], cwd=dest, stdout=subprocess.PIPE, check=True).stdout.strip()#
+
+    assert name == b"USEagent"
+    assert email == b"useagent@useagent.com"
+
+
+@pytest.mark.regression
+def test_git_user_without_any_change_is_not_useagent():
+    import useagent as useagent_module
+    original_project_path = Path(useagent_module.__file__).parent
+
+    name = subprocess.run(["git", "config", "user.name"], cwd=original_project_path, stdout=subprocess.PIPE, check=True).stdout.strip()
+    email = subprocess.run(["git", "config", "user.email"], cwd=original_project_path, stdout=subprocess.PIPE, check=True).stdout.strip()
+
+    assert name != b"USEagent"
+    assert email != b"useagent@useagent.com"
+
+@pytest.mark.regression
+def test_git_user_is_only_changed_for_the_local_repository(temp_project_dir, tmp_path):
+    # See Issue#1: 
+    # In the initial setup, the local task changed the global git config and overwrote my actual git user. 
+    subprocess.run(["git", "init"], cwd=temp_project_dir, check=True)
+    (temp_project_dir / "file.txt").write_text("commit content")
+    subprocess.run(["git", "add", "file.txt"], cwd=temp_project_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "initial commit"], cwd=temp_project_dir, check=True)
+
+    dest = tmp_path / "copy_repo"
+    task = LocalTask("Issue", str(temp_project_dir), dest)
+
+    import useagent as useagent_module
+    original_project_path = Path(useagent_module.__file__).parent
+
+    name = subprocess.run(["git", "config", "user.name"], cwd=original_project_path, stdout=subprocess.PIPE, check=True).stdout.strip()
+    email = subprocess.run(["git", "config", "user.email"], cwd=original_project_path, stdout=subprocess.PIPE, check=True).stdout.strip()
+
+    assert name != b"USEagent"
+    assert email != b"useagent@useagent.com"
