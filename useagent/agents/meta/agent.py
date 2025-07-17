@@ -51,7 +51,7 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         return ctx.deps._task.get_issue_statement()
 
     ### Define actions as tools to meta_agent. Each action interfaces to another agent in Pydantic AI.
-    @meta_agent.tool(retries=2)
+    @meta_agent.tool(retries=4)
     async def search_code(ctx: RunContext[TaskState], instruction: str) -> list[Location]:
         """Search for relevant locations in the codebase. Only search in source code files, not test files.
 
@@ -73,7 +73,7 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         return res
 
 
-    @meta_agent.tool(retries=2)
+    @meta_agent.tool(retries=4)
     async def edit_code(ctx: RunContext[TaskState], instruction: str) -> DiffEntry:
         """Edit the codebase based on the provided instruction.
 
@@ -112,6 +112,17 @@ def agent_loop(task_state: TaskState):
     init_edit_tools(task_state._task.get_working_directory())
     meta_agent = init_agent()
     # actually running the agent
-    result = meta_agent.run_sync("Invoke tools to complete the task.", deps=task_state)
+
+    #TODO: This is for the meta-agent, but it would make sense that every agent gets a configurable amount of retries. 
+    # At the moment, an inside-edit-code-agent will also restart at the meta-agent level.
+    maximum_allowed_tool_errors : int = 25
+    tool_errors: int = 0
+    while tool_errors < maximum_allowed_tool_errors:
+        try:
+            result = meta_agent.run_sync("Invoke tools to complete the task.", deps=task_state)
+        except ToolError as e:
+            logger.debug(f"[MetaAgent] Received a Tool Error {e.message}. Re-Prompting (error #{tool_errors} of {maximum_allowed_tool_errors})")
+            prompt = f"Previous tool call was done poorly: {e.message}. Try again."
+            tool_errors = tool_errors + 1
 
     return result.output
