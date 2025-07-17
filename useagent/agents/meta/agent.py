@@ -115,6 +115,9 @@ def agent_loop(task_state: TaskState):
 
     #TODO: This is for the meta-agent, but it would make sense that every agent gets a configurable amount of retries. 
     # At the moment, an inside-edit-code-agent will also restart at the meta-agent level.
+    # I tried to wrap it in a function, but there are two issues: 
+    #    1) The other agents are async, so the function must be Async too
+    #    2) The types must match for pydantic to work flawlessly, so a retry that returns ANY does not work, and there are no good Functional-Generics in Python.
     maximum_allowed_tool_errors : int = 25
     tool_errors: int = 0
     while tool_errors < maximum_allowed_tool_errors:
