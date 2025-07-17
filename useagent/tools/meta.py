@@ -32,3 +32,16 @@ def _select_diff_from_diff_store(diff_store:DiffStore, index:str) -> str:
         if not entry.diff_content or not (entry.diff_content.strip()):
             logger.warning(f"[Tool] An empty diff was selected by the agent.")
         return entry.diff_content
+
+
+def view_task_state(ctx: RunContext[TaskState]) -> str:
+    """View the current task state.
+    Use this tool to retrieve the up-to-date task state, including code locations, test locations, the diff store, and additional knowledge.
+
+    Returns:
+        str: The string representation of the current task state.
+    """
+    logger.info("[Tool] Invoked view_task_state")
+    res = ctx.deps.to_model_repr()
+    logger.debug(f"[Tool] view_task_state result: {res}")
+    return res

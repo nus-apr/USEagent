@@ -17,7 +17,7 @@ from useagent.state.state import DiffEntry, Location, TaskState
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
 from useagent.tools.base import ToolError
-from useagent.tools.meta import select_diff_from_diff_store
+from useagent.tools.meta import select_diff_from_diff_store, view_task_state
 from useagent.microagents.decorators import alias_for_microagents,conditional_microagents_triggers
 from useagent.microagents.management import load_microagents_from_project_dir
 
@@ -32,7 +32,8 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         instructions=SYSTEM_PROMPT, 
         deps_type=TaskState,
         tools=[
-            Tool(select_diff_from_diff_store,takes_ctx=True, max_retries=3)
+            Tool(select_diff_from_diff_store,takes_ctx=True, max_retries=3),
+            Tool(view_task_state,takes_ctx=True,max_retries=0)
         ],
         output_type=str
     )
@@ -92,19 +93,6 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
 
         return res
     ### Action definitions END
-
-    @meta_agent.tool(retries=2)
-    async def view_task_state(ctx: RunContext[TaskState]) -> str:
-        """View the current task state.
-        Use this tool to retrieve the up-to-date task state, including code locations, test locations, the diff store, and additional knowledge.
-
-        Returns:
-            str: The string representation of the current task state.
-        """
-        logger.info("[MetaAgent] Invoked view_task_state")
-        res = ctx.deps.to_model_repr()
-        logger.info(f"[MetaAgent] view_task_state result: {res}")
-        return res
 
 
     return meta_agent
