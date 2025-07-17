@@ -2,13 +2,13 @@
 Persistent state for task, which is shared between MetaAgent and actions.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import field
+from pydantic.dataclasses import dataclass
 
 from useagent.state.git_repo import GitRepository
 from useagent.tasks.task import Task
-from useagent.tools.base import ToolError
 
-@dataclass
+@dataclass(frozen=True)
 class Location:
     rel_file_path: str
     start_line: int
@@ -17,13 +17,13 @@ class Location:
     reason_why_relevant: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class DiffEntry:
     diff_content: str
     notes: str | None = None
 
 
-@dataclass
+@dataclass(config=dict(arbitrary_types_allowed=True))
 class DiffStore:
     id_to_diff: dict[str, DiffEntry] = field(default_factory=dict)
 
@@ -38,7 +38,7 @@ class DiffStore:
 
 
 
-@dataclass
+@dataclass(config=dict(arbitrary_types_allowed=True))
 class TaskState:
     task: Task
     git_repo: GitRepository

@@ -7,6 +7,7 @@ from loguru import logger
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.usage import UsageLimits
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.tools import Tool
 
 from useagent import config
 from useagent.config import ConfigSingleton, AppConfig
@@ -16,6 +17,7 @@ from useagent.state.state import DiffEntry, Location, TaskState
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
 from useagent.tools.base import ToolError
+from useagent.tools.meta import select_diff_from_diff_store
 from useagent.microagents.decorators import alias_for_microagents,conditional_microagents_triggers
 from useagent.microagents.management import load_microagents_from_project_dir
 
@@ -28,7 +30,10 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
     meta_agent = Agent(
         config.model, 
         instructions=SYSTEM_PROMPT, 
-        deps_type=TaskState, 
+        deps_type=TaskState,
+        tools=[
+            Tool(select_diff_from_diff_store,takes_ctx=True, max_retries=3)
+        ],
         output_type=str
     )
 
@@ -101,27 +106,6 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         logger.info(f"[MetaAgent] view_task_state result: {res}")
         return res
 
-    @meta_agent.tool(retries=3)
-    async def select_diff_from_diff_store(ctx: RunContext[TaskState], index:str) -> str: 
-        """
-        Select a diff (represented as a string) from the TaskState diff_store. 
-        This tool is suitable to select a final patch to solve some tasks, or can be used to view intermediate results and compare candidates. 
-
-        Args:
-            index (str): the key of which element in the diff store to select.
-
-        Returns:
-            str: A string representation of a git diff originating fro mthe current TaskStates diff_store
-        """
-        diff_store = ctx.deps.diff_store
-        logger.info(f"[MetaAgent] Invoked select_diff_from_diff_store tool with index {index} ({len(diff_store)} entries in diff_store)")
-        if len(diff_store) == 0:
-            raise ToolError("There are currently no diffs stored in the diff-store")
-        if index not in diff_store.id_to_diff.keys():
-            appendix = "" if len(diff_store) > 5 else "Available keys in diff_store: " + " ".join(diff_store.id_to_diff.keys())
-            raise ToolError(f"Key {index} was not in the diff_store. {appendix}")
-        else:
-            return diff_store.id_to_diff[index]
 
     return meta_agent
 

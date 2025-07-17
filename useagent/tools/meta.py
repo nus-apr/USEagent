@@ -1,0 +1,34 @@
+from loguru import logger
+from useagent.state.state import TaskState, DiffStore, DiffEntry
+from useagent.tools.base import ToolError
+from pydantic_ai import Agent, RunContext
+
+def select_diff_from_diff_store(ctx:RunContext[TaskState], diff_store_key:str) -> str: 
+    """
+    Select a diff (represented as a string) from the TaskState diff_store. 
+    This tool is suitable to select a final patch to solve some tasks, or can be used to view intermediate results and compare candidates. 
+
+    Args:
+        diff_store_key (str): the key of which element in the diff store to select.
+
+    Returns:
+        str: A string representation of a git diff originating fro mthe current TaskStates diff_store
+    """
+    diff_store = ctx.deps.diff_store
+    return _select_diff_from_diff_store(diff_store,diff_store_key)
+
+def _select_diff_from_diff_store(diff_store:DiffStore, index:str) -> str:
+    logger.info(f"[Tool] Invoked select_diff_from_diff_store tool with index {index} ({len(diff_store)} entries in diff_store)")
+    if len(diff_store) == 0:
+        raise ToolError("There are currently no diffs stored in the diff-store")
+    # DevNote: Let's help a little if we got an integer
+    if index.isdigit() and int(index) >= 0:
+        index = "diff_"+index
+    if index not in diff_store.id_to_diff.keys():
+        appendix = "" if len(diff_store) > 5 else "Available keys in diff_store: " + " ".join(diff_store.id_to_diff.keys())
+        raise ToolError(f"Key {index} was not in the diff_store. {appendix}")
+    else:
+        entry: DiffEntry = diff_store.id_to_diff[index]
+        if not entry.diff_content or not (entry.diff_content.strip()):
+            logger.warning(f"[Tool] An empty diff was selected by the agent.")
+        return entry.diff_content
