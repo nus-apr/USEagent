@@ -43,7 +43,7 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         return ctx.deps.task.get_issue_statement()
 
     ### Define actions as tools to meta_agent. Each action interfaces to another agent in Pydantic AI.
-    @meta_agent.tool
+    @meta_agent.tool(retries=2)
     async def search_code(ctx: RunContext[TaskState], instruction: str) -> list[Location]:
         """Search for relevant locations in the codebase. Only search in source code files, not test files.
 
@@ -65,7 +65,7 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         return res
 
 
-    @meta_agent.tool
+    @meta_agent.tool(retries=2)
     async def edit_code(ctx: RunContext[TaskState], instruction: str) -> DiffEntry:
         """Edit the codebase based on the provided instruction.
 
@@ -88,7 +88,7 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         return res
     ### Action definitions END
 
-    @meta_agent.tool
+    @meta_agent.tool(retries=2)
     async def view_task_state(ctx: RunContext[TaskState]) -> str:
         """View the current task state.
         Use this tool to retrieve the up-to-date task state, including code locations, test locations, the diff store, and additional knowledge.
@@ -101,7 +101,7 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         logger.info(f"[MetaAgent] view_task_state result: {res}")
         return res
 
-    @meta_agent.tool
+    @meta_agent.tool(retries=3)
     async def select_diff_from_diff_store(ctx: RunContext[TaskState], index:str) -> str: 
         """
         Select a diff (represented as a string) from the TaskState diff_store. 
@@ -114,7 +114,7 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
             str: A string representation of a git diff originating fro mthe current TaskStates diff_store
         """
         diff_store = ctx.deps.diff_store
-        logger.info(f"[MetaAgent] Invoced select_diff_from_diff_store tool with index {index} ({len(diff_store)} entries in diff_store)")
+        logger.info(f"[MetaAgent] Invoked select_diff_from_diff_store tool with index {index} ({len(diff_store)} entries in diff_store)")
         if len(diff_store) == 0:
             raise ToolError("There are currently no diffs stored in the diff-store")
         if index not in diff_store.id_to_diff.keys():
