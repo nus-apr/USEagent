@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from useagent.state.git_repo import GitRepository
 from useagent.tasks.task import Task
-
+from useagent.tools.base import ToolError
 
 @dataclass
 class Location:
@@ -32,6 +32,10 @@ class DiffStore:
         diff_id = f"diff_{len(self.id_to_diff)}"
         self.id_to_diff[diff_id] = entry
         return diff_id
+
+    def __len__(self) -> int:
+        return len(self.id_to_diff)
+
 
 
 @dataclass
