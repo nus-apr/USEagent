@@ -7,7 +7,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from useagent.state.state import TaskState
+from useagent.models.task_state import TaskState
 from useagent.tasks.task import Task
 from useagent.agents.meta.agent import agent_loop
 

@@ -1,7 +1,9 @@
 from loguru import logger
-from useagent.state.state import TaskState, DiffStore, DiffEntry
-from useagent.tools.base import ToolError
 from pydantic_ai import Agent, RunContext
+
+from useagent.models.git import DiffStore, DiffEntry
+from useagent.models.task_state import TaskState
+from useagent.tools.base import ToolError
 
 def select_diff_from_diff_store(ctx:RunContext[TaskState], diff_store_key:str) -> str: 
     """

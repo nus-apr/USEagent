@@ -1,7 +1,7 @@
 import pytest
 from dataclasses import dataclass, field
 from typing import Optional
-from useagent.state.state import DiffEntry,DiffStore
+from useagent.models.git import DiffEntry,DiffStore
 from useagent.tools.base import ToolError
 from useagent.tools.meta import _select_diff_from_diff_store
 

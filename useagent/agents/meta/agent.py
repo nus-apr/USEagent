@@ -13,7 +13,9 @@ from useagent import config
 from useagent.config import ConfigSingleton, AppConfig
 from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
 from useagent.agents.search_code.agent import init_agent as init_search_code_agent
-from useagent.state.state import DiffEntry, Location, TaskState
+from useagent.models.code import Location
+from useagent.models.git import DiffEntry
+from useagent.models.task_state import TaskState
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
 from useagent.tools.base import ToolError
@@ -46,7 +48,7 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         Args:
             task_description (str): The description of the task to be added.
         """
-        return ctx.deps.task.get_issue_statement()
+        return ctx.deps._task.get_issue_statement()
 
     ### Define actions as tools to meta_agent. Each action interfaces to another agent in Pydantic AI.
     @meta_agent.tool(retries=2)
@@ -104,10 +106,10 @@ def agent_loop(task_state: TaskState):
     """
     # first initialize some of the tools based on the task.
     init_bash_tool(
-        task_state.task.get_working_directory(),
-        command_transformer=task_state.task.command_transformer,
+        task_state._task.get_working_directory(),
+        command_transformer=task_state._task.command_transformer,
     )
-    init_edit_tools(task_state.task.get_working_directory())
+    init_edit_tools(task_state._task.get_working_directory())
     meta_agent = init_agent()
     # actually running the agent
     result = meta_agent.run_sync("Invoke tools to complete the task.", deps=task_state)
