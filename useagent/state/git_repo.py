@@ -16,8 +16,8 @@ class GitRepository:
         logger.info(f"[Setup] Setting up a Git Repository at {local_path}")
         self.local_path = local_path
         with cd(self.local_path):
-            self._configure_git()
             self.initialize_git_if_needed()
+            self._configure_git()
 
     def _configure_git(self) -> None:
         """

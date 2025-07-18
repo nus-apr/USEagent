@@ -109,7 +109,7 @@ def test_git_user_without_any_change_is_not_useagent():
 
 @pytest.mark.regression
 def test_git_user_is_only_changed_for_the_local_repository(temp_project_dir, tmp_path):
-    # See Issue#1: 
+    # See Issue#6: 
     # In the initial setup, the local task changed the global git config and overwrote my actual git user. 
     subprocess.run(["git", "init"], cwd=temp_project_dir, check=True)
     (temp_project_dir / "file.txt").write_text("commit content")
