@@ -27,7 +27,7 @@ def _select_diff_from_diff_store(diff_store:DiffStore, index:str) -> str:
     if index.isdigit() and int(index) >= 0:
         index = "diff_"+index
     if index not in diff_store.id_to_diff.keys():
-        logger.debug(f"[Tool] poor key-choice: {index} was tried to select but does not exist [{+ ",".join(list(diff_store.id_to_diff.keys())[:8])}]")
+        logger.debug(f"[Tool] poor key-choice: {index} was tried to select but does not exist [{",".join(list(diff_store.id_to_diff.keys())[:8])}]")
         appendix = "Available keys in diff_store: " + " ".join(list(diff_store.id_to_diff.keys())[:8])
         raise ToolError(f"Key {index} was not in the diff_store. {appendix}")
     else:
