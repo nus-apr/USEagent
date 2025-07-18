@@ -28,8 +28,9 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           eval "$(ssh-agent -s)"
           ssh-add ~/.ssh/id_ed25519
+          echo "SSH_AUTH_SOCK=$(grep SSH_AUTH_SOCK agent_env.sh | cut -d= -f2-)" >> $GITHUB_ENV
         shell: bash
-        
+
       - name: Build Docker image
         run: |
           DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
