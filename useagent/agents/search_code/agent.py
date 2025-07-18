@@ -36,6 +36,6 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         Returns:
             str: The issue statement of the task.
         """
-        return ctx.deps.task.get_issue_statement()
+        return ctx.deps._task.get_issue_statement()
     
     return search_code_agent

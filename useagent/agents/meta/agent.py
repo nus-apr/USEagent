@@ -85,15 +85,25 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         """
         logger.info(f"[MetaAgent] Invoked edit_code with instruction: {instruction}")
         edit_code_agent = init_edit_code_agent()
-        r = await edit_code_agent.run(instruction, deps=ctx.deps)
-        res = r.output
-        logger.info(f"[MetaAgent] edit_code result: {res}")
 
-        # update task state with the diff
-        diff_id = ctx.deps.diff_store.add_entry(res)
-        logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
-
-        return res
+        #TODO: Modularize this behaviour (See Below at AgentLoop)
+        prompt = instruction
+        maximum_allowed_tool_errors : int = 15
+        tool_errors: int = 0
+        while tool_errors < maximum_allowed_tool_errors:
+            try:
+                r = await edit_code_agent.run(prompt, deps=ctx.deps)
+                result = r.output
+                logger.info(f"[MetaAgent] edit_code result: {result}")
+                # update task state with the diff
+                diff_id = ctx.deps.diff_store.add_entry(result)
+                logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
+                return result
+            except ToolError as e:
+                logger.debug(f"[EditAgent] Produced a Tool Error {e.message}. Re-Prompting (error #{tool_errors} of {maximum_allowed_tool_errors})")
+                prompt = f"Previous tool call was done poorly: {e.message}. Try again. Your instruction was: {instruction}"
+                tool_errors = tool_errors + 1
+        
     ### Action definitions END
 
 
@@ -118,14 +128,14 @@ def agent_loop(task_state: TaskState):
     # I tried to wrap it in a function, but there are two issues: 
     #    1) The other agents are async, so the function must be Async too
     #    2) The types must match for pydantic to work flawlessly, so a retry that returns ANY does not work, and there are no good Functional-Generics in Python.
-    maximum_allowed_tool_errors : int = 25
+    maximum_allowed_tool_errors : int = 10
     tool_errors: int = 0
     while tool_errors < maximum_allowed_tool_errors:
         try:
             result = meta_agent.run_sync("Invoke tools to complete the task.", deps=task_state)
+            return result.output
         except ToolError as e:
             logger.debug(f"[MetaAgent] Received a Tool Error {e.message}. Re-Prompting (error #{tool_errors} of {maximum_allowed_tool_errors})")
             prompt = f"Previous tool call was done poorly: {e.message}. Try again."
             tool_errors = tool_errors + 1
 
-    return result.output
