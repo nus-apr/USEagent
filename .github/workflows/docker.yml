@@ -20,16 +20,19 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
+        
       - name: Start SSH agent
+        id: ssh
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.GH_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          eval "$(ssh-agent -s)"
+          eval "$(ssh-agent -s)" > /tmp/agent_env
+          source /tmp/agent_env
           ssh-add ~/.ssh/id_ed25519
-          echo "SSH_AUTH_SOCK=$(grep SSH_AUTH_SOCK agent_env.sh | cut -d= -f2-)" >> $GITHUB_ENV
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
         shell: bash
+
 
       - name: Build Docker image
         run: |
