@@ -29,12 +29,9 @@ jobs:
           eval "$(ssh-agent -s)"
           ssh-add ~/.ssh/id_ed25519
         shell: bash
-
+        
       - name: Build Docker image
-      # We need SSH Forwarding to use our Github Credentials from the Shell in the Image Build.
-      # Otherwise we'd have to pass it as an ARG/ENV and that would become visible in the image or ci logs. 
         run: |
-          DOCKER_BUILDKIT=1 SSH_AUTH_SOCK=$SSH_AUTH_SOCK docker build --ssh default -t useagent-turbo:dev .
-        env:
-          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+          DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
         shell: bash
+
