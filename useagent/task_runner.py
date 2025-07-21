@@ -8,7 +8,7 @@ from pathlib import Path
 from loguru import logger
 
 from useagent.agents.meta.agent import agent_loop
-from useagent.models.task_state import TaskState
+from useagent.pydantic_models.task_state import TaskState
 from useagent.tasks.task import Task
 
 

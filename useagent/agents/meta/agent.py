@@ -14,9 +14,9 @@ from useagent.microagents.decorators import (
     conditional_microagents_triggers,
 )
 from useagent.microagents.management import load_microagents_from_project_dir
-from useagent.models.code import Location
-from useagent.models.git import DiffEntry
-from useagent.models.task_state import TaskState
+from useagent.pydantic_models.code import Location
+from useagent.pydantic_models.git import DiffEntry
+from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.base import ToolError
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools

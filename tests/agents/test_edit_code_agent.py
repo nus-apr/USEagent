@@ -4,8 +4,8 @@ from pydantic_ai.models.test import TestModel
 
 from useagent.agents.edit_code.agent import init_agent
 from useagent.config import AppConfig
-from useagent.models.git import DiffEntry
-from useagent.models.task_state import TaskState
+from useagent.pydantic_models.git import DiffEntry
+from useagent.pydantic_models.task_state import TaskState
 from useagent.state.git_repo import GitRepository
 from useagent.tasks.test_task import TestTask
 

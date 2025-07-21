@@ -1,8 +1,8 @@
 from loguru import logger
 from pydantic_ai import RunContext
 
-from useagent.models.git import DiffEntry, DiffStore
-from useagent.models.task_state import TaskState
+from useagent.pydantic_models.git import DiffEntry, DiffStore
+from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.base import ToolError
 
 

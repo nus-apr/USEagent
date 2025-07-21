@@ -9,8 +9,8 @@ from useagent.microagents.decorators import (
     conditional_microagents_triggers,
 )
 from useagent.microagents.management import load_microagents_from_project_dir
-from useagent.models.git import DiffEntry
-from useagent.models.task_state import TaskState
+from useagent.pydantic_models.git import DiffEntry
+from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.edit import create, extract_diff, insert, str_replace, view
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
