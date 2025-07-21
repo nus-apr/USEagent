@@ -10,8 +10,8 @@ uv sync
 uv run usebench-migration ./data
 ```
 
-*Note*: USEBench is used to provide docker-images and texts - its docker-using APIs are not used. 
-The full work will be done on-top of the buggy usebench image. 
+*Note*: USEBench is used to provide docker-images and texts - its docker-using APIs are not used.
+The full work will be done on-top of the buggy usebench image.
 
 ## Docker
 
@@ -30,6 +30,39 @@ Build image on top of existing image (useful when running on benchmarks):
 ```shell
 DOCKER_BUILDKIT=1 docker build --build-arg BASE_IMAGE=usebench.sweb.eval.x86_64.django__django-10914 --ssh default -t useagent-turbo:dev .
 ```
+
+
+### Development setup
+
+Install app + dev dependencies:
+
+```shell
+uv sync --extra dev
+```
+
+If you want to add a new optional development dependency, do:
+
+```shell
+uv add --optional dev <package>
+```
+
+#### Before commiting changes
+
+Install pre-commit hooks:
+
+```shell
+uv run pre-commit install
+```
+
+The pre-commit hooks will run before any commit is made.
+Please make sure there is no pre-commit errors before code is pushed.
+
+You can also run the pre-commit hooks manually with:
+
+```shell
+uv run pre-commit run --all-files
+```
+
 
 
 ## Run
@@ -101,7 +134,7 @@ docker run --rm \
 
 See more [at pydantic API Documentation](https://ai.pydantic.dev/models/)
 
-**Locally Hosted OLLama** _(assuming there is one running)_, 
+**Locally Hosted OLLama** _(assuming there is one running)_,
 see more examples [at the pydantic OpenAI documentation](https://ai.pydantic.dev/models/openai/)
 
 ```shell
