@@ -14,12 +14,21 @@ class AppConfig:
 class ConfigSingleton:
     _instance: AppConfig | None = None
 
-    @property
-    def config(self) -> AppConfig:
+    class classproperty:
+        def __init__(self, fget):
+            self.fget = fget
+
+        def __get__(self, obj, owner):
+            return self.fget(owner)
+
+    @classproperty
+    def config(cls) -> AppConfig:
         """Returns the current configuration instance."""
-        if self._instance is None:
-            raise RuntimeError("Config has not been initialized.")
-        return self._instance
+        if cls._instance is None:
+            raise RuntimeError(
+                "Config has not been initialized. Must call ConfigSingleton.init() first."
+            )
+        return cls._instance
 
     @classmethod
     def init(

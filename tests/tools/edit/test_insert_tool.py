@@ -3,12 +3,13 @@ from pathlib import Path
 import pytest
 
 from useagent.tools.base import CLIResult, ToolError
-from useagent.tools.edit import insert
+from useagent.tools.edit import init_edit_tools, insert
 
 
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_basic_insertion(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "basic.txt"
     file.write_text("line1\nline2\nline3")
 
@@ -23,6 +24,7 @@ async def test_insert_basic_insertion(tmp_path: Path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_multiline_insertion(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "multi.txt"
     file.write_text("line1\nline2")
 
@@ -38,6 +40,7 @@ async def test_insert_multiline_insertion(tmp_path: Path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_top_of_file(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "top.txt"
     file.write_text("original line")
 
@@ -49,6 +52,7 @@ async def test_insert_top_of_file(tmp_path: Path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_bottom_of_file(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "bottom.txt"
     file.write_text("line1\nline2")
 
@@ -61,6 +65,7 @@ async def test_insert_bottom_of_file(tmp_path: Path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_invalid_negative_line(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "negative.txt"
     file.write_text("line1\nline2")
 
@@ -71,6 +76,7 @@ async def test_insert_invalid_negative_line(tmp_path: Path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_invalid_too_large_line(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "toolarge.txt"
     file.write_text("line1\nline2")
 
@@ -81,6 +87,7 @@ async def test_insert_invalid_too_large_line(tmp_path: Path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_insert_tabs_fill_whitespace_up_to_fixed_point(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "tabs.txt"
     file.write_text("line1")
 
@@ -98,6 +105,7 @@ async def test_insert_tabs_fill_whitespace_up_to_fixed_point(tmp_path: Path):
 async def test_insert_tabs_fill_whitespace_up_to_fixed_point_longer_initial_string_will_add_less_whitespace(
     tmp_path: Path,
 ):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "tabs.txt"
     file.write_text("line1")
 

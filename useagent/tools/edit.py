@@ -304,6 +304,7 @@ async def extract_diff(project_dir: Path | str | None = None):
     """
     assert _project_dir is not None, "Project directory must be initialized first."
     project_dir = project_dir or _project_dir
+
     logger.info(
         f"[Tool] Invoked edit_tool `extract_diff`. Extracting a patch from {project_dir} (type: {type(project_dir)})"
     )

@@ -159,3 +159,10 @@ source .venv/bin/activate  # On macOS/Linux
 uv pip install -e ".[dev]"
 uv run pytest tests
 ```
+
+Alternatively:
+
+```shell
+uv sync --extra dev
+uv run python -m pytest tests
+```

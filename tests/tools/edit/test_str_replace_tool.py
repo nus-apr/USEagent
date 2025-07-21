@@ -3,12 +3,13 @@ from pathlib import Path
 import pytest
 
 from useagent.tools.base import CLIResult, ToolError
-from useagent.tools.edit import str_replace
+from useagent.tools.edit import init_edit_tools, str_replace
 
 
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_success(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "sample.txt"
     file.write_text("hello world\nthis is a test")
 
@@ -22,6 +23,7 @@ async def test_str_replace_success(tmp_path: Path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_no_occurrence(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "no_match.txt"
     file.write_text("hello world\nno match here")
 
@@ -32,6 +34,7 @@ async def test_str_replace_no_occurrence(tmp_path: Path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_multiple_occurrences(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "multiple.txt"
     file.write_text("repeat this repeat again")
 
@@ -42,6 +45,7 @@ async def test_str_replace_multiple_occurrences(tmp_path: Path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_tabs_handled(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "tabs.txt"
     file.write_text("a\tb\tc")
 
@@ -55,6 +59,7 @@ async def test_str_replace_tabs_handled(tmp_path: Path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_multiline_new_string(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "multiline.txt"
     file.write_text("change this line")
 
@@ -72,6 +77,7 @@ async def test_str_replace_multiline_new_string(tmp_path: Path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_edge_case_empty_file(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "empty.txt"
     file.write_text("")
 
@@ -82,6 +88,7 @@ async def test_str_replace_edge_case_empty_file(tmp_path: Path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_str_replace_exact_line_match(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     file = tmp_path / "line_match.txt"
     file.write_text("replace me\nand not me")
 

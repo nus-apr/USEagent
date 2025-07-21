@@ -4,11 +4,12 @@ import pytest
 
 from useagent.state.git_repo import GitRepository
 from useagent.tools.base import ToolResult
-from useagent.tools.edit import extract_diff
+from useagent.tools.edit import extract_diff, init_edit_tools
 
 
 @pytest.mark.asyncio
 async def test_diff_after_repo_init_and_modification(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     (tmp_path / "initial.txt").write_text("initial\n")
     GitRepository(str(tmp_path))
 
@@ -22,6 +23,7 @@ async def test_diff_after_repo_init_and_modification(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_diff_after_repo_clean(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     (tmp_path / "file.txt").write_text("line\n")
     repo = GitRepository(str(tmp_path))
 
@@ -35,6 +37,7 @@ async def test_diff_after_repo_clean(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_diff_after_file_addition(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     GitRepository(str(tmp_path))
 
     (tmp_path / "new.txt").write_text("content\n")
@@ -46,6 +49,7 @@ async def test_diff_after_file_addition(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_diff_ignores_gitignored_file(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     (tmp_path / ".gitignore").write_text("ignored.txt\n")
     (tmp_path / "tracked.txt").write_text("t\n")
 
@@ -61,6 +65,7 @@ async def test_diff_ignores_gitignored_file(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_diff_after_file_deletion(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
     f = tmp_path / "delete_me.txt"
     f.write_text("bye\n")
     GitRepository(str(tmp_path))
