@@ -7,7 +7,8 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from useagent.config import ConfigSingleton, AppConfig
 from useagent.state.git_repo import GitRepository
-from useagent.state.state import Location, TaskState
+from useagent.models.code import Location
+from useagent.models.task_state import TaskState
 from useagent.tools.bash import bash_tool
 from useagent.microagents.decorators import alias_for_microagents,conditional_microagents_triggers
 from useagent.microagents.management import load_microagents_from_project_dir
@@ -35,6 +36,6 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         Returns:
             str: The issue statement of the task.
         """
-        return ctx.deps.task.get_issue_statement()
+        return ctx.deps._task.get_issue_statement()
     
     return search_code_agent

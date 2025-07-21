@@ -6,7 +6,9 @@ from pydantic_ai.tools import Tool
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from useagent.config import ConfigSingleton, AppConfig
-from useagent.state.state import Location, TaskState, DiffEntry
+from useagent.models.code import Location
+from useagent.models.git import DiffEntry
+from useagent.models.task_state import TaskState
 from useagent.tools.edit import view, create, str_replace, insert, extract_diff
 from useagent.microagents.decorators import alias_for_microagents,conditional_microagents_triggers
 from useagent.microagents.management import load_microagents_from_project_dir

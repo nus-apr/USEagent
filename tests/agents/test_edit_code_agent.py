@@ -15,8 +15,8 @@ from pydantic_ai.messages import (
 
 from useagent.agents.edit_code.agent import init_agent
 from useagent.config import AppConfig
-from useagent.state.state import DiffEntry
-from useagent.state.state import TaskState
+from useagent.models.git import DiffEntry
+from useagent.models.task_state import TaskState
 from useagent.tasks.test_task import TestTask
 from useagent.state.git_repo import GitRepository
 
