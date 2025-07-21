@@ -1,7 +1,10 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
+from useagent.tools.base import CLIResult, ToolError
 from useagent.tools.edit import view
-from useagent.tools.base import ToolError,CLIResult
+
 
 @pytest.mark.tool
 @pytest.mark.asyncio
@@ -37,7 +40,7 @@ async def test_view_file_with_valid_range(tmp_path: Path):
     file.write_text("a\nb\nc\nd\ne")
 
     result = await view(str(file), [2, 4])
-    #DEVNOTE: The tool gives every file a little pretext, saying what is happening. We cut that off and test it separately. 
+    # DEVNOTE: The tool gives every file a little pretext, saying what is happening. We cut that off and test it separately.
     output_no_header = "\n".join((result.output.splitlines())[1:])
 
     assert "b" in output_no_header
@@ -53,7 +56,7 @@ async def test_view_file_with_open_ended_range(tmp_path: Path):
 
     result = await view(str(file), [3, -1])
 
-    #DEVNOTE: The tool gives every file a little pretext, saying what is happening. We cut that off and test it seperately. 
+    # DEVNOTE: The tool gives every file a little pretext, saying what is happening. We cut that off and test it seperately.
     output_no_header = "\n".join((result.output.splitlines())[1:])
 
     assert "c" in output_no_header
@@ -84,7 +87,9 @@ async def test_view_file_invalid_range_start(tmp_path: Path):
     file = tmp_path / "bad_start.txt"
     file.write_text("x\ny\nz")
 
-    with pytest.raises(ToolError, match="should be within the range of lines of the file"):
+    with pytest.raises(
+        ToolError, match="should be within the range of lines of the file"
+    ):
         await view(str(file), [0, 2])
 
 
@@ -108,4 +113,3 @@ async def test_view_directory_listing(tmp_path: Path):
     assert isinstance(result, CLIResult)
     assert "file1.txt" in result.output
     assert "file2.txt" in result.output
-

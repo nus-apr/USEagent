@@ -1,19 +1,22 @@
-from pathlib import Path
-from useagent.state.git_repo import GitRepository
 import subprocess
+from pathlib import Path
+
+from useagent.state.git_repo import GitRepository
 
 
 class Task:
-    '''
-    Base Class for all Tasks, providing default 
+    """
+    Base Class for all Tasks, providing default
 
     For now, we require all Tasks to be Git Related.
-    '''
+    """
 
     git_repo: GitRepository
 
     def setup_project(self) -> None:
-        git_cmd = f"git config --global --add safe.directory {self.get_working_directory()}"
+        git_cmd = (
+            f"git config --global --add safe.directory {self.get_working_directory()}"
+        )
         subprocess.run(
             git_cmd,
             shell=True,
@@ -27,7 +30,7 @@ class Task:
 
     def get_working_directory(self) -> Path:
         raise NotImplementedError("Subclasses need to implement this")
-    
+
     def get_issue_statement(self) -> str:
         raise NotImplementedError("Subclasses need to implement this")
 

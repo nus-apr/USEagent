@@ -1,14 +1,14 @@
 import os
 from argparse import ArgumentParser, Namespace
-from tempfile import mkdtemp
 from pathlib import Path
+from tempfile import mkdtemp
 
-
-from useagent.config import AppConfig, ConfigSingleton
-from useagent.tasks.usebench_task import UseBenchTask
-from useagent.tasks.local_task import LocalTask
-from useagent.tasks.github_task import GithubTask
 from useagent import task_runner
+from useagent.config import AppConfig, ConfigSingleton
+from useagent.tasks.github_task import GithubTask
+from useagent.tasks.local_task import LocalTask
+from useagent.tasks.usebench_task import UseBenchTask
+
 
 def add_common_args(parser: ArgumentParser) -> None:
     parser.add_argument(
@@ -47,24 +47,61 @@ def set_usebench_parser_args(parser: ArgumentParser) -> None:
         help="Path to the file that contains all tasks ids to be run.",
     )
 
+
 def set_local_parser_args(parser: ArgumentParser) -> None:
     add_common_args(parser)
 
-    parser.add_argument('--project-directory', type=Path, help="Path to the folder containing the project to operate on.")
+    parser.add_argument(
+        "--project-directory",
+        type=Path,
+        help="Path to the folder containing the project to operate on.",
+    )
 
     task_group = parser.add_mutually_exclusive_group(required=True)
-    task_group.add_argument('--task-description', type=str, help="Verbatim description of what should be done.")
-    task_group.add_argument('--task-file', type=Path, help="A path to a markdown or text file containing the task.")
+    task_group.add_argument(
+        "--task-description",
+        type=str,
+        help="Verbatim description of what should be done.",
+    )
+    task_group.add_argument(
+        "--task-file",
+        type=Path,
+        help="A path to a markdown or text file containing the task.",
+    )
+
 
 def set_github_parser_args(parser: ArgumentParser) -> None:
     add_common_args(parser)
-    parser.add_argument('--repo-url', type=str, required=True, help="Git repository to clone (SSH or HTTPS).")
-    parser.add_argument('--working-dir', type=Path, default=Path("/tmp/working_dir"), help="Target directory to clone into and work on (within Docker Container).")
-    parser.add_argument('--commit', type=str, required=False, help="Commit SHA to checkout and branch from.")
+    parser.add_argument(
+        "--repo-url",
+        type=str,
+        required=True,
+        help="Git repository to clone (SSH or HTTPS).",
+    )
+    parser.add_argument(
+        "--working-dir",
+        type=Path,
+        default=Path("/tmp/working_dir"),
+        help="Target directory to clone into and work on (within Docker Container).",
+    )
+    parser.add_argument(
+        "--commit",
+        type=str,
+        required=False,
+        help="Commit SHA to checkout and branch from.",
+    )
 
     task_group = parser.add_mutually_exclusive_group(required=True)
-    task_group.add_argument('--task-description', type=str, help="Verbatim description of what should be done.")
-    task_group.add_argument('--task-file', type=Path, help="A path to a markdown or text file containing the task.")
+    task_group.add_argument(
+        "--task-description",
+        type=str,
+        help="Verbatim description of what should be done.",
+    )
+    task_group.add_argument(
+        "--task-file",
+        type=Path,
+        help="A path to a markdown or text file containing the task.",
+    )
 
 
 def _get_task_description(args: Namespace) -> str:
@@ -73,6 +110,7 @@ def _get_task_description(args: Namespace) -> str:
     if args.task_file and args.task_file.is_file():
         return args.task_file.read_text()
     raise ValueError("Invalid task file")
+
 
 def parse_args():
     parser = ArgumentParser()
@@ -114,9 +152,7 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
     elif subcommand == "local":
         local_path = args.project_directory
         task_desc = _get_task_description(args)
-        local_task = LocalTask(
-            issue_statement=task_desc, 
-            project_path=local_path)
+        local_task = LocalTask(issue_statement=task_desc, project_path=local_path)
         task_runner.run(local_task, args.output_dir)
 
     elif subcommand == "github":
@@ -128,22 +164,23 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
             commit=args.commit,
         )
         task_runner.run(task, args.output_dir)
-        
+
     else:
         raise ValueError(f"Unknown command: {subcommand}")
 
 
 def build_and_register_config(args: Namespace) -> AppConfig:
     output_dir = os.path.abspath(args.output_dir) if args.output_dir else None
-    ollama_kwargs = {} if not args.provider_url else {"provider_url" : args.provider_url }
+    ollama_kwargs = {} if not args.provider_url else {"provider_url": args.provider_url}
     ConfigSingleton.init(model=args.model, output_dir=output_dir, **ollama_kwargs)
     return ConfigSingleton.config
 
 
 def main():
     args, subparser_dest_attr_name = parse_args()
-    config = build_and_register_config(args)
+    build_and_register_config(args)
     handle_command(args, subparser_dest_attr_name)
+
 
 if __name__ == "__main__":
     main()

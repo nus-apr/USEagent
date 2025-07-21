@@ -1,7 +1,10 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
+from useagent.tools.base import CLIResult, ToolError
 from useagent.tools.edit import str_replace
-from useagent.tools.base import ToolError, CLIResult
+
 
 @pytest.mark.tool
 @pytest.mark.asyncio

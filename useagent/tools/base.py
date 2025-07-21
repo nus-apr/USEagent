@@ -1,5 +1,4 @@
 from dataclasses import dataclass, fields, replace
-from typing import Any
 
 
 @dataclass(kw_only=True, frozen=True)

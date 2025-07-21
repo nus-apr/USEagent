@@ -1,22 +1,22 @@
-from pydantic import BaseModel, PrivateAttr, Field
-from typing import List, Dict
+from pydantic import BaseModel, Field, PrivateAttr
 
-from useagent.tasks.task import Task
-from useagent.models.git import DiffStore,DiffEntry
 from useagent.models.code import Location
+from useagent.models.git import DiffStore
 from useagent.state.git_repo import GitRepository
+from useagent.tasks.task import Task
 
-class TaskState(BaseModel): 
+
+class TaskState(BaseModel):
     _task: Task = PrivateAttr()
     _git_repo: GitRepository = PrivateAttr()
 
-    code_locations: List[Location] = Field(default_factory=list)
-    test_locations: List[Location] = Field(default_factory=list)
+    code_locations: list[Location] = Field(default_factory=list)
+    test_locations: list[Location] = Field(default_factory=list)
 
     diff_store: DiffStore = Field(default_factory=DiffStore)
 
     # stores any additional knowledge to remember
-    additional_knowledge: Dict[str, str] = Field(default_factory=dict)
+    additional_knowledge: dict[str, str] = Field(default_factory=dict)
 
     def __init__(self, task: Task, git_repo: GitRepository, **data):
         super().__init__(**data)

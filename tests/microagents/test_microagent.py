@@ -1,12 +1,14 @@
-import pytest
 from pathlib import Path
-from tempfile import TemporaryDirectory
-from useagent.microagents.microagent import load_microagent, MicroAgent
+
+import pytest
+
+from useagent.microagents.microagent import MicroAgent, load_microagent
 
 # ===================================
 #         Test Area
 #   Find Data at the bottom of file
 # ===================================
+
 
 def test_valid_microagent(tmp_path: Path):
     file = tmp_path / "test.microagent.md"
@@ -17,6 +19,7 @@ def test_valid_microagent(tmp_path: Path):
     assert agent.version == "1.2.3"
     assert "instruction" in agent.__dataclass_fields__
     assert agent.instruction
+
 
 def test_invalid_version_format(tmp_path: Path):
     file = tmp_path / "bad.microagent.md"
@@ -38,25 +41,32 @@ def test_missing_required_field(tmp_path: Path):
     with pytest.raises(ValueError, match="Missing required field: name"):
         load_microagent(file)
 
+
 def test_non_file_path():
     with pytest.raises(ValueError, match="Path is empty or None"):
         load_microagent(None)
+
 
 def test_path_not_a_file(tmp_path: Path):
     with pytest.raises(ValueError, match="Path does not point to a file"):
         load_microagent(tmp_path / "nonexistent.microagent.md")
 
+
 def test_missing_header_structure(tmp_path: Path):
     file = tmp_path / "bad.microagent.md"
     file.write_text(MISSING_HEADER)
-    with pytest.raises(ValueError, match="File does not contain a valid YAML header section"):
+    with pytest.raises(
+        ValueError, match="File does not contain a valid YAML header section"
+    ):
         load_microagent(file)
+
 
 def test_agents_keyword_all(tmp_path: Path):
     file = tmp_path / "all.microagent.md"
     file.write_text(ALL_AGENTS_CONTENT)
     agent = load_microagent(file)
     assert agent.agents == []
+
 
 def test_multiple_agents_and_triggers(tmp_path: Path):
     file = tmp_path / "multi.microagent.md"
@@ -65,11 +75,13 @@ def test_multiple_agents_and_triggers(tmp_path: Path):
     assert len(agent.agents) == 3
     assert len(agent.triggers) == 3
 
+
 def test_str_path_input(tmp_path: Path):
     file = tmp_path / "strpath.microagent.md"
     file.write_text(VALID_CONTENT)
     agent = load_microagent(str(file))
     assert isinstance(agent, MicroAgent)
+
 
 def test_instruction_with_dashes(tmp_path: Path):
     file = tmp_path / "dashes.microagent.md"
@@ -78,6 +90,7 @@ def test_instruction_with_dashes(tmp_path: Path):
     assert "---" in agent.instruction
     assert "This part should also be captured." in agent.instruction
 
+
 def test_instruction_with_yml_block(tmp_path: Path):
     file = tmp_path / "ymlblock.microagent.md"
     file.write_text(INSTRUCTION_WITH_YML_BLOCK)
@@ -85,11 +98,13 @@ def test_instruction_with_yml_block(tmp_path: Path):
     assert "```yml" in agent.instruction
     assert "name: something" in agent.instruction
 
+
 def test_instruction_with_raw_yaml(tmp_path: Path):
     file = tmp_path / "rawyaml.microagent.md"
     file.write_text(INSTRUCTION_WITH_RAW_YAML)
     agent = load_microagent(file)
     assert "name: not_really" in agent.instruction
+
 
 def test_instruction_with_code(tmp_path: Path):
     file = tmp_path / "code.microagent.md"
@@ -97,6 +112,7 @@ def test_instruction_with_code(tmp_path: Path):
     agent = load_microagent(file)
     assert "def foo" in agent.instruction
     assert "return 42" in agent.instruction
+
 
 def test_instruction_with_md_block(tmp_path: Path):
     file = tmp_path / "markdown.microagent.md"
@@ -114,12 +130,14 @@ def test_instruction_with_blank_lines_preserved(tmp_path: Path):
     assert "First line" in agent.instruction
     assert agent.instruction.endswith("\n")
 
+
 def test_instruction_with_leading_whitespace(tmp_path: Path):
     file = tmp_path / "leading.microagent.md"
     file.write_text(INSTRUCTION_WITH_LEADING_SPACE)
     agent = load_microagent(file)
     assert "    Indented line" in agent.instruction
     assert agent.instruction.startswith("Indented line") is False
+
 
 def test_empty_instruction_is_valid(tmp_path: Path):
     file = tmp_path / "empty.microagent.md"
@@ -128,10 +146,9 @@ def test_empty_instruction_is_valid(tmp_path: Path):
     assert agent.instruction.strip() == ""
 
 
-
 # ================================================
-#               Data Area               
-#    Examples used in the Tests           
+#               Data Area
+#    Examples used in the Tests
 # ================================================
 
 

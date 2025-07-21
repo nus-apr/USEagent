@@ -1,43 +1,43 @@
 ## NOTE: implment MetaAgent with agent delegation
 
 from pathlib import Path
-from string import Template
 
 from loguru import logger
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.usage import UsageLimits
-from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.tools import Tool
 
-from useagent import config
-from useagent.config import ConfigSingleton, AppConfig
 from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
 from useagent.agents.search_code.agent import init_agent as init_search_code_agent
+from useagent.config import AppConfig, ConfigSingleton
+from useagent.microagents.decorators import (
+    alias_for_microagents,
+    conditional_microagents_triggers,
+)
+from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.models.code import Location
 from useagent.models.git import DiffEntry
 from useagent.models.task_state import TaskState
+from useagent.tools.base import ToolError
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
-from useagent.tools.base import ToolError
 from useagent.tools.meta import select_diff_from_diff_store, view_task_state
-from useagent.microagents.decorators import alias_for_microagents,conditional_microagents_triggers
-from useagent.microagents.management import load_microagents_from_project_dir
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 # TODO: define the output type
 
+
 @conditional_microagents_triggers(load_microagents_from_project_dir())
 @alias_for_microagents("META")
-def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
+def init_agent(config: AppConfig = ConfigSingleton.config) -> Agent:
     meta_agent = Agent(
-        config.model, 
-        instructions=SYSTEM_PROMPT, 
+        config.model,
+        instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
         tools=[
-            Tool(select_diff_from_diff_store,takes_ctx=True, max_retries=3),
-            Tool(view_task_state,takes_ctx=True,max_retries=0)
+            Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
+            Tool(view_task_state, takes_ctx=True, max_retries=0),
         ],
-        output_type=str
+        output_type=str,
     )
 
     ## This adds the task description to instructions (SYSTEM prompt).
@@ -52,7 +52,9 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
 
     ### Define actions as tools to meta_agent. Each action interfaces to another agent in Pydantic AI.
     @meta_agent.tool(retries=4)
-    async def search_code(ctx: RunContext[TaskState], instruction: str) -> list[Location]:
+    async def search_code(
+        ctx: RunContext[TaskState], instruction: str
+    ) -> list[Location]:
         """Search for relevant locations in the codebase. Only search in source code files, not test files.
 
         Args:
@@ -72,7 +74,6 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
 
         return res
 
-
     @meta_agent.tool(retries=4)
     async def edit_code(ctx: RunContext[TaskState], instruction: str) -> DiffEntry:
         """Edit the codebase based on the provided instruction.
@@ -86,9 +87,9 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
         logger.info(f"[MetaAgent] Invoked edit_code with instruction: {instruction}")
         edit_code_agent = init_edit_code_agent()
 
-        #TODO: Modularize this behaviour (See Below at AgentLoop)
+        # TODO: Modularize this behaviour (See Below at AgentLoop)
         prompt = instruction
-        maximum_allowed_tool_errors : int = 15
+        maximum_allowed_tool_errors: int = 15
         tool_errors: int = 0
         while tool_errors < maximum_allowed_tool_errors:
             try:
@@ -100,12 +101,13 @@ def init_agent(config:AppConfig = ConfigSingleton.config) -> Agent:
                 logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
                 return result
             except ToolError as e:
-                logger.debug(f"[EditAgent] Produced a Tool Error {e.message}. Re-Prompting (error #{tool_errors} of {maximum_allowed_tool_errors})")
+                logger.debug(
+                    f"[EditAgent] Produced a Tool Error {e.message}. Re-Prompting (error #{tool_errors} of {maximum_allowed_tool_errors})"
+                )
                 prompt = f"Previous tool call was done poorly: {e.message}. Try again. Your instruction was: {instruction}"
                 tool_errors = tool_errors + 1
-        
-    ### Action definitions END
 
+    ### Action definitions END
 
     return meta_agent
 
@@ -123,19 +125,21 @@ def agent_loop(task_state: TaskState):
     meta_agent = init_agent()
     # actually running the agent
 
-    #TODO: This is for the meta-agent, but it would make sense that every agent gets a configurable amount of retries. 
+    # TODO: This is for the meta-agent, but it would make sense that every agent gets a configurable amount of retries.
     # At the moment, an inside-edit-code-agent will also restart at the meta-agent level.
-    # I tried to wrap it in a function, but there are two issues: 
+    # I tried to wrap it in a function, but there are two issues:
     #    1) The other agents are async, so the function must be Async too
     #    2) The types must match for pydantic to work flawlessly, so a retry that returns ANY does not work, and there are no good Functional-Generics in Python.
-    maximum_allowed_tool_errors : int = 10
+    maximum_allowed_tool_errors: int = 10
     tool_errors: int = 0
     while tool_errors < maximum_allowed_tool_errors:
+        prompt = "Invoke tools to complete the task."
         try:
-            result = meta_agent.run_sync("Invoke tools to complete the task.", deps=task_state)
+            result = meta_agent.run_sync(prompt, deps=task_state)
             return result.output
         except ToolError as e:
-            logger.debug(f"[MetaAgent] Received a Tool Error {e.message}. Re-Prompting (error #{tool_errors} of {maximum_allowed_tool_errors})")
-            prompt = f"Previous tool call was done poorly: {e.message}. Try again."
+            logger.debug(
+                f"[MetaAgent] Received a Tool Error {e.message}. Re-Prompting (error #{tool_errors} of {maximum_allowed_tool_errors})"
+            )
+            prompt += f"Previous tool call was done poorly: {e.message}. Try again."
             tool_errors = tool_errors + 1
-

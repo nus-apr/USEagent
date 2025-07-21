@@ -4,6 +4,7 @@ import subprocess
 
 from loguru import logger
 
+
 def run_command(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
     """
     Run a command in the shell.

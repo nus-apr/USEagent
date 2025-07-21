@@ -1,7 +1,10 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
+from useagent.tools.base import CLIResult, ToolError
 from useagent.tools.edit import insert
-from useagent.tools.base import ToolError, CLIResult
+
 
 @pytest.mark.tool
 @pytest.mark.asyncio
@@ -10,7 +13,7 @@ async def test_insert_basic_insertion(tmp_path: Path):
     file.write_text("line1\nline2\nline3")
 
     result = await insert(str(file), 1, "inserted")
-    
+
     assert isinstance(result, CLIResult)
     content = file.read_text().splitlines()
     assert content == ["line1", "inserted", "line2", "line3"]
@@ -84,7 +87,7 @@ async def test_insert_tabs_fill_whitespace_up_to_fixed_point(tmp_path: Path):
     # Insert a string with a tab
     result = await insert(str(file), 1, "a\tb")
     assert isinstance(result, CLIResult)
-    
+
     # Check that tab was expanded
     # The tab will fill the space up to 8 spaces, but see the second test for more examples
     assert "a       b" in file.read_text()  # Assuming default tab = 8 spaces
@@ -92,14 +95,16 @@ async def test_insert_tabs_fill_whitespace_up_to_fixed_point(tmp_path: Path):
 
 @pytest.mark.tool
 @pytest.mark.asyncio
-async def test_insert_tabs_fill_whitespace_up_to_fixed_point_longer_initial_string_will_add_less_whitespace(tmp_path: Path):
+async def test_insert_tabs_fill_whitespace_up_to_fixed_point_longer_initial_string_will_add_less_whitespace(
+    tmp_path: Path,
+):
     file = tmp_path / "tabs.txt"
     file.write_text("line1")
 
     # Insert a string with a tab
     result = await insert(str(file), 1, "app\tb")
     assert isinstance(result, CLIResult)
-    
+
     # Check that tab was expanded
     # The tab will fill the space up to 8 spaces, but that means that from a to the next word is 8 characters.
     assert "app     b" in file.read_text()  # Assuming default tab = 8 spaces

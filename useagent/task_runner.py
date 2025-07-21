@@ -7,9 +7,9 @@ from pathlib import Path
 
 from loguru import logger
 
+from useagent.agents.meta.agent import agent_loop
 from useagent.models.task_state import TaskState
 from useagent.tasks.task import Task
-from useagent.agents.meta.agent import agent_loop
 
 
 def run(task: Task, output_dir: str):
@@ -35,8 +35,6 @@ def _run(task: Task, task_output_dir: Path):
         ),
     )
 
-    start_time = datetime.now()
-
     # construct task state
     task_state = TaskState(
         task=task,
@@ -44,6 +42,6 @@ def _run(task: Task, task_output_dir: Path):
     )
 
     # start main agent loop
-    logger.info(f"Starting main agent loop")
+    logger.info("Starting main agent loop")
     result = agent_loop(task_state)
     logger.info(f"Task {task} completed with result: {result}")

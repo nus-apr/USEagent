@@ -1,13 +1,11 @@
 import subprocess
+from pathlib import Path
 
 from usebench.api.datatypes.UnifiedBenchmarkEntry import UnifiedBenchmarkEntry
 from usebench.api.utilities.id_management import lookup_uid_from_dataset
 
 from useagent.state.git_repo import GitRepository
 from useagent.tasks.task import Task
-
-from pathlib import Path
-
 
 _DEFAULT_DATASET_PATH: str = "/useagent/data"  # default path in container
 
@@ -21,7 +19,6 @@ class UseBenchTask(Task):
         # Initialize the git repository for the project
         self.git_repo = GitRepository(local_path=project_path)
         self.setup_project()
-
 
     def _lookup_benchmark_entry(self) -> UnifiedBenchmarkEntry:
         """

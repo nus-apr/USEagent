@@ -1,14 +1,15 @@
 import pytest
-from typing import List
-
-from useagent.microagents.decorators import alias_for_microagents, conditional_microagents_triggers
-from useagent.microagents.microagent import MicroAgent
-from useagent.config import AppConfig
-
-from pydantic_ai import models, capture_run_messages
+from pydantic_ai import capture_run_messages, models
 from pydantic_ai.agent import Agent
-from pydantic_ai.models.test import TestModel
 from pydantic_ai.messages import ModelRequest
+from pydantic_ai.models.test import TestModel
+
+from useagent.config import AppConfig
+from useagent.microagents.decorators import (
+    alias_for_microagents,
+    conditional_microagents_triggers,
+)
+from useagent.microagents.microagent import MicroAgent
 
 models.ALLOW_MODEL_REQUESTS = False
 
@@ -48,7 +49,9 @@ async def test_conditional_microagents_trigger_matching_keyword(config):
 
 @pytest.mark.agent
 @pytest.mark.asyncio
-async def test_conditional_microagents_trigger_matching_keyword_when_agent_id_is_given_per_field(config):
+async def test_conditional_microagents_trigger_matching_keyword_when_agent_id_is_given_per_field(
+    config,
+):
     microagents = [
         MicroAgent("test_microagent", "1.0.0", ["MY_AGENT"], ["trigger_a"], "foo")
     ]
@@ -72,12 +75,15 @@ async def test_conditional_microagents_trigger_matching_keyword_when_agent_id_is
 
 @pytest.mark.agent
 @pytest.mark.asyncio
-async def test_conditional_microagents_wrong_order_of_alias_and_microagent_decorator_raises_error(test_model):
+async def test_conditional_microagents_wrong_order_of_alias_and_microagent_decorator_raises_error(
+    test_model,
+):
     microagents = [
         MicroAgent("test_microagent", "1.0.0", ["MY_AGENT"], ["trigger_a"], "triggered")
     ]
 
     with pytest.raises(ValueError):
+
         @alias_for_microagents("MY_AGENT")
         @conditional_microagents_triggers(microagents)
         def init_agent(config: AppConfig) -> Agent:
@@ -94,6 +100,7 @@ async def test_conditional_microagents_no_alias_given_raises_error(test_model):
     ]
 
     with pytest.raises(ValueError):
+
         @conditional_microagents_triggers(microagents)
         def init_agent(config: AppConfig) -> Agent:
             return Agent(model=test_model, output_type=str)
@@ -114,16 +121,16 @@ async def test_conditional_microagents_empty_list_does_nothing(config):
     with capture_run_messages() as history:
         await agent.run("anything here")
 
-    assert all(
-        not m.instructions for m in history if isinstance(m, ModelRequest)
-    )
+    assert all(not m.instructions for m in history if isinstance(m, ModelRequest))
 
 
 @pytest.mark.agent
 @pytest.mark.asyncio
 async def test_conditional_microagents_prompt_does_not_trigger(config):
     microagents = [
-        MicroAgent("micro_1", "1.0.0", ["MY_AGENT"], ["not_in_prompt"], "should_not_trigger")
+        MicroAgent(
+            "micro_1", "1.0.0", ["MY_AGENT"], ["not_in_prompt"], "should_not_trigger"
+        )
     ]
 
     @conditional_microagents_triggers(microagents)
@@ -138,7 +145,8 @@ async def test_conditional_microagents_prompt_does_not_trigger(config):
 
     assert all(
         m.instructions is None or "should_not_trigger" not in m.instructions
-        for m in history if isinstance(m, ModelRequest)
+        for m in history
+        if isinstance(m, ModelRequest)
     )
 
 
@@ -162,7 +170,8 @@ async def test_conditional_microagents_two_triggers_matched(config):
 
     assert any(
         "A" in m.instructions and "B" in m.instructions
-        for m in history if isinstance(m, ModelRequest) and m.instructions
+        for m in history
+        if isinstance(m, ModelRequest) and m.instructions
     )
 
 
@@ -186,15 +195,15 @@ async def test_conditional_microagents_two_defined_only_one_triggered(config):
 
     assert any(
         "A" in m.instructions and "B" not in m.instructions
-        for m in history if isinstance(m, ModelRequest) and m.instructions
+        for m in history
+        if isinstance(m, ModelRequest) and m.instructions
     )
+
 
 @pytest.mark.agent
 @pytest.mark.asyncio
 async def test_conditional_microagents_triggered_but_agent_id_not_matching(config):
-    microagents = [
-        MicroAgent("X", "1", ["OTHER_AGENT"], ["trigger_me"], "X")
-    ]
+    microagents = [MicroAgent("X", "1", ["OTHER_AGENT"], ["trigger_me"], "X")]
 
     @conditional_microagents_triggers(microagents)
     @alias_for_microagents("MY_AGENT")
@@ -208,8 +217,10 @@ async def test_conditional_microagents_triggered_but_agent_id_not_matching(confi
 
     assert all(
         m.instructions is None or "X" not in m.instructions
-        for m in history if isinstance(m, ModelRequest)
+        for m in history
+        if isinstance(m, ModelRequest)
     )
+
 
 @pytest.mark.agent
 @pytest.mark.asyncio

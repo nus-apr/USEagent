@@ -1,17 +1,16 @@
+import os
 import subprocess
-import pytest
-import os 
-
 from pathlib import Path
 
-from useagent.tools.edit import extract_diff
-from useagent.tools.base import ToolError, ToolResult
-import useagent.tools.edit as edit_module
+import pytest
 
+from useagent.tools.base import ToolError, ToolResult
+from useagent.tools.edit import extract_diff
 
 # DevNote:
-# These tests will require that Git is installed and working. 
-# But given that you are using a git repository right now, that should be fine. 
+# These tests will require that Git is installed and working.
+# But given that you are using a git repository right now, that should be fine.
+
 
 def _setup_git_repo_with_change(repo_path: Path):
     """
@@ -21,8 +20,12 @@ def _setup_git_repo_with_change(repo_path: Path):
         Path to the modified file.
     """
     subprocess.run(["git", "init"], cwd=repo_path, check=True)
-    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"], cwd=repo_path, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True
+    )
 
     file = repo_path / "test.txt"
     file.write_text("original content\n")
@@ -33,6 +36,7 @@ def _setup_git_repo_with_change(repo_path: Path):
     file.write_text("original content\nnew line\n")
 
     return file
+
 
 @pytest.mark.tool
 @pytest.mark.asyncio
@@ -69,7 +73,7 @@ async def test_extract_diff_git_not_initialized(tmp_path):
 @pytest.mark.asyncio
 async def test_extract_diff_single_file_edit(tmp_path):
     _setup_git_repo_with_change(tmp_path)
-    
+
     file = tmp_path / "test.txt"
     file.write_text("modified content\nanother line\n")
 
@@ -79,15 +83,18 @@ async def test_extract_diff_single_file_edit(tmp_path):
     assert "+another line" in result.output
     assert "-original content" in result.output or "+modified content" in result.output
 
+
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_extract_diff_respects_gitignore(tmp_path):
     (tmp_path / ".gitignore").write_text("ignored.txt\n")
     (tmp_path / "tracked.txt").write_text("t\n")
-    
+
     subprocess.run(["git", "init"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True
+    )
     subprocess.run(["git", "add", "tracked.txt"], cwd=tmp_path, check=True)
     subprocess.run(["git", "add", ".gitignore"], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
@@ -121,6 +128,7 @@ async def test_extract_diff_multiple_files(tmp_path):
     assert "diff --git a/test.txt" in result.output
     assert "diff --git a/other.txt" in result.output
 
+
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_extract_diff_file_deletion(tmp_path):
@@ -132,6 +140,7 @@ async def test_extract_diff_file_deletion(tmp_path):
 
     assert "diff --git" in result.output
     assert "deleted file mode" in result.output
+
 
 @pytest.mark.tool
 @pytest.mark.asyncio
@@ -160,16 +169,19 @@ async def test_extract_diff_nested_file(tmp_path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_extract_diff_untracked_file_is_not_included(tmp_path: Path):
-    # DevNote: 
+    # DevNote:
     # This tests for the case that a completely new file was added, not a change but a `create`
     # These do NOT appear in a git diff, unless there was a git add (they were not added to the index)
     (tmp_path / "tracked.txt").write_text("initial\n")
 
     # Initialize repo and commit
     import subprocess
+
     subprocess.run(["git", "init"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True
+    )
     subprocess.run(["git", "add", "tracked.txt"], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
 
@@ -185,15 +197,20 @@ async def test_extract_diff_untracked_file_is_not_included(tmp_path: Path):
 @pytest.mark.regression
 @pytest.mark.tool
 @pytest.mark.asyncio
-async def test_extract_diff_tracked_file_change_included_untracked_ignored(tmp_path: Path):
-    # DevNote: 
+async def test_extract_diff_tracked_file_change_included_untracked_ignored(
+    tmp_path: Path,
+):
+    # DevNote:
     # This tests for the case that a completely new file was added, not a change but a `create`
     # These do NOT appear in a git diff, unless there was a git add (they were not added to the index)
     (tmp_path / "a.txt").write_text("a\n")
     import subprocess
+
     subprocess.run(["git", "init"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True
+    )
     subprocess.run(["git", "add", "a.txt"], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
 

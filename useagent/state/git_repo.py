@@ -1,9 +1,10 @@
-from subprocess import DEVNULL, CalledProcessError
-
-from useagent.utils import cd, run_command
 import os
+from subprocess import DEVNULL
 
 from loguru import logger
+
+from useagent.utils import cd, run_command
+
 
 class GitRepository:
     """
@@ -25,9 +26,13 @@ class GitRepository:
         This is necessary for committing changes.
         """
         logger.debug(f"Configuring git user and email (at {self.local_path})")
-        run_command(["git", "config","--local", "user.name", "USEagent"], cwd=self.local_path)
-        run_command(["git", "config","--local", "user.email", "useagent@useagent.com"], cwd=self.local_path)
-
+        run_command(
+            ["git", "config", "--local", "user.name", "USEagent"], cwd=self.local_path
+        )
+        run_command(
+            ["git", "config", "--local", "user.email", "useagent@useagent.com"],
+            cwd=self.local_path,
+        )
 
     def initialize_git_if_needed(self) -> None:
         # DevNote:
@@ -37,8 +42,15 @@ class GitRepository:
             run_command(["git", "init", "--quiet"], cwd=self.local_path)
             self._configure_git()
             run_command(["git", "add", "."], cwd=self.local_path)
-            run_command(["git", "commit", "-m", "Initial commit"], stdout=DEVNULL, stderr=DEVNULL, cwd=self.local_path)
-            logger.info(f"[Setup] {self.local_path} was NOT a git repository - initialized a repository and made an initial commit.")
+            run_command(
+                ["git", "commit", "-m", "Initial commit"],
+                stdout=DEVNULL,
+                stderr=DEVNULL,
+                cwd=self.local_path,
+            )
+            logger.info(
+                f"[Setup] {self.local_path} was NOT a git repository - initialized a repository and made an initial commit."
+            )
 
     def repo_clean_changes(self) -> None:
         """

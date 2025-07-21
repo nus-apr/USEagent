@@ -1,8 +1,7 @@
-
 from dataclasses import field
+
 from pydantic.dataclasses import dataclass
 
-from typing import Dict
 
 @dataclass(frozen=True)
 class DiffEntry:
@@ -12,7 +11,7 @@ class DiffEntry:
 
 @dataclass(config=dict(arbitrary_types_allowed=True))
 class DiffStore:
-    id_to_diff: Dict[str, DiffEntry] = field(default_factory=dict)
+    id_to_diff: dict[str, DiffEntry] = field(default_factory=dict)
 
     def add_entry(self, entry: DiffEntry) -> str:
         """Add an existing diff entry and return its ID."""
