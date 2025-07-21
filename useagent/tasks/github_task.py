@@ -14,11 +14,11 @@ class GithubTask(Task):
     Task for cloning GitHub repositories into a working directory.
     """
 
-    repo_url: str = None
-    issue_statement: str = None
-    uid: str = None
+    repo_url: str
+    issue_statement: str
+    uid: str
     _working_dir: Path
-    commit: str = None
+    commit: str | None = None
     _default_branch_name: str = "useagent"
 
     def __init__(
@@ -26,7 +26,7 @@ class GithubTask(Task):
         issue_statement: str,
         repo_url: str,
         working_dir: Path = Path("/tmp/working_dir"),
-        commit: str = None,
+        commit: str | None = None,
     ):
         if not issue_statement or not issue_statement.strip():
             raise ValueError("issue_statement must be a non-empty string")
@@ -57,7 +57,7 @@ class GithubTask(Task):
         self._working_dir = working_dir
         self.uid = self._derive_uid_from_url(repo_url)
         self.clone_repo_to_working_dir()
-        self.git_repo = GitRepository(local_path=self._working_dir)
+        self.git_repo = GitRepository(local_path=str(self._working_dir))
         self.setup_project()
 
     def get_issue_statement(self) -> str:

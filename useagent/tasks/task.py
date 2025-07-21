@@ -11,6 +11,7 @@ class Task:
     For now, we require all Tasks to be Git Related.
     """
 
+    uid: str
     git_repo: GitRepository
 
     def setup_project(self) -> None:

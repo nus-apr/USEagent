@@ -28,7 +28,7 @@ SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
 @conditional_microagents_triggers(load_microagents_from_project_dir())
 @alias_for_microagents("META")
-def init_agent(config: AppConfig = ConfigSingleton().config) -> Agent:
+def init_agent(config: AppConfig = ConfigSingleton().config) -> Agent[TaskState, str]:
     meta_agent = Agent(
         config.model,
         instructions=SYSTEM_PROMPT,
@@ -75,7 +75,9 @@ def init_agent(config: AppConfig = ConfigSingleton().config) -> Agent:
         return res
 
     @meta_agent.tool(retries=4)
-    async def edit_code(ctx: RunContext[TaskState], instruction: str) -> DiffEntry:
+    async def edit_code(
+        ctx: RunContext[TaskState], instruction: str
+    ) -> DiffEntry | None:
         """Edit the codebase based on the provided instruction.
 
         Args:
@@ -107,6 +109,8 @@ def init_agent(config: AppConfig = ConfigSingleton().config) -> Agent:
                 prompt = f"Previous tool call was done poorly: {e.message}. Try again. Your instruction was: {instruction}"
                 tool_errors = tool_errors + 1
 
+        return None
+
     ### Action definitions END
 
     return meta_agent
@@ -118,10 +122,10 @@ def agent_loop(task_state: TaskState):
     """
     # first initialize some of the tools based on the task.
     init_bash_tool(
-        task_state._task.get_working_directory(),
+        str(task_state._task.get_working_directory()),
         command_transformer=task_state._task.command_transformer,
     )
-    init_edit_tools(task_state._task.get_working_directory())
+    init_edit_tools(str(task_state._task.get_working_directory()))
     meta_agent = init_agent()
     # actually running the agent
 

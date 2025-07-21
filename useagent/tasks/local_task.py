@@ -12,8 +12,8 @@ class LocalTask(Task):
     and if necessary a git repository is initialized.
     """
 
-    project_path: str = None
-    issue_statement: str = None
+    project_path: str
+    issue_statement: str
     uid: str = "local"
     _working_dir: Path  # All files will be copied to this directory, before the git repository is initialized there.
 
@@ -41,7 +41,7 @@ class LocalTask(Task):
         self.issue_statement = issue_statement
         self._working_dir = working_dir
         self.copy_project_to_working_dir()
-        self.git_repo = GitRepository(local_path=self._working_dir)
+        self.git_repo = GitRepository(local_path=str(self._working_dir))
         self.setup_project()
 
     def get_issue_statement(self) -> str:

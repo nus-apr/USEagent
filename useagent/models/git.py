@@ -9,7 +9,7 @@ class DiffEntry:
     notes: str | None = None
 
 
-@dataclass(config=dict(arbitrary_types_allowed=True))
+@dataclass(config=dict(arbitrary_types_allowed=True))  # type: ignore
 class DiffStore:
     id_to_diff: dict[str, DiffEntry] = field(default_factory=dict)
 

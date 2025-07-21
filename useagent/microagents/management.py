@@ -13,7 +13,7 @@ def _get_default_microagent_directory() -> Path:
 
 
 def load_microagents(dir_path: str) -> list[MicroAgent]:
-    results: [MicroAgent] = []
+    results: list[MicroAgent] = []
     for path in Path(dir_path).rglob("*.microagent.md"):
         if path.name.count(".") >= 2 and path.name.endswith(".microagent.md"):
             results.append(load_microagent(path))
@@ -22,4 +22,4 @@ def load_microagents(dir_path: str) -> list[MicroAgent]:
 
 @staticmethod
 def load_microagents_from_project_dir() -> list[MicroAgent]:
-    return load_microagents(_get_default_microagent_directory())
+    return load_microagents(str(_get_default_microagent_directory()))

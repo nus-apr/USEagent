@@ -10,7 +10,7 @@ from useagent.utils import cd
 SNIPPET_LINES: int = 4
 
 
-_project_dir: Path = None
+_project_dir: Path | None = None
 
 
 def init_edit_tools(project_dir: str):
@@ -23,6 +23,7 @@ def init_edit_tools(project_dir: str):
 
 
 def _make_path_absolute(path: str) -> Path:
+    assert _project_dir is not None, "Project directory must be initialized first."
     if os.path.isabs(path):
         return Path(path)
     return _project_dir / path
@@ -294,13 +295,14 @@ async def insert(file_path: str, insert_line: int, new_str: str):
     return CLIResult(output=success_msg)
 
 
-async def extract_diff(project_dir: Path | str = None):
+async def extract_diff(project_dir: Path | str | None = None):
     """
     Extract the diff of the current state of the repository.
 
     Returns:
         ToolResult: The result of the diff extraction, containing the output or error.
     """
+    assert _project_dir is not None, "Project directory must be initialized first."
     project_dir = project_dir or _project_dir
     logger.info(
         f"[Tool] Invoked edit_tool `extract_diff`. Extracting a patch from {project_dir} (type: {type(project_dir)})"

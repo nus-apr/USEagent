@@ -84,7 +84,7 @@ class _BashSession:
                     # if we read directly from stdout/stderr, it will wait forever for
                     # EOF. use the StreamReader buffer directly instead.
                     output = (
-                        self._process.stdout._buffer.decode()
+                        self._process.stdout._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue]
                     )  # pyright: ignore[reportAttributeAccessIssue]
                     if self._sentinel in output:
                         # strip the sentinel and break
@@ -100,7 +100,7 @@ class _BashSession:
             output = output[:-1]
 
         error = (
-            self._process.stderr._buffer.decode()
+            self._process.stderr._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue]
         )  # pyright: ignore[reportAttributeAccessIssue]
         if error.endswith("\n"):
             error = error[:-1]

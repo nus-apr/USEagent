@@ -67,7 +67,7 @@ def conditional_microagents_triggers(microagents: list[MicroAgent]):
 
             @agent.instructions
             def conditional_microagent_instructions(ctx: RunContext) -> str:
-                prompt = ctx.prompt.lower()
+                prompt = str(ctx.prompt).lower()
                 triggered = [
                     m for m in relevant if any(t.lower() in prompt for t in m.triggers)
                 ]
