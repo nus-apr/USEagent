@@ -11,21 +11,15 @@ class AppConfig:
     output_dir: str | None = None
 
 
-class _LazyProxy:
-    """Lazily forwards attribute access to the real AppConfig once initialized."""
-
-    def __getattr__(self, name):
-        instance = ConfigSingleton._instance
-        if instance is None:
-            raise RuntimeError(
-                f"Config has not been initialized, cannot access `{name}`."
-            )
-        return getattr(instance, name)
-
-
 class ConfigSingleton:
-    _instance: Optional[AppConfig] = None
-    config = _LazyProxy()  # public interface
+    _instance: AppConfig | None = None
+
+    @property
+    def config(self) -> AppConfig:
+        """Returns the current configuration instance."""
+        if self._instance is None:
+            raise RuntimeError("Config has not been initialized.")
+        return self._instance
 
     @classmethod
     def init(

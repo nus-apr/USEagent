@@ -18,7 +18,7 @@ SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
 @conditional_microagents_triggers(load_microagents_from_project_dir())
 @alias_for_microagents("SEARCH")
-def init_agent(config: AppConfig = ConfigSingleton.config) -> Agent:
+def init_agent(config: AppConfig = ConfigSingleton().config) -> Agent:
     search_code_agent = Agent(
         config.model,
         instructions=SYSTEM_PROMPT,

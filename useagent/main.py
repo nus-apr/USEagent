@@ -173,7 +173,7 @@ def build_and_register_config(args: Namespace) -> AppConfig:
     output_dir = os.path.abspath(args.output_dir) if args.output_dir else None
     ollama_kwargs = {} if not args.provider_url else {"provider_url": args.provider_url}
     ConfigSingleton.init(model=args.model, output_dir=output_dir, **ollama_kwargs)
-    return ConfigSingleton.config
+    return ConfigSingleton().config
 
 
 def main():
