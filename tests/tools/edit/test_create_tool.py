@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from useagent.pydantic_models.cliresult import CLIResult
-from useagent.tools.common.toolerror import ToolError
+from useagent.pydantic_models.tools.cliresult import CLIResult
+from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.edit import create
 
 
@@ -27,8 +27,11 @@ async def test_create_file_already_exists(tmp_path: Path):
     file = tmp_path / "existing.txt"
     file.write_text("Existing content")
 
-    with pytest.raises(ToolError, match="File already exists"):
-        await create(str(file), "New content")
+    result = await create(str(file), "New content")
+
+    assert isinstance(result, ToolErrorInfo)
+    assert result.tool == "create"
+    assert "File already exists" in result.message
 
 
 @pytest.mark.tool
@@ -65,5 +68,7 @@ async def test_create_file_path_is_directory(tmp_path: Path):
     dir_path = tmp_path / "not_a_file"
     dir_path.mkdir()
 
-    with pytest.raises(ToolError):
-        await create(str(dir_path), "This should fail")
+    result = await create(str(dir_path), "This should fail")
+
+    assert isinstance(result, ToolErrorInfo)
+    assert result.tool == "create"

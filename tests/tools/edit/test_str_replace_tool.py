@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from useagent.pydantic_models.cliresult import CLIResult
-from useagent.tools.common.toolerror import ToolError
+from useagent.pydantic_models.tools.cliresult import CLIResult
+from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.edit import init_edit_tools, str_replace
 
 
@@ -19,28 +19,6 @@ async def test_str_replace_success(tmp_path: Path):
     assert "has been edited" in result.output
     assert "hi world" in file.read_text()
     assert "hello" not in file.read_text()
-
-
-@pytest.mark.tool
-@pytest.mark.asyncio
-async def test_str_replace_no_occurrence(tmp_path: Path):
-    init_edit_tools(str(tmp_path))
-    file = tmp_path / "no_match.txt"
-    file.write_text("hello world\nno match here")
-
-    with pytest.raises(ToolError, match=r"old_str `nomatch` did not appear verbatim"):
-        await str_replace(str(file), "nomatch", "replace")
-
-
-@pytest.mark.tool
-@pytest.mark.asyncio
-async def test_str_replace_multiple_occurrences(tmp_path: Path):
-    init_edit_tools(str(tmp_path))
-    file = tmp_path / "multiple.txt"
-    file.write_text("repeat this repeat again")
-
-    with pytest.raises(ToolError, match=r"Multiple occurrences of old_str"):
-        await str_replace(str(file), "repeat", "once")
 
 
 @pytest.mark.tool
@@ -77,17 +55,6 @@ async def test_str_replace_multiline_new_string(tmp_path: Path):
 
 @pytest.mark.tool
 @pytest.mark.asyncio
-async def test_str_replace_edge_case_empty_file(tmp_path: Path):
-    init_edit_tools(str(tmp_path))
-    file = tmp_path / "empty.txt"
-    file.write_text("")
-
-    with pytest.raises(ToolError, match="did not appear verbatim"):
-        await str_replace(str(file), "anything", "nothing")
-
-
-@pytest.mark.tool
-@pytest.mark.asyncio
 async def test_str_replace_exact_line_match(tmp_path: Path):
     init_edit_tools(str(tmp_path))
     file = tmp_path / "line_match.txt"
@@ -97,3 +64,45 @@ async def test_str_replace_exact_line_match(tmp_path: Path):
     assert isinstance(result, CLIResult)
     assert "done" in file.read_text()
     assert "replace me" not in file.read_text()
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_str_replace_edge_case_empty_file(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
+    file = tmp_path / "empty.txt"
+    file.write_text("")
+
+    result = await str_replace(str(file), "anything", "nothing")
+
+    assert isinstance(result, ToolErrorInfo)
+    assert result.tool == "str_replace"
+    assert "did not appear" in result.message.lower()
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_str_replace_no_occurrence(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
+    file = tmp_path / "no_match.txt"
+    file.write_text("hello world\nno match here")
+
+    result = await str_replace(str(file), "nomatch", "replace")
+
+    assert isinstance(result, ToolErrorInfo)
+    assert result.tool == "str_replace"
+    assert "did not appear" in result.message.lower()
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_str_replace_multiple_occurrences(tmp_path: Path):
+    init_edit_tools(str(tmp_path))
+    file = tmp_path / "multiple.txt"
+    file.write_text("repeat this repeat again")
+
+    result = await str_replace(str(file), "repeat", "once")
+
+    assert isinstance(result, ToolErrorInfo)
+    assert result.tool == "str_replace"
+    assert "multiple occurrences" in result.message.lower()

@@ -3,8 +3,8 @@ from pathlib import Path
 
 from loguru import logger
 
-from useagent.pydantic_models.cliresult import CLIResult
-from useagent.tools.common.toolerror import ToolError
+from useagent.pydantic_models.tools.cliresult import CLIResult
+from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.run import maybe_truncate, run
 from useagent.utils import cd
 
@@ -30,12 +30,16 @@ def _make_path_absolute(path: str) -> Path:
     return _project_dir / path
 
 
-def _read_file(path: Path):
+def _read_file(path: Path) -> str | ToolErrorInfo:
     """Read the content of a file from a given path; raise a ToolError if an error occurs."""
     try:
         return path.read_text()
     except Exception as e:
-        raise ToolError(f"Ran into {e} while trying to read {path}") from None
+        return ToolErrorInfo(
+            tool="view",
+            message=f"Ran into {e} while trying to read {path}",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
+        )
 
 
 def _write_file(path: Path, file: str):
@@ -43,7 +47,11 @@ def _write_file(path: Path, file: str):
     try:
         path.write_text(file)
     except Exception as e:
-        raise ToolError(f"Ran into {e} while trying to write to {path}") from None
+        return ToolErrorInfo(
+            tool="view",
+            message=f"Ran into {e} while trying to write to {path}",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
+        )
 
 
 def _make_output(
@@ -69,10 +77,9 @@ def _make_output(
     )
 
 
-# TODO: change all raised exceptions to returned errors
-
-
-async def view(file_path: str, view_range: list[int] | None = None) -> CLIResult:
+async def view(
+    file_path: str, view_range: list[int] | None = None
+) -> CLIResult | ToolErrorInfo:
     """
     View the content of a file or directory at the specified path.
     If view_range is provided, only the specified lines will be returned.
@@ -88,16 +95,26 @@ async def view(file_path: str, view_range: list[int] | None = None) -> CLIResult
         f"[Tool] Invoked edit_tool `view`. Viewing {file_path}, range {view_range}"
     )
     if not file_path or not file_path.strip():
-        raise ToolError("Received an empty or None file_path")
+        return ToolErrorInfo(
+            tool="view",
+            message="Received an empty or None file_path",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
+        )
 
     path = _make_path_absolute(file_path)
 
     if not path.exists():
-        raise ToolError(f"Filepath {file_path} does not exist.")
+        return ToolErrorInfo(
+            tool="view",
+            message=f"Filepath {file_path} does not exist.",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
+        )
     if path.is_dir():
         if view_range:
-            raise ToolError(
-                "The `view_range` parameter is not allowed when `path` points to a directory."
+            return ToolErrorInfo(
+                tool="view",
+                message="The `view_range` parameter is not allowed when `path` points to a directory.",
+                supplied_arguments={k: str(v) for k, v in locals().items()},
             )
 
         _, stdout, stderr = await run(rf"find {path} -maxdepth 2 -not -path '*/\.*'")
@@ -105,27 +122,38 @@ async def view(file_path: str, view_range: list[int] | None = None) -> CLIResult
             stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
         return CLIResult(output=stdout, error=stderr)
 
-    file_content = _read_file(path)
+    _read_file_result = _read_file(path)
+    if isinstance(_read_file_result, ToolErrorInfo):
+        return _read_file_result
+    file_content = _read_file_result
     init_line = 1
     if view_range:
         if len(view_range) != 2 or not all(isinstance(i, int) for i in view_range):
-            raise ToolError(
-                "Invalid `view_range`. It should be a list of two integers."
+            return ToolErrorInfo(
+                tool="view",
+                message="Invalid `view_range`. It should be a list of two integers.",
+                supplied_arguments={k: str(v) for k, v in locals().items()},
             )
         file_lines = file_content.split("\n")
         n_lines_file = len(file_lines)
         init_line, final_line = view_range
         if init_line < 1 or init_line > n_lines_file:
-            raise ToolError(
-                f"Invalid `view_range`: {view_range}. Its first element `{init_line}` should be within the range of lines of the file: {[1, n_lines_file]}"
+            return ToolErrorInfo(
+                tool="view",
+                message=f"Invalid `view_range`: {view_range}. Its first element `{init_line}` should be within the range of lines of the file: {[1, n_lines_file]}",
+                supplied_arguments={k: str(v) for k, v in locals().items()},
             )
         if final_line > n_lines_file:
-            raise ToolError(
-                f"Invalid `view_range`: {view_range}. Its second element `{final_line}` should be smaller than the number of lines in the file: `{n_lines_file}`"
+            return ToolErrorInfo(
+                tool="view",
+                message=f"Invalid `view_range`: {view_range}. Its second element `{final_line}` should be smaller than the number of lines in the file: `{n_lines_file}`",
+                supplied_arguments={k: str(v) for k, v in locals().items()},
             )
         if final_line != -1 and final_line < init_line:
-            raise ToolError(
-                f"Invalid `view_range`: {view_range}. Its second element `{final_line}` should be larger or equal than its first `{init_line}`"
+            return ToolErrorInfo(
+                tool="view",
+                message=f"Invalid `view_range`: {view_range}. Its second element `{final_line}` should be larger or equal than its first `{init_line}`",
+                supplied_arguments={k: str(v) for k, v in locals().items()},
             )
 
         if final_line == -1:
@@ -136,7 +164,7 @@ async def view(file_path: str, view_range: list[int] | None = None) -> CLIResult
     return CLIResult(output=_make_output(file_content, str(path), init_line=init_line))
 
 
-async def create(file_path: str, file_text: str) -> CLIResult:
+async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
     """
     Create a new file at the specified path with the given text content.
     Text content can be empty.
@@ -154,13 +182,19 @@ async def create(file_path: str, file_text: str) -> CLIResult:
     )
 
     if not file_path or not file_path.strip():
-        raise ToolError("Received an None or Empty file_path argument.")
+        return ToolErrorInfo(
+            tool="create",
+            message="Received an None or Empty file_path argument.",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
+        )
 
     path = _make_path_absolute(file_path)
 
     if path.exists():
-        raise ToolError(
-            f"File already exists at: {path}. Cannot overwrite files using command `create`."
+        return ToolErrorInfo(
+            tool="create",
+            message=f"File already exists at: {path}. Cannot overwrite files using command `create`.",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
         )
 
     _write_file(path, file_text)
@@ -187,33 +221,43 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
     path = _make_path_absolute(file_path)
 
     if not path.exists():
-        raise ToolError(
-            f"Filepath {file_path} does not exist, it has to be created first. `str_replace` only works for existing files."
+        return ToolErrorInfo(
+            tool="str_replace",
+            message=f"Filepath {file_path} does not exist, it has to be created first. `str_replace` only works for existing files.",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
         )
     if path.exists() and path.is_dir():
-        raise ToolError(
-            f"Filepath {file_path} is a directory - `str_replace` can only be applied to files."
+        return ToolErrorInfo(
+            tool="str_replace",
+            message=f"Filepath {file_path} is a directory - `str_replace` can only be applied to files.",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
         )
 
-    file_content = _read_file(path).expandtabs()
+    _read_file_result = _read_file(path)
+    if isinstance(_read_file_result, ToolErrorInfo):
+        return _read_file_result
+    file_content = _read_file_result.expandtabs()
     old_str = old_str.expandtabs()
     new_str = new_str.expandtabs()
 
     # Check if old_str is unique in the file
     occurrences = file_content.count(old_str)
     if occurrences == 0:
-        raise ToolError(
-            f"No replacement was performed, old_str `{old_str}` did not appear verbatim in {path}."
+        return ToolErrorInfo(
+            tool="str_replace",
+            message=f"No replacement was performed, old_str `{old_str}` did not appear verbatim in {path}.",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
         )
     elif occurrences > 1:
         file_content_lines = file_content.split("\n")
         lines = [
             idx + 1 for idx, line in enumerate(file_content_lines) if old_str in line
         ]
-        raise ToolError(
-            f"No replacement was performed. Multiple occurrences of old_str `{old_str}` in lines {lines}. Please ensure it is unique"
+        return ToolErrorInfo(
+            tool="str_replace",
+            message=f"No replacement was performed. Multiple occurrences of old_str `{old_str}` in lines {lines}. Please ensure it is unique",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
         )
-
     # Replace old_str with new_str
     new_file_content = file_content.replace(old_str, new_str)
 
@@ -234,7 +278,9 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
     return CLIResult(output=success_msg)
 
 
-async def insert(file_path: str, insert_line: int, new_str: str):
+async def insert(
+    file_path: str, insert_line: int, new_str: str
+) -> CLIResult | ToolErrorInfo:
     """
     Insert new_str at the specified line in the file at the given path.
 
@@ -253,22 +299,31 @@ async def insert(file_path: str, insert_line: int, new_str: str):
     path = _make_path_absolute(file_path)
 
     if not path.exists():
-        raise ToolError(
-            f"Filepath {file_path} does not exist, it has to be created first. `insert` only works for existing files."
+        return ToolErrorInfo(
+            tool="insert",
+            message=f"Filepath {file_path} does not exist, it has to be created first. `insert` only works for existing files.",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
         )
     if path.exists() and path.is_dir():
-        raise ToolError(
-            f"Filepath {file_path} is a directory - `insert` can only be applied to files."
+        return ToolErrorInfo(
+            tool="insert",
+            message=f"Filepath {file_path} is a directory - `insert` can only be applied to files.",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
         )
 
-    file_text = _read_file(path).expandtabs()
+    _read_file_result = _read_file(path)
+    if isinstance(_read_file_result, ToolErrorInfo):
+        return _read_file_result
+    file_text = _read_file_result.expandtabs()
     new_str = new_str.expandtabs()
     file_text_lines = file_text.split("\n")
     n_lines_file = len(file_text_lines)
 
     if insert_line < 0 or insert_line > n_lines_file:
-        raise ToolError(
-            f"Invalid `insert_line` parameter: {insert_line}. It should be within the range of lines of the file: {[0, n_lines_file]}"
+        return ToolErrorInfo(
+            tool="insert",
+            message=f"Invalid `insert_line` parameter: {insert_line}. It should be within the range of lines of the file: {[0, n_lines_file]}",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
         )
 
     new_str_lines = new_str.split("\n")
@@ -296,7 +351,9 @@ async def insert(file_path: str, insert_line: int, new_str: str):
     return CLIResult(output=success_msg)
 
 
-async def extract_diff(project_dir: Path | str | None = None):
+async def extract_diff(
+    project_dir: Path | str | None = None,
+) -> CLIResult | ToolErrorInfo:
     """
     Extract the diff of the current state of the repository.
 
@@ -319,7 +376,11 @@ async def extract_diff(project_dir: Path | str | None = None):
         stdout = cached_out + working_out
 
         if stderr_1 or stderr_2:
-            raise ToolError(f"Failed to extract diff: {stderr_1 + stderr_2}")
+            return ToolErrorInfo(
+                tool="extract_diff",
+                message=f"Failed to extract diff: {stderr_1 + stderr_2}",
+                supplied_arguments={k: str(v) for k, v in locals().items()},
+            )
         if not stdout or not stdout.strip():
             logger.debug("[Tool] edit_tool `extract_diff`: Received empty Diff")
             return CLIResult(output="No changes detected in the repository.")

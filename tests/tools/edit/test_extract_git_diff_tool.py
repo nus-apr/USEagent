@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from useagent.pydantic_models.cliresult import CLIResult
-from useagent.tools.common.toolerror import ToolError
+from useagent.pydantic_models.tools.cliresult import CLIResult
+from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.edit import extract_diff, init_edit_tools
 
 # DevNote:
@@ -66,13 +66,6 @@ async def test_extract_diff_no_changes_after_commit(tmp_path):
 
 @pytest.mark.tool
 @pytest.mark.asyncio
-async def test_extract_diff_git_not_initialized(tmp_path):
-    with pytest.raises(ToolError, match="Failed to extract diff"):
-        await extract_diff(project_dir=tmp_path)
-
-
-@pytest.mark.tool
-@pytest.mark.asyncio
 async def test_extract_diff_single_file_edit(tmp_path):
     _setup_git_repo_with_change(tmp_path)
 
@@ -84,6 +77,19 @@ async def test_extract_diff_single_file_edit(tmp_path):
     assert "diff --git" in result.output
     assert "+another line" in result.output
     assert "-original content" in result.output or "+modified content" in result.output
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_git_not_initialized(tmp_path):
+    result = await extract_diff(project_dir=tmp_path)
+
+    assert isinstance(result, ToolErrorInfo)
+    assert result.tool == "extract_diff"
+    assert (
+        "not a git repository" in result.message.lower()
+        or "git" in result.message.lower()
+    )
 
 
 @pytest.mark.tool

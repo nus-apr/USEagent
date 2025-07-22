@@ -3,10 +3,12 @@ from pydantic_ai import RunContext
 
 from useagent.pydantic_models.git import DiffEntry, DiffStore
 from useagent.pydantic_models.task_state import TaskState
-from useagent.tools.common.toolerror import ToolError
+from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 
 
-def select_diff_from_diff_store(ctx: RunContext[TaskState], diff_store_key: str) -> str:
+def select_diff_from_diff_store(
+    ctx: RunContext[TaskState], diff_store_key: str
+) -> str | ToolErrorInfo:
     """
     Select a diff (represented as a string) from the TaskState diff_store.
     This tool is suitable to select a final patch to solve some tasks, or can be used to view intermediate results and compare candidates.
@@ -21,12 +23,18 @@ def select_diff_from_diff_store(ctx: RunContext[TaskState], diff_store_key: str)
     return _select_diff_from_diff_store(diff_store, diff_store_key)
 
 
-def _select_diff_from_diff_store(diff_store: DiffStore, index: str) -> str:
+def _select_diff_from_diff_store(
+    diff_store: DiffStore, index: str
+) -> str | ToolErrorInfo:
     logger.info(
         f"[Tool] Invoked select_diff_from_diff_store tool with index {index} ({len(diff_store)} entries in diff_store)"
     )
     if len(diff_store) == 0:
-        raise ToolError("There are currently no diffs stored in the diff-store")
+        return ToolErrorInfo(
+            tool="select_diff_from_diff_store",
+            message="There are currently no diffs stored in the diff-store",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
+        )
     # DevNote: Let's help a little if we got an integer
     if index.isdigit() and int(index) >= 0:
         index = "diff_" + index
@@ -37,7 +45,11 @@ def _select_diff_from_diff_store(diff_store: DiffStore, index: str) -> str:
         appendix = "Available keys in diff_store: " + " ".join(
             list(diff_store.id_to_diff.keys())[:8]
         )
-        raise ToolError(f"Key {index} was not in the diff_store. {appendix}")
+        return ToolErrorInfo(
+            tool="select_diff_from_diff_store",
+            message=f"Key {index} was not in the diff_store. {appendix}",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
+        )
     else:
         entry: DiffEntry = diff_store.id_to_diff[index]
         if not entry.diff_content or not (entry.diff_content.strip()):

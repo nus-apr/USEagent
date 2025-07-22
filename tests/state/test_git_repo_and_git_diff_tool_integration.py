@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from useagent.pydantic_models.cliresult import CLIResult
+from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.state.git_repo import GitRepository
 from useagent.tools.edit import extract_diff, init_edit_tools
 
