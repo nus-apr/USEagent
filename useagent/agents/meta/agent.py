@@ -18,7 +18,6 @@ from useagent.pydantic_models.code import Location
 from useagent.pydantic_models.git import DiffEntry
 from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.bash import init_bash_tool
-from useagent.tools.common.toolerror import ToolError
 from useagent.tools.edit import init_edit_tools
 from useagent.tools.meta import select_diff_from_diff_store, view_task_state
 
@@ -93,28 +92,13 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         logger.info(f"[MetaAgent] Invoked edit_code with instruction: {instruction}")
         edit_code_agent = init_edit_code_agent()
 
-        # TODO: Modularize this behaviour (See Below at AgentLoop)
-        prompt: str = instruction
-        maximum_allowed_tool_errors: int = 15
-        tool_errors: int = 0
-        while tool_errors < maximum_allowed_tool_errors:
-            try:
-                # TODO: Does this way run a completely new agent session, or does it add messages??
-                edit_result = await edit_code_agent.run(prompt, deps=ctx.deps)
-                diff: DiffEntry = edit_result.output
-                logger.info(f"[MetaAgent] edit_code result: {diff}")
-                # update task state with the diff
-                diff_id: str = ctx.deps.diff_store.add_entry(diff)
-                logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
-                return diff
-            except ToolError as e:
-                logger.debug(
-                    f"[EditAgent] Produced a Tool Error {e.message}. Re-Prompting (error #{tool_errors} of {maximum_allowed_tool_errors})"
-                )
-                prompt = f"Previous tool call was done poorly: {e.message}. Try again. Your instruction was: {instruction}"
-                tool_errors = tool_errors + 1
-
-        return None
+        edit_result = await edit_code_agent.run(instruction, deps=ctx.deps)
+        diff: DiffEntry = edit_result.output
+        logger.info(f"[MetaAgent] edit_code result: {diff}")
+        # update task state with the diff
+        diff_id: str = ctx.deps.diff_store.add_entry(diff)
+        logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
+        return diff
 
     ### Action definitions END
 
@@ -133,22 +117,6 @@ def agent_loop(task_state: TaskState):
     init_edit_tools(str(task_state._task.get_working_directory()))
     meta_agent = init_agent()
     # actually running the agent
-
-    # TODO: This is for the meta-agent, but it would make sense that every agent gets a configurable amount of retries.
-    # At the moment, an inside-edit-code-agent will also restart at the meta-agent level.
-    # I tried to wrap it in a function, but there are two issues:
-    #    1) The other agents are async, so the function must be Async too
-    #    2) The types must match for pydantic to work flawlessly, so a retry that returns ANY does not work, and there are no good Functional-Generics in Python.
-    maximum_allowed_tool_errors: int = 10
-    tool_errors: int = 0
-    while tool_errors < maximum_allowed_tool_errors:
-        prompt = "Invoke tools to complete the task."
-        try:
-            result = meta_agent.run_sync(prompt, deps=task_state)
-            return result.output
-        except ToolError as e:
-            logger.debug(
-                f"[MetaAgent] Received a Tool Error {e.message}. Re-Prompting (error #{tool_errors} of {maximum_allowed_tool_errors})"
-            )
-            prompt += f"Previous tool call was done poorly: {e.message}. Try again."
-            tool_errors = tool_errors + 1
+    prompt = "Invoke tools to complete the task."
+    result = meta_agent.run_sync(prompt, deps=task_state)
+    return result.output
