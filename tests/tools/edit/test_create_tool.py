@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from useagent.tools.base import ToolError, ToolResult
+from useagent.pydantic_models.cliresult import CLIResult
+from useagent.tools.common.toolerror import ToolError
 from useagent.tools.edit import create
 
 
@@ -14,7 +15,7 @@ async def test_create_file_success(tmp_path: Path):
 
     result = await create(str(file), content)
 
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert "File created successfully" in result.output
     assert file.exists()
     assert file.read_text() == content
@@ -36,7 +37,7 @@ async def test_create_empty_file(tmp_path: Path):
     file = tmp_path / "empty.txt"
     result = await create(str(file), "")
 
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert "File created successfully" in result.output
     assert file.exists()
     assert file.read_text() == ""
@@ -52,7 +53,7 @@ async def test_create_file_nested_directory(tmp_path: Path):
 
     result = await create(str(file), content)
 
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert "File created successfully" in result.output
     assert file.exists()
     assert file.read_text() == content

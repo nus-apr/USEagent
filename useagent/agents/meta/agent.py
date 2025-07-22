@@ -17,8 +17,8 @@ from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.code import Location
 from useagent.pydantic_models.git import DiffEntry
 from useagent.pydantic_models.task_state import TaskState
-from useagent.tools.base import ToolError
 from useagent.tools.bash import init_bash_tool
+from useagent.tools.common.toolerror import ToolError
 from useagent.tools.edit import init_edit_tools
 from useagent.tools.meta import select_diff_from_diff_store, view_task_state
 
@@ -88,24 +88,25 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
             instruction (str): Instruction for the code edit. The instrution should be very specific, typically should include where in the codebase to edit (files, lines, etc.), what to change, and how to change it.
 
         Returns:
-            str: A unified diff of the changes that can be applied to the codebase.
+            DiffEntry: A unified diff of the changes that can be applied to the codebase.
         """
         logger.info(f"[MetaAgent] Invoked edit_code with instruction: {instruction}")
         edit_code_agent = init_edit_code_agent()
 
         # TODO: Modularize this behaviour (See Below at AgentLoop)
-        prompt = instruction
+        prompt: str = instruction
         maximum_allowed_tool_errors: int = 15
         tool_errors: int = 0
         while tool_errors < maximum_allowed_tool_errors:
             try:
-                r = await edit_code_agent.run(prompt, deps=ctx.deps)
-                result = r.output
-                logger.info(f"[MetaAgent] edit_code result: {result}")
+                # TODO: Does this way run a completely new agent session, or does it add messages??
+                edit_result = await edit_code_agent.run(prompt, deps=ctx.deps)
+                diff: DiffEntry = edit_result.output
+                logger.info(f"[MetaAgent] edit_code result: {diff}")
                 # update task state with the diff
-                diff_id = ctx.deps.diff_store.add_entry(result)
+                diff_id: str = ctx.deps.diff_store.add_entry(diff)
                 logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
-                return result
+                return diff
             except ToolError as e:
                 logger.debug(
                     f"[EditAgent] Produced a Tool Error {e.message}. Re-Prompting (error #{tool_errors} of {maximum_allowed_tool_errors})"

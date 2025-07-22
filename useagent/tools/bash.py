@@ -8,7 +8,8 @@ from collections.abc import Callable
 
 from loguru import logger
 
-from useagent.tools.base import CLIResult, ToolError, ToolResult
+from useagent.pydantic_models.cliresult import CLIResult
+from useagent.tools.common.toolerror import ToolError
 
 
 class _BashSession:
@@ -56,7 +57,7 @@ class _BashSession:
         if not self._started:
             raise ToolError("Session has not started.")
         if self._process.returncode is not None:
-            return ToolResult(
+            return CLIResult(
                 system="tool must be restarted",
                 error=f"bash has exited with returncode {self._process.returncode}",
             )
@@ -136,14 +137,14 @@ class BashTool:
 
     async def __call__(
         self, command: str | None = None, restart: bool = False, **kwargs
-    ) -> ToolResult:
+    ) -> CLIResult:
         if restart:
             if self._session:
                 self._session.stop()
             self._session = _BashSession()
             await self._session.start(self.default_working_dir)
 
-            return ToolResult(system="tool has been restarted.")
+            return CLIResult(system="tool has been restarted.")
 
         if self._session is None:
             self._session = _BashSession()
@@ -167,14 +168,14 @@ def init_bash_tool(
     _bash_tool_instance = BashTool(default_working_dir, command_transformer)
 
 
-async def bash_tool(command: str) -> ToolResult:
+async def bash_tool(command: str) -> CLIResult:
     """Execute a bash command in the bash shell.
 
     Args:
         command (str): The command to execute.
 
     Returns:
-        ToolResult: The result of the command execution.
+        CLIResult: The result of the command execution.
     """
     logger.info(f"[Tool] Invoked bash_tool with command: {command}")
 

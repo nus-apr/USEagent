@@ -1,7 +1,7 @@
 import pytest
 
 from useagent.pydantic_models.git import DiffEntry, DiffStore
-from useagent.tools.base import ToolError
+from useagent.tools.common.toolerror import ToolError
 from useagent.tools.meta import _select_diff_from_diff_store
 
 

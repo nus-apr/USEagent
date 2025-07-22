@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from useagent.tools.base import CLIResult, ToolError
+from useagent.pydantic_models.cliresult import CLIResult
+from useagent.tools.common.toolerror import ToolError
 from useagent.tools.edit import init_edit_tools, view
 
 

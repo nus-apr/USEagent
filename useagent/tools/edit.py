@@ -3,7 +3,8 @@ from pathlib import Path
 
 from loguru import logger
 
-from useagent.tools.base import CLIResult, ToolError, ToolResult
+from useagent.pydantic_models.cliresult import CLIResult
+from useagent.tools.common.toolerror import ToolError
 from useagent.tools.run import maybe_truncate, run
 from useagent.utils import cd
 
@@ -71,7 +72,7 @@ def _make_output(
 # TODO: change all raised exceptions to returned errors
 
 
-async def view(file_path: str, view_range: list[int] | None = None):
+async def view(file_path: str, view_range: list[int] | None = None) -> CLIResult:
     """
     View the content of a file or directory at the specified path.
     If view_range is provided, only the specified lines will be returned.
@@ -81,7 +82,7 @@ async def view(file_path: str, view_range: list[int] | None = None):
         view_range (list[int] | None): A list of two integers specifying the range of lines to view. Only applicable to files, not directories.
 
     Returns:
-        ToolResult: The result of the view operation, containing the output and a short header summarizing the used command.
+        CLIResult: The result of the view operation, containing the output and a short header summarizing the used command.
     """
     logger.info(
         f"[Tool] Invoked edit_tool `view`. Viewing {file_path}, range {view_range}"
@@ -135,7 +136,7 @@ async def view(file_path: str, view_range: list[int] | None = None):
     return CLIResult(output=_make_output(file_content, str(path), init_line=init_line))
 
 
-async def create(file_path: str, file_text: str):
+async def create(file_path: str, file_text: str) -> CLIResult:
     """
     Create a new file at the specified path with the given text content.
     Text content can be empty.
@@ -146,7 +147,7 @@ async def create(file_path: str, file_text: str):
         file_text (str): The text content to write into the new file.
 
     Returns:
-        ToolResult: The result of the create operation, indicating success or failure.
+        CLIResult: The result of the create operation, indicating success or failure.
     """
     logger.info(
         f"[Tool] Invoked edit_tool `create`. Creating {file_path}, content preview: {file_text[:15]} ..."
@@ -163,7 +164,7 @@ async def create(file_path: str, file_text: str):
         )
 
     _write_file(path, file_text)
-    return ToolResult(output=f"File created successfully at: {file_path}")
+    return CLIResult(output=f"File created successfully at: {file_path}")
 
 
 async def str_replace(file_path: str, old_str: str, new_str: str):
@@ -176,7 +177,7 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
         new_str (str): The string to replace with.
 
     Returns:
-        ToolResult: The result of the str_replace operation, containing the output or error.
+        CLIResult: The result of the str_replace operation, containing the output or error.
     """
     logger.info(
         f"[Tool] Invoked edit_tool `str_replace`. Replacing {old_str} for {new_str} in {file_path}"
@@ -243,7 +244,7 @@ async def insert(file_path: str, insert_line: int, new_str: str):
         new_str (str): The string to insert into the file.
 
     Returns:
-        ToolResult: The result of the insert operation, containing the output or error.
+        CLIResult: The result of the insert operation, containing the output or error.
     """
     logger.info(
         f"[Tool] Invoked edit_tool `insert`. Inserting {new_str} at L{insert_line} in {file_path}"
@@ -300,7 +301,7 @@ async def extract_diff(project_dir: Path | str | None = None):
     Extract the diff of the current state of the repository.
 
     Returns:
-        ToolResult: The result of the diff extraction, containing the output or error.
+        CLIResult: The result of the diff extraction, containing the output or error.
     """
     assert _project_dir is not None, "Project directory must be initialized first."
     project_dir = project_dir or _project_dir
@@ -321,8 +322,8 @@ async def extract_diff(project_dir: Path | str | None = None):
             raise ToolError(f"Failed to extract diff: {stderr_1 + stderr_2}")
         if not stdout or not stdout.strip():
             logger.debug("[Tool] edit_tool `extract_diff`: Received empty Diff")
-            return ToolResult(output="No changes detected in the repository.")
+            return CLIResult(output="No changes detected in the repository.")
         logger.debug(
             f"[Tool] edit_tool `extract_diff`: Received {stdout[:25]} ... from {project_dir}"
         )
-        return ToolResult(output=f"Here's the diff of the current state:\n{stdout}")
+        return CLIResult(output=f"Here's the diff of the current state:\n{stdout}")

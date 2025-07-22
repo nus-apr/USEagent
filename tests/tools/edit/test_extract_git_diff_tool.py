@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from useagent.tools.base import ToolError, ToolResult
+from useagent.pydantic_models.cliresult import CLIResult
+from useagent.tools.common.toolerror import ToolError
 from useagent.tools.edit import extract_diff, init_edit_tools
 
 # DevNote:
@@ -46,7 +47,7 @@ async def test_extract_diff_real_changes(tmp_path):
 
     result = await extract_diff(project_dir=tmp_path)
 
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert "diff --git" in result.output
     assert "+new line" in result.output
 
@@ -59,7 +60,7 @@ async def test_extract_diff_no_changes_after_commit(tmp_path):
 
     result = await extract_diff(project_dir=tmp_path)
 
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert result.output.strip() == "No changes detected in the repository."
 
 
@@ -192,7 +193,7 @@ async def test_extract_diff_untracked_file_is_not_included(tmp_path: Path):
     (tmp_path / "untracked.txt").write_text("should not appear\n")
 
     result = await extract_diff(project_dir=tmp_path)
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert "untracked.txt" in result.output
     assert not result.output.strip() == "No changes detected in the repository."
 
