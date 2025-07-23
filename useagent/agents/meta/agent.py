@@ -7,6 +7,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.tools import Tool
 
 from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
+from useagent.agents.probing.agent import init_agent as init_probing_agent
 from useagent.agents.search_code.agent import init_agent as init_search_code_agent
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
@@ -14,8 +15,9 @@ from useagent.microagents.decorators import (
     conditional_microagents_triggers,
 )
 from useagent.microagents.management import load_microagents_from_project_dir
-from useagent.pydantic_models.code import Location
-from useagent.pydantic_models.git import DiffEntry
+from useagent.pydantic_models.artifacts.code import Location
+from useagent.pydantic_models.artifacts.git import DiffEntry
+from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
@@ -54,6 +56,41 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         return ctx.deps._task.get_issue_statement()
 
     ### Define actions as tools to meta_agent. Each action interfaces to another agent in Pydantic AI.
+
+    @meta_agent.tool
+    async def probe_environment(ctx: RunContext[TaskState]) -> Environment:
+        """Investigate the currently active environment relevant to the project.
+
+        This is a tool very relevant if you
+            - start a new task
+            - received a lot of errors related to project structure
+            - received a lot of errors related to commands and command arguments
+            - perceived errors related to permission
+            - switched environments
+            - altered the environment, e.g. by performing installations
+
+        This action can be considered safe, but you might want to avoid calling it too often in favour of costs.
+
+        Returns:
+            Environment: Currently active environment, as detected by the sub-agent.
+
+        As a side effect, the current environment in the TaskState will be set to the newly obtained one.
+        """
+        logger.info("[MetaAgent] Invoked probe_environment")
+
+        probing_agent = init_probing_agent()
+        r = await probing_agent.run(deps=ctx.deps)
+        env: Environment = r.output
+        next_id: int = len(ctx.deps.known_environments.keys())
+        logger.info(
+            f"[MetaAgent] Probing finished for {env.project_root} @ {env.active_git_commit} (Stored as {'env_'+str(next_id)})"
+        )
+
+        ctx.deps.active_environment = env
+        ctx.deps.known_environments["env_" + str(next_id)] = env
+
+        return env
+
     @meta_agent.tool(retries=4)
     async def search_code(
         ctx: RunContext[TaskState], instruction: str
