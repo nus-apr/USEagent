@@ -83,7 +83,7 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         env: Environment = r.output
         next_id: int = len(ctx.deps.known_environments.keys())
         logger.info(
-            f"[MetaAgent] Probing finished for {env.project_root} @ {env.active_git_commit} (Stored as {'env_'+str(next_id)})"
+            f"[MetaAgent] Probing finished for {env.project_root} @ {env.git_status.active_git_commit} (Stored as {'env_'+str(next_id)})"
         )
 
         ctx.deps.active_environment = env

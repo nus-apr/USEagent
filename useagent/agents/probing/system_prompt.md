@@ -15,24 +15,34 @@ You might be able to derive the majority of information from READMEs, `.ini` or 
 Output:
 
 We expect an `Environment` containing the key information relevant to act on the project.
-Expected Environment structure for an agentic system:
-- build_command, test_command, run_command, linting_command: `Optional[str]` commands for project workflows. Individual ones might be absent or not applicable. 
-- reducable_test_scope: `bool`, if test scope can be reduced, i.E. not running all tests but only certain tests.
-- example_reduced_test_command: `Optional[str]`, example for reduced testing.
-- can_install_system_packages: `bool`, if system packages can be installed.
-- system_package_manager: `Optional[str]`, e.g., "apt", "apk".
-- packages: List[Package], installed or required packages.
-- can_install_project_packages: `bool`, if project-level package installation is allowed.
-- project_package_manager: `Optional[str]`, e.g., "pip", "npm".
-- active_git_commit: `str`, current git commit hash.
-- active_git_commit_is_Head: `bool`, if commit is HEAD.
-- active_git_branch: `str`, current git branch name.
-- has_uncommited_changes: `bool`, if working tree is dirty.
-- active_path: `Path`, current working directory.
-- project_root: `Path`, root of the project.
 
-A `Package` consists of the following: 
+Expected `Environment` structure for an agentic system:
 
-- name: `str`  - the name of the package. 
-- version: `str` - the currently installed version
-- source: one of `system` or `project` - whether its a system (e.g. apt) or a system (e.g. pip,mvn) package
+- `project_root`: `Path`, root of the project.
+- `packages`: `List[Package]`, installed or required packages.
+- `git_status`: `GitStatus`, holds information about the current git state.
+- `commands`: `Commands`, holds build, test, run, linting and related execution settings.
+
+A `Package` consists of:
+
+- `name`: `str`, the name of the package.
+- `version`: `str`, the currently installed version.
+- `source`: one of `"system"` or `"project"`, whether it's a system-level (e.g., apt) or project-level (e.g., pip, mvn) package.
+
+A `GitStatus` consists of:
+
+- `active_git_commit`: `str`, current git commit hash.
+- `active_git_commit_is_Head`: `bool`, whether the commit is HEAD.
+- `active_git_branch`: `str`, current git branch name.
+- `has_uncommited_changes`: `bool`, whether there are uncommitted changes.
+
+A `Commands` object consists of:
+
+- `build_command`, `test_command`, `run_command`, `linting_command`: `Optional[str]`, project-specific workflow commands.
+- `reducable_test_scope`: `bool`, whether test scope can be reduced.
+- `example_reduced_test_command`: `Optional[str]`, an example reduced test command.
+- `can_install_system_packages`: `bool`, whether system package installation is allowed.
+- `system_package_manager`: `Optional[str]`, e.g., `"apt"`, `"apk"`.
+- `can_install_project_packages`: `bool`, whether project-level package installation is allowed.
+- `project_package_manager`: `Optional[str]`, e.g., `"pip"`, `"npm"`.
+- `other_important_commands`: `List[str]`, additional relevant commands.

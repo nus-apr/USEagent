@@ -27,7 +27,7 @@ def _select_diff_from_diff_store(
     diff_store: DiffStore, index: str
 ) -> str | ToolErrorInfo:
     logger.info(
-        f"[Tool] Invoked select_diff_from_diff_store tool with index {index} ({len(diff_store)} entries in diff_store)"
+        f"[Tool] Invoked select_diff_from_diff_store tool with index {index} ({len(diff_store)} entries in diff_store [{','.join(list(diff_store.id_to_diff.keys())[:8])}])"
     )
     if len(diff_store) == 0:
         return ToolErrorInfo(
