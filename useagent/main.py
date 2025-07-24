@@ -1,7 +1,10 @@
 import os
+import sys
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from tempfile import mkdtemp
+
+from loguru import logger
 
 from useagent import task_runner
 from useagent.config import AppConfig, ConfigSingleton
@@ -35,6 +38,18 @@ def add_common_args(parser: ArgumentParser) -> None:
         "--task-id",
         type=str,
         help="Unique identifier for the task run.",
+    )
+
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="The log level user for loguru logging to the console.",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help="If specified, a DEBUG level log will be logger to this location.",
     )
 
 
@@ -176,8 +191,20 @@ def build_and_register_config(args: Namespace) -> AppConfig:
     return ConfigSingleton.config
 
 
+def setup_loguru(console_log_level: str, log_file: str | None) -> None:
+    logger.remove()
+    fmt = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <6}</level> | <cyan>{name}:{function}:{line}</cyan> - <level>{message}</level>"
+    logger.add(sys.stderr, level=console_log_level.upper(), format=fmt)
+    if log_file:
+        logger.add(log_file, level="DEBUG", format=fmt)
+    logger.info(
+        f"Loguru initialized: console={console_log_level.upper()}, file={'enabled @ DEBUG level' if log_file else 'disabled'}"
+    )
+
+
 def main():
     args, subparser_dest_attr_name = parse_args()
+    setup_loguru(console_log_level=args.log_level, log_file=args.log_file)
     build_and_register_config(args)
     handle_command(args, subparser_dest_attr_name)
 
