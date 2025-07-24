@@ -34,3 +34,16 @@ def test_initialization_with_empty_string_gives_error():
 def test_initialization_with_whitespace_string_gives_error():
     with pytest.raises(ValueError):
         init_edit_tools("   ")
+
+
+"""
+DevNote: See Issue 10, there are some side effects still going on that make this test pass sometimes. 
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+async def test_using_tool_without_initialization_throws_assertion_error(tmp_path):
+    file = tmp_path / "new_file.txt"
+    content = "This is a new file."
+    with pytest.raises(AssertionError):
+        await create(str(file), content)
+"""
