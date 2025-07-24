@@ -57,7 +57,7 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
 
     ### Define actions as tools to meta_agent. Each action interfaces to another agent in Pydantic AI.
 
-    @meta_agent.tool
+    @meta_agent.tool(retries=4)
     async def probe_environment(ctx: RunContext[TaskState]) -> Environment:
         """Investigate the currently active environment relevant to the project.
 
@@ -91,7 +91,7 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
 
         return env
 
-    @meta_agent.tool(retries=4)
+    @meta_agent.tool(retries=6)
     async def search_code(
         ctx: RunContext[TaskState], instruction: str
     ) -> list[Location]:

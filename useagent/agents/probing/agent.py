@@ -31,7 +31,7 @@ def init_agent(
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
         output_type=Environment,
-        tools=[Tool(bash_tool)],
+        tools=[Tool(bash_tool, max_retries=5)],
     )
 
     return environment_probing_agent
