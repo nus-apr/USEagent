@@ -4,7 +4,7 @@ import pytest
 
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
-from useagent.tools.edit import create
+from useagent.tools.edit import create, init_edit_tools
 
 
 @pytest.mark.tool
@@ -12,6 +12,7 @@ from useagent.tools.edit import create
 async def test_create_file_success(tmp_path: Path):
     file = tmp_path / "new_file.txt"
     content = "This is a new file."
+    init_edit_tools(str(tmp_path))
 
     result = await create(str(file), content)
 
@@ -26,6 +27,7 @@ async def test_create_file_success(tmp_path: Path):
 async def test_create_file_already_exists(tmp_path: Path):
     file = tmp_path / "existing.txt"
     file.write_text("Existing content")
+    init_edit_tools(str(tmp_path))
 
     result = await create(str(file), "New content")
 
@@ -38,6 +40,8 @@ async def test_create_file_already_exists(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_create_empty_file(tmp_path: Path):
     file = tmp_path / "empty.txt"
+    init_edit_tools(str(tmp_path))
+
     result = await create(str(file), "")
 
     assert isinstance(result, CLIResult)
@@ -53,6 +57,7 @@ async def test_create_file_nested_directory(tmp_path: Path):
     nested_dir.mkdir(parents=True)
     file = nested_dir / "nested.txt"
     content = "Nested file content"
+    init_edit_tools(str(tmp_path))
 
     result = await create(str(file), content)
 
@@ -67,6 +72,7 @@ async def test_create_file_nested_directory(tmp_path: Path):
 async def test_create_file_path_is_directory(tmp_path: Path):
     dir_path = tmp_path / "not_a_file"
     dir_path.mkdir()
+    init_edit_tools(str(tmp_path))
 
     result = await create(str(dir_path), "This should fail")
 

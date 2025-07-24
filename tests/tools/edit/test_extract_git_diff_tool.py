@@ -82,6 +82,8 @@ async def test_extract_diff_single_file_edit(tmp_path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_extract_diff_git_not_initialized(tmp_path):
+    init_edit_tools(str(tmp_path))
+
     result = await extract_diff(project_dir=tmp_path)
 
     assert isinstance(result, ToolErrorInfo)
