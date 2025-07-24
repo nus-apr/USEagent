@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from useagent.pydantic_models.artifacts.git import DiffEntry, DiffStore
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
@@ -44,9 +45,11 @@ def test_two_entries_selection():
     assert _select_diff_from_diff_store(store, k2) == "second"
 
 
+@pytest.mark.pydantic_model
 @pytest.mark.tool
-def test_empty_diff_content():
-    store = DiffStore()
-    key = store.add_entry(DiffEntry(diff_content=""))
-    result = _select_diff_from_diff_store(store, key)
-    assert result == ""
+def test_empty_diff_content_we_can_never_have_empty_diff_entries():
+    with pytest.raises(ValidationError):
+        # DevNote: We introduced constrained strings (constrs) to disallow any empty DiffEntry.
+        store = DiffStore()
+        key = store.add_entry(DiffEntry(diff_content=""))
+        _select_diff_from_diff_store(store, key)

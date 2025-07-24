@@ -1,10 +1,40 @@
+import os
+
+from pydantic import field_validator, model_validator
 from pydantic.dataclasses import dataclass
+
+from useagent.pydantic_models.common.constrained_types import (
+    NonEmptyStr,
+    NonNegativeInt,
+)
 
 
 @dataclass(frozen=True)
 class Location:
-    rel_file_path: str
-    start_line: int
-    end_line: int
-    code_content: str
-    reason_why_relevant: str
+    rel_file_path: NonEmptyStr
+    start_line: NonNegativeInt
+    end_line: NonNegativeInt
+    code_content: NonEmptyStr
+    reason_why_relevant: NonEmptyStr
+
+    @field_validator("start_line", "end_line")
+    @classmethod
+    def line_numbers_must_be_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("line numbers must be positive")
+        return v
+
+    @field_validator("rel_file_path")
+    @classmethod
+    def rel_file_path_must_be_relative(cls, v: str) -> str:
+        if os.path.isabs(v):
+            raise ValueError(
+                f"rel_file_path must be a relative path, {v} is a absolute path"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def check_line_range(self) -> "Location":
+        if self.end_line < self.start_line:
+            raise ValueError("end_line must be greater or equal than start_line")
+        return self

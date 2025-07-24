@@ -1,5 +1,7 @@
 from pydantic.dataclasses import dataclass
 
+from useagent.pydantic_models.common.constrained_types import NonEmptyStr
+
 
 @dataclass(kw_only=True, frozen=True)
 class ToolErrorInfo:
@@ -15,8 +17,8 @@ class ToolErrorInfo:
     # While that is ok for tools, it can confuse / fault agents that have [str] as their return value.
     # By havign a seperate return type for errors, we avoid issues on confusing that would rely on model judgement.
 
-    message: str
-    tool: str
+    message: NonEmptyStr
+    tool: NonEmptyStr
 
-    other_info: str | None = None
-    supplied_arguments: dict[str, str] | None = None
+    other_info: NonEmptyStr | None = None
+    supplied_arguments: dict[NonEmptyStr, NonEmptyStr] | None = None

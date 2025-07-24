@@ -2,4 +2,5 @@
   "venvPath": ".",
   "venv": ".venv",
   "include": ["useagent"],
+  "reportInvalidTypeForm": false
 }

@@ -36,9 +36,9 @@ def _read_file(path: Path) -> str | ToolErrorInfo:
         return path.read_text()
     except Exception as e:
         return ToolErrorInfo(
-            tool="view",
+            tool="_read_file",
             message=f"Ran into {e} while trying to read {path}",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={"path": str(path)},
         )
 
 
@@ -48,9 +48,9 @@ def _write_file(path: Path, file: str):
         path.write_text(file)
     except Exception as e:
         return ToolErrorInfo(
-            tool="view",
+            tool="_write_file",
             message=f"Ran into {e} while trying to write to {path}",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={"path": str(path), "file": str(file)},
         )
 
 
@@ -98,7 +98,10 @@ async def view(
         return ToolErrorInfo(
             tool="view",
             message="Received an empty or None file_path",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={
+                "file_path": str(file_path),
+                "view_range": str(view_range),
+            },
         )
 
     path = _make_path_absolute(file_path)
@@ -107,19 +110,28 @@ async def view(
         return ToolErrorInfo(
             tool="view",
             message=f"Filepath {file_path} does not exist.",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={
+                "file_path": str(file_path),
+                "view_range": str(view_range),
+            },
         )
     if path.is_dir():
         if view_range:
             return ToolErrorInfo(
                 tool="view",
                 message="The `view_range` parameter is not allowed when `path` points to a directory.",
-                supplied_arguments={k: str(v) for k, v in locals().items()},
+                supplied_arguments={
+                    "file_path": str(file_path),
+                    "view_range": str(view_range),
+                },
             )
 
         _, stdout, stderr = await run(rf"find {path} -maxdepth 2 -not -path '*/\.*'")
         if not stderr:
             stdout = f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{stdout}\n"
+            return CLIResult(output=stdout)
+        if not stdout:
+            return CLIResult(error=stderr, output=None)
         return CLIResult(output=stdout, error=stderr)
 
     _read_file_result = _read_file(path)
@@ -132,7 +144,10 @@ async def view(
             return ToolErrorInfo(
                 tool="view",
                 message="Invalid `view_range`. It should be a list of two integers.",
-                supplied_arguments={k: str(v) for k, v in locals().items()},
+                supplied_arguments={
+                    "file_path": str(file_path),
+                    "view_range": str(view_range),
+                },
             )
         file_lines = file_content.split("\n")
         n_lines_file = len(file_lines)
@@ -141,19 +156,28 @@ async def view(
             return ToolErrorInfo(
                 tool="view",
                 message=f"Invalid `view_range`: {view_range}. Its first element `{init_line}` should be within the range of lines of the file: {[1, n_lines_file]}",
-                supplied_arguments={k: str(v) for k, v in locals().items()},
+                supplied_arguments={
+                    "file_path": str(file_path),
+                    "view_range": str(view_range),
+                },
             )
         if final_line > n_lines_file:
             return ToolErrorInfo(
                 tool="view",
                 message=f"Invalid `view_range`: {view_range}. Its second element `{final_line}` should be smaller than the number of lines in the file: `{n_lines_file}`",
-                supplied_arguments={k: str(v) for k, v in locals().items()},
+                supplied_arguments={
+                    "file_path": str(file_path),
+                    "view_range": str(view_range),
+                },
             )
         if final_line != -1 and final_line < init_line:
             return ToolErrorInfo(
                 tool="view",
                 message=f"Invalid `view_range`: {view_range}. Its second element `{final_line}` should be larger or equal than its first `{init_line}`",
-                supplied_arguments={k: str(v) for k, v in locals().items()},
+                supplied_arguments={
+                    "file_path": str(file_path),
+                    "view_range": str(view_range),
+                },
             )
 
         if final_line == -1:
@@ -185,7 +209,10 @@ async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
         return ToolErrorInfo(
             tool="create",
             message="Received an None or Empty file_path argument.",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={
+                "file_path": str(file_path),
+                "file_text": str(file_text),
+            },
         )
 
     path = _make_path_absolute(file_path)
@@ -194,7 +221,10 @@ async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
         return ToolErrorInfo(
             tool="create",
             message=f"File already exists at: {path}. Cannot overwrite files using command `create`.",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={
+                "file_path": str(file_path),
+                "file_text": str(file_text),
+            },
         )
 
     _write_file(path, file_text)
@@ -224,13 +254,21 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
         return ToolErrorInfo(
             tool="str_replace",
             message=f"Filepath {file_path} does not exist, it has to be created first. `str_replace` only works for existing files.",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={
+                "file_path": str(file_path),
+                "old_str": str(old_str),
+                "new_str": str(new_str),
+            },
         )
     if path.exists() and path.is_dir():
         return ToolErrorInfo(
             tool="str_replace",
             message=f"Filepath {file_path} is a directory - `str_replace` can only be applied to files.",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={
+                "file_path": str(file_path),
+                "old_str": str(old_str),
+                "new_str": str(new_str),
+            },
         )
 
     _read_file_result = _read_file(path)
@@ -246,7 +284,11 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
         return ToolErrorInfo(
             tool="str_replace",
             message=f"No replacement was performed, old_str `{old_str}` did not appear verbatim in {path}.",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={
+                "file_path": str(file_path),
+                "old_str": str(old_str),
+                "new_str": str(new_str),
+            },
         )
     elif occurrences > 1:
         file_content_lines = file_content.split("\n")
@@ -256,7 +298,11 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
         return ToolErrorInfo(
             tool="str_replace",
             message=f"No replacement was performed. Multiple occurrences of old_str `{old_str}` in lines {lines}. Please ensure it is unique",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={
+                "file_path": str(file_path),
+                "old_str": str(old_str),
+                "new_str": str(new_str),
+            },
         )
     # Replace old_str with new_str
     new_file_content = file_content.replace(old_str, new_str)
@@ -302,13 +348,21 @@ async def insert(
         return ToolErrorInfo(
             tool="insert",
             message=f"Filepath {file_path} does not exist, it has to be created first. `insert` only works for existing files.",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={
+                "file_path": str(file_path),
+                "insert_line": str(insert_line),
+                "new_str": str(new_str),
+            },
         )
     if path.exists() and path.is_dir():
         return ToolErrorInfo(
             tool="insert",
             message=f"Filepath {file_path} is a directory - `insert` can only be applied to files.",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={
+                "file_path": str(file_path),
+                "insert_line": str(insert_line),
+                "new_str": str(new_str),
+            },
         )
 
     _read_file_result = _read_file(path)
@@ -323,7 +377,11 @@ async def insert(
         return ToolErrorInfo(
             tool="insert",
             message=f"Invalid `insert_line` parameter: {insert_line}. It should be within the range of lines of the file: {[0, n_lines_file]}",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={
+                "file_path": str(file_path),
+                "insert_line": str(insert_line),
+                "new_str": str(new_str),
+            },
         )
 
     new_str_lines = new_str.split("\n")
@@ -379,8 +437,9 @@ async def extract_diff(
             return ToolErrorInfo(
                 tool="extract_diff",
                 message=f"Failed to extract diff: {stderr_1 + stderr_2}",
-                supplied_arguments={k: str(v) for k, v in locals().items()},
+                supplied_arguments={"project_dir": str(project_dir)},
             )
+
         if not stdout or not stdout.strip():
             logger.debug("[Tool] edit_tool `extract_diff`: Received empty Diff")
             return CLIResult(output="No changes detected in the repository.")

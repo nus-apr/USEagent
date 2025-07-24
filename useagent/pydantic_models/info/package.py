@@ -3,6 +3,8 @@ from enum import Enum
 from pydantic import field_validator
 from pydantic.dataclasses import dataclass
 
+from useagent.pydantic_models.common.constrained_types import NonEmptyStr
+
 
 class Source(str, Enum):
     SYSTEM = "system"
@@ -11,8 +13,8 @@ class Source(str, Enum):
 
 @dataclass
 class Package:
-    name: str
-    version: str
+    name: NonEmptyStr
+    version: NonEmptyStr
     source: Source
 
     @field_validator("version")
