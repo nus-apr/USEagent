@@ -66,6 +66,8 @@ async def test_extract_diff_no_changes_after_commit(tmp_path):
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_extract_diff_git_not_initialized(tmp_path):
+    init_edit_tools(str(tmp_path))
+
     with pytest.raises(ToolError, match="Failed to extract diff"):
         await extract_diff(project_dir=tmp_path)
 

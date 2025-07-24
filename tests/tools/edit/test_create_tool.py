@@ -36,8 +36,9 @@ async def test_create_file_already_exists(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_create_empty_file(tmp_path: Path):
     file = tmp_path / "empty.txt"
-    result = await create(str(file), "")
     init_edit_tools(str(tmp_path))
+
+    result = await create(str(file), "")
 
     assert isinstance(result, ToolResult)
     assert "File created successfully" in result.output

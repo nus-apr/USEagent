@@ -326,3 +326,12 @@ async def extract_diff(project_dir: Path | str | None = None):
             f"[Tool] edit_tool `extract_diff`: Received {stdout[:25]} ... from {project_dir}"
         )
         return ToolResult(output=f"Here's the diff of the current state:\n{stdout}")
+
+
+def __reset_project_dir():
+    """
+    This project is only used for tests and testing purposes.
+    Otherwise, with our `init_edit_tools` we introduce some side-effects that make tests a bit flaky.
+    """
+    global _project_dir
+    _project_dir = None
