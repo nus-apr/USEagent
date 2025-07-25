@@ -82,10 +82,11 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         r = await probing_agent.run(deps=ctx.deps)
         env: Environment = r.output
         next_id: int = len(ctx.deps.known_environments.keys())
-        logger.info(
+
+        logger.info(f"[ProbingAgent] identified {env}")
+        logger.debug(
             f"[MetaAgent] Probing finished for {env.project_root} @ {env.git_status.active_git_commit} (Stored as {'env_'+str(next_id)})"
         )
-
         ctx.deps.active_environment = env
         ctx.deps.known_environments["env_" + str(next_id)] = env
 

@@ -117,3 +117,12 @@ class Environment:
 
     # We make git info mandatory (a) because of project focus, and (b) because we can assume that git must be installed and available
     git_status: GitStatus
+
+    def __str__(self) -> str:
+        return (
+            f"Environment("
+            f"project_root={self.project_root}, "
+            f"packages={[p.name for p in self.packages]}, "
+            f"commands={self.commands}, "
+            f"git_status={self.git_status})"
+        )
