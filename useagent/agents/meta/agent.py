@@ -21,7 +21,11 @@ from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
-from useagent.tools.meta import select_diff_from_diff_store, view_task_state
+from useagent.tools.meta import (
+    remove_diffs_from_diff_store,
+    select_diff_from_diff_store,
+    view_task_state,
+)
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 # TODO: define the output type
@@ -41,6 +45,7 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         tools=[
             Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
             Tool(view_task_state, takes_ctx=True, max_retries=0),
+            Tool(remove_diffs_from_diff_store, takes_ctx=True, max_retries=5),
         ],
         output_type=str,
     )

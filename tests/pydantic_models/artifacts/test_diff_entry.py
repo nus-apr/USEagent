@@ -474,17 +474,3 @@ def test_has_no_newline_eof_marker(diff_content: str, expected_flag: bool):
 def test_wrapped_diff_is_valid(wrapped: str):
     entry = DiffEntry(diff_content=wrapped)
     assert entry.number_of_hunks > 0
-
-
-def test_debug_print_lines():
-    from useagent.pydantic_models.artifacts.git import CODE_BLOCK_RE_DIFF
-
-    wrapped = _wrap_in_codeblocks(
-        EXAMPLE_GIT_DIFF,
-        with_codeblock_diff_annotation=True,
-        newline_before_first_quote=True,
-    )
-    match = CODE_BLOCK_RE_DIFF.match(wrapped.strip())
-    assert match is not None
-    patch = match.group(1)
-    print(repr(patch.splitlines()[0]))

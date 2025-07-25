@@ -1,7 +1,7 @@
 import re
 from dataclasses import field
 
-from pydantic import computed_field, constr, field_validator
+from pydantic import computed_field, constr, field_validator, model_validator
 from pydantic.dataclasses import dataclass
 
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
@@ -95,17 +95,54 @@ class DiffEntry:
         return v
 
 
-@dataclass(config=dict(arbitrary_types_allowed=True))  # type: ignore
+@dataclass
 class DiffStore:
-    id_to_diff: dict[NonEmptyStr, DiffEntry] = field(default_factory=dict)  # type: ignore[reportInvalidTypeForm]
+    id_to_diff: dict[NonEmptyStr, DiffEntry] = field(default_factory=dict)
+
+    # DevNote:
+    # While add_entry checks for duplication and assignes keys manually,
+    # as a pydantic_dataclass the model might initiate (simple) DiffStores from somewhere else.
+    # These can be good but should still follow the same standards, so we also have model validators.
+    @model_validator(mode="after")  # pyright: ignore[reportArgumentType]
+    def check_no_duplicate_content(cls, values: "DiffStore") -> "DiffStore":
+        seen = set()
+        for e in values.id_to_diff.values():
+            norm = e.diff_content.strip()
+            if norm in seen:
+                raise ValueError("Duplicate diff contents detected in initialization")
+            seen.add(norm)
+        return values
+
+    @model_validator(mode="after")  # pyright: ignore[reportArgumentType]
+    def check_key_format(cls, values: "DiffStore") -> "DiffStore":
+        for k in values.id_to_diff:
+            if not k.startswith("diff_"):
+                raise ValueError(f"Invalid key in DiffStore: {k}")
+        return values
+
+    @computed_field(return_type=dict[DiffEntry, NonEmptyStr])
+    def diff_to_id(self) -> dict[str, str]:
+        # Reverse lookup to id_to_diff
+        return {e.diff_content.strip(): k for k, e in self.id_to_diff.items()}
 
     def add_entry(
         self, entry: DiffEntry
     ) -> constr(strip_whitespace=True, min_length=1):
-        """Add an existing diff entry and return its ID."""
-        diff_id = f"diff_{len(self.id_to_diff)}"
-        self.id_to_diff[diff_id] = entry
-        return diff_id
+        """
+        Add an existing diff entry and return its ID.
+        Raise a ValueError if a duplicate of the entry already exists.
+        """
+        norm = entry.diff_content.strip()
+        if any(e.diff_content.strip() == norm for e in self.id_to_diff.values()):
+            raise ValueError("Equivalent diff already exists.")
+        new_id = f"diff_{len(self.id_to_diff)}"
+        self.id_to_diff[new_id] = entry
+        return new_id
+
+    # DevNote:
+    # I had a `pop entry` at some point here, but this will give us horrible problems with the numbering !
+    # Because if we have diff_1..5 and we delete 3, should we continue with diff_6, or fill diff_3 again?
+    # Either way having it here is complex, suggestion: Removing elements should be done as a meta_agent tool and just make a completely new DiffStore.
 
     def __len__(self) -> int:
         return len(self.id_to_diff)
