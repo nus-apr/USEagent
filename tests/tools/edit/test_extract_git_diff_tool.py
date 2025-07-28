@@ -87,7 +87,6 @@ async def test_extract_diff_git_not_initialized(tmp_path):
     result = await extract_diff(project_dir=tmp_path)
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "extract_diff"
     assert (
         "not a git repository" in result.message.lower()
         or "git" in result.message.lower()

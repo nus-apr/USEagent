@@ -18,7 +18,6 @@ class ToolErrorInfo:
     # By havign a seperate return type for errors, we avoid issues on confusing that would rely on model judgement.
 
     message: NonEmptyStr
-    tool: NonEmptyStr
 
     other_info: NonEmptyStr | None = None
     supplied_arguments: dict[NonEmptyStr, NonEmptyStr] | None = None

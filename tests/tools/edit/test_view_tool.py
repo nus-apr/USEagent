@@ -74,7 +74,6 @@ async def test_view_file_invalid_range_length(tmp_path: Path):
     result = await view(str(file), [1])
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "view"
     assert "invalid" in result.message.lower()
 
 
@@ -87,7 +86,6 @@ async def test_view_file_invalid_range_order(tmp_path: Path):
     result = await view(str(file), [3, 1])
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "view"
     assert (
         "order" in result.message.lower() or "second element" in result.message.lower()
     )
@@ -102,7 +100,6 @@ async def test_view_file_invalid_range_start(tmp_path: Path):
     result = await view(str(file), [0, 2])
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "view"
     assert "range" in result.message.lower()
 
 
@@ -115,7 +112,6 @@ async def test_view_file_invalid_range_end(tmp_path: Path):
     result = await view(str(file), [1, 10])
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "view"
     assert "range" in result.message.lower() or "too large" in result.message.lower()
 
 

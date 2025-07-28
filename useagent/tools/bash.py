@@ -47,7 +47,7 @@ class _BashSession:
     def stop(self):
         """Terminate the bash shell."""
         if not self._started:
-            return ToolErrorInfo(tool="Run", message="Session has not started.")
+            return ToolErrorInfo(message="Session has not started.")
         if self._process.returncode is not None:
             return
         self._process.terminate()
@@ -56,7 +56,6 @@ class _BashSession:
         """Execute a command in the bash shell."""
         if not self._started:
             return ToolErrorInfo(
-                tool="Run",
                 message="Session has not started.",
                 supplied_arguments={"command": command},
             )
@@ -67,7 +66,6 @@ class _BashSession:
             )
         if self._timed_out:
             return ToolErrorInfo(
-                tool="Run",
                 message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
                 supplied_arguments={"command": command},
             )
@@ -100,7 +98,6 @@ class _BashSession:
         except TimeoutError:
             self._timed_out = True
             return ToolErrorInfo(
-                tool="Run",
                 message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
                 supplied_arguments={"command": command},
             )
@@ -168,12 +165,11 @@ class BashTool:
             await self._session.start(self.default_working_dir)
 
         if not command:
-            return ToolErrorInfo(tool="__Call__", message="No Command Supplied")
+            return ToolErrorInfo(message="No Command Supplied")
         # DevNote: This is a common issue witnessed, it tries to call `grep -r 'some_pattern'` which is invalid.
         # The resulting grep-error-message seems unsufficient for the model to be unerstandable.
         if command.startswith("grep -r ") and len(command.split()) < 4:
             return ToolErrorInfo(
-                tool="__Call__",
                 message="The supplied command is a grep -r, but did not specify enough other arguments. Please reconsider your strategy how to supply a string to your grep - or use a different command and approach.",
                 supplied_arguments={"command": str(command), "restart": str(restart)},
             )

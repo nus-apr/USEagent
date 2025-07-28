@@ -73,7 +73,6 @@ async def test_insert_invalid_negative_line(tmp_path: Path):
     result = await insert(str(file), -1, "invalid")
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "insert"
     assert "invalid" in result.message.lower()
 
 
@@ -87,7 +86,6 @@ async def test_insert_invalid_too_large_line(tmp_path: Path):
     result = await insert(str(file), 3, "invalid")
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "insert"
     assert "invalid" in result.message.lower()
 
 

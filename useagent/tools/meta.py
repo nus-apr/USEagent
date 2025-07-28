@@ -55,13 +55,10 @@ def _remove_diffs_from_diff_store(
         f"[Tool] Invoked remove_diffs_from_diff_store tool removing {keys_of_diffs_to_remove}"
     )
     if not keys_of_diffs_to_remove:
-        return ToolErrorInfo(
-            tool="remove_diffs_from_diff_store", message="Supplied no keys to remove."
-        )
+        return ToolErrorInfo(message="Supplied no keys to remove.")
     for key in keys_of_diffs_to_remove:
         if not key.startswith("diff_"):
             return ToolErrorInfo(
-                tool="remove_diffs_from_diff_store",
                 message=f"Supplied at least one key ({key}) that does not match the required format 'diff_X'",
                 supplied_arguments={
                     "keys_of_diffs_to_remove": str(keys_of_diffs_to_remove)
@@ -69,7 +66,6 @@ def _remove_diffs_from_diff_store(
             )
         if key not in diff_store.id_to_diff.keys():
             return ToolErrorInfo(
-                tool="remove_diffs_from_diff_store",
                 message=f"Supplied at least one key ({key}) that is not in the existing DiffStore",
                 supplied_arguments={
                     "keys_of_diffs_to_remove": str(keys_of_diffs_to_remove)
@@ -94,7 +90,6 @@ def _select_diff_from_diff_store(
     )
     if len(diff_store) == 0:
         return ToolErrorInfo(
-            tool="select_diff_from_diff_store",
             message="There are currently no diffs stored in the diff-store",
             supplied_arguments={"diff_store": str(diff_store), "index": str(index)},
         )
@@ -109,7 +104,6 @@ def _select_diff_from_diff_store(
             list(diff_store.id_to_diff.keys())[:8]
         )
         return ToolErrorInfo(
-            tool="select_diff_from_diff_store",
             message=f"Key {index} was not in the diff_store. {appendix}",
             supplied_arguments={"diff_store": str(diff_store), "index": str(index)},
         )

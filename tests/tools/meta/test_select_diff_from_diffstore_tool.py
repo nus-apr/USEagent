@@ -33,7 +33,6 @@ def test_empty_store_returns_error():
     result = _select_diff_from_diff_store(store, "diff_0")
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "select_diff_from_diff_store"
     assert "no diffs stored" in result.message.lower()
 
 
@@ -44,7 +43,6 @@ def test_missing_key_returns_error():
     result = _select_diff_from_diff_store(store, "diff_1")
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "select_diff_from_diff_store"
     assert "diff_1" in result.message
     assert "diff_0" in result.message
 
