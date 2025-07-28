@@ -48,7 +48,6 @@ class _BashSession:
         """Terminate the bash shell."""
         if not self._started:
             return ToolErrorInfo(
-                tool="Run",
                 message="Session has not started.",
                 supplied_arguments={k: str(v) for k, v in locals().items()},
             )
@@ -60,7 +59,6 @@ class _BashSession:
         """Execute a command in the bash shell."""
         if not self._started:
             return ToolErrorInfo(
-                tool="Run",
                 message="Session has not started.",
                 supplied_arguments={k: str(v) for k, v in locals().items()},
             )
@@ -71,7 +69,6 @@ class _BashSession:
             )
         if self._timed_out:
             return ToolErrorInfo(
-                tool="Run",
                 message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
                 supplied_arguments={k: str(v) for k, v in locals().items()},
             )
@@ -104,7 +101,6 @@ class _BashSession:
         except TimeoutError:
             self._timed_out = True
             return ToolErrorInfo(
-                tool="Run",
                 message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
                 supplied_arguments={k: str(v) for k, v in locals().items()},
             )
@@ -167,7 +163,6 @@ class BashTool:
             return await self._session.run(transformed_command)
 
         return ToolErrorInfo(
-            tool="__Call__",
             message="No Command Supplied",
             supplied_arguments={k: str(v) for k, v in locals().items()},
         )

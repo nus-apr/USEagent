@@ -31,7 +31,6 @@ def _select_diff_from_diff_store(
     )
     if len(diff_store) == 0:
         return ToolErrorInfo(
-            tool="select_diff_from_diff_store",
             message="There are currently no diffs stored in the diff-store",
             supplied_arguments={k: str(v) for k, v in locals().items()},
         )
@@ -46,7 +45,6 @@ def _select_diff_from_diff_store(
             list(diff_store.id_to_diff.keys())[:8]
         )
         return ToolErrorInfo(
-            tool="select_diff_from_diff_store",
             message=f"Key {index} was not in the diff_store. {appendix}",
             supplied_arguments={k: str(v) for k, v in locals().items()},
         )

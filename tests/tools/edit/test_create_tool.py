@@ -32,7 +32,6 @@ async def test_create_file_already_exists(tmp_path: Path):
     result = await create(str(file), "New content")
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "create"
     assert "File already exists" in result.message
 
 
@@ -77,4 +76,3 @@ async def test_create_file_path_is_directory(tmp_path: Path):
     result = await create(str(dir_path), "This should fail")
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "create"

@@ -16,7 +16,6 @@ class ToolErrorInfo:
     # By havign a seperate return type for errors, we avoid issues on confusing that would rely on model judgement.
 
     message: str
-    tool: str
 
     other_info: str | None = None
     supplied_arguments: dict[str, str] | None = None

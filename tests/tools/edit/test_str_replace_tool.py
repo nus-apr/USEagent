@@ -76,7 +76,6 @@ async def test_str_replace_edge_case_empty_file(tmp_path: Path):
     result = await str_replace(str(file), "anything", "nothing")
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "str_replace"
     assert "did not appear" in result.message.lower()
 
 
@@ -90,7 +89,6 @@ async def test_str_replace_no_occurrence(tmp_path: Path):
     result = await str_replace(str(file), "nomatch", "replace")
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "str_replace"
     assert "did not appear" in result.message.lower()
 
 
@@ -104,5 +102,4 @@ async def test_str_replace_multiple_occurrences(tmp_path: Path):
     result = await str_replace(str(file), "repeat", "once")
 
     assert isinstance(result, ToolErrorInfo)
-    assert result.tool == "str_replace"
     assert "multiple occurrences" in result.message.lower()
