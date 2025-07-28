@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from useagent.tools.base import CLIResult, ToolError
+from useagent.pydantic_models.tools.cliresult import CLIResult
+from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.edit import init_edit_tools, insert
 
 
@@ -69,8 +70,10 @@ async def test_insert_invalid_negative_line(tmp_path: Path):
     file = tmp_path / "negative.txt"
     file.write_text("line1\nline2")
 
-    with pytest.raises(ToolError, match="Invalid `insert_line` parameter"):
-        await insert(str(file), -1, "invalid")
+    result = await insert(str(file), -1, "invalid")
+
+    assert isinstance(result, ToolErrorInfo)
+    assert "invalid" in result.message.lower()
 
 
 @pytest.mark.tool
@@ -80,8 +83,10 @@ async def test_insert_invalid_too_large_line(tmp_path: Path):
     file = tmp_path / "toolarge.txt"
     file.write_text("line1\nline2")
 
-    with pytest.raises(ToolError, match="Invalid `insert_line` parameter"):
-        await insert(str(file), 3, "invalid")  # Only 2 lines, max valid index = 2
+    result = await insert(str(file), 3, "invalid")
+
+    assert isinstance(result, ToolErrorInfo)
+    assert "invalid" in result.message.lower()
 
 
 @pytest.mark.tool
@@ -91,13 +96,9 @@ async def test_insert_tabs_fill_whitespace_up_to_fixed_point(tmp_path: Path):
     file = tmp_path / "tabs.txt"
     file.write_text("line1")
 
-    # Insert a string with a tab
     result = await insert(str(file), 1, "a\tb")
     assert isinstance(result, CLIResult)
-
-    # Check that tab was expanded
-    # The tab will fill the space up to 8 spaces, but see the second test for more examples
-    assert "a       b" in file.read_text()  # Assuming default tab = 8 spaces
+    assert "a       b" in file.read_text()
 
 
 @pytest.mark.tool
@@ -109,10 +110,6 @@ async def test_insert_tabs_fill_whitespace_up_to_fixed_point_longer_initial_stri
     file = tmp_path / "tabs.txt"
     file.write_text("line1")
 
-    # Insert a string with a tab
     result = await insert(str(file), 1, "app\tb")
     assert isinstance(result, CLIResult)
-
-    # Check that tab was expanded
-    # The tab will fill the space up to 8 spaces, but that means that from a to the next word is 8 characters.
-    assert "app     b" in file.read_text()  # Assuming default tab = 8 spaces
+    assert "app     b" in file.read_text()

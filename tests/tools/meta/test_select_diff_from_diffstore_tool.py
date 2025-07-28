@@ -1,26 +1,28 @@
 import pytest
 
 from useagent.pydantic_models.git import DiffEntry, DiffStore
-from useagent.tools.base import ToolError
+from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.meta import _select_diff_from_diff_store
 
 
 @pytest.mark.tool
-def test_empty_store_raises():
+def test_empty_store_returns_error():
     store = DiffStore()
-    with pytest.raises(ToolError, match="no diffs stored"):
-        _select_diff_from_diff_store(store, "diff_0")
+    result = _select_diff_from_diff_store(store, "diff_0")
+
+    assert isinstance(result, ToolErrorInfo)
+    assert "no diffs stored" in result.message.lower()
 
 
 @pytest.mark.tool
-def test_missing_key_raises():
+def test_missing_key_returns_error():
     store = DiffStore()
     store.add_entry(DiffEntry(diff_content="diff a"))
-    with pytest.raises(
-        ToolError,
-        match="Key diff_1 was not in the diff_store. Available keys in diff_store: diff_0",
-    ):
-        _select_diff_from_diff_store(store, "diff_1")
+    result = _select_diff_from_diff_store(store, "diff_1")
+
+    assert isinstance(result, ToolErrorInfo)
+    assert "diff_1" in result.message
+    assert "diff_0" in result.message
 
 
 @pytest.mark.tool

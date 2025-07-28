@@ -8,7 +8,8 @@ from collections.abc import Callable
 
 from loguru import logger
 
-from useagent.tools.base import CLIResult, ToolError, ToolResult
+from useagent.pydantic_models.tools.cliresult import CLIResult
+from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 
 
 class _BashSession:
@@ -46,7 +47,10 @@ class _BashSession:
     def stop(self):
         """Terminate the bash shell."""
         if not self._started:
-            raise ToolError("Session has not started.")
+            return ToolErrorInfo(
+                message="Session has not started.",
+                supplied_arguments={k: str(v) for k, v in locals().items()},
+            )
         if self._process.returncode is not None:
             return
         self._process.terminate()
@@ -54,15 +58,19 @@ class _BashSession:
     async def run(self, command: str):
         """Execute a command in the bash shell."""
         if not self._started:
-            raise ToolError("Session has not started.")
+            return ToolErrorInfo(
+                message="Session has not started.",
+                supplied_arguments={k: str(v) for k, v in locals().items()},
+            )
         if self._process.returncode is not None:
-            return ToolResult(
+            return CLIResult(
                 system="tool must be restarted",
                 error=f"bash has exited with returncode {self._process.returncode}",
             )
         if self._timed_out:
-            raise ToolError(
-                f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
+            return ToolErrorInfo(
+                message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
+                supplied_arguments={k: str(v) for k, v in locals().items()},
             )
 
         # we know these are not None because we created the process with PIPEs
@@ -92,9 +100,10 @@ class _BashSession:
                         break
         except TimeoutError:
             self._timed_out = True
-            raise ToolError(
-                f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
-            ) from None
+            return ToolErrorInfo(
+                message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
+                supplied_arguments={k: str(v) for k, v in locals().items()},
+            )
 
         if output.endswith("\n"):
             output = output[:-1]
@@ -136,14 +145,14 @@ class BashTool:
 
     async def __call__(
         self, command: str | None = None, restart: bool = False, **kwargs
-    ) -> ToolResult:
+    ) -> CLIResult | ToolErrorInfo:
         if restart:
             if self._session:
                 self._session.stop()
             self._session = _BashSession()
             await self._session.start(self.default_working_dir)
 
-            return ToolResult(system="tool has been restarted.")
+            return CLIResult(system="tool has been restarted.")
 
         if self._session is None:
             self._session = _BashSession()
@@ -153,7 +162,10 @@ class BashTool:
             transformed_command = self.command_transformer(command)
             return await self._session.run(transformed_command)
 
-        raise ToolError("no command provided.")
+        return ToolErrorInfo(
+            message="No Command Supplied",
+            supplied_arguments={k: str(v) for k, v in locals().items()},
+        )
 
 
 _bash_tool_instance: BashTool | None = None
@@ -167,14 +179,14 @@ def init_bash_tool(
     _bash_tool_instance = BashTool(default_working_dir, command_transformer)
 
 
-async def bash_tool(command: str) -> ToolResult:
+async def bash_tool(command: str) -> CLIResult | ToolErrorInfo:
     """Execute a bash command in the bash shell.
 
     Args:
         command (str): The command to execute.
 
     Returns:
-        ToolResult: The result of the command execution.
+        CLIResult: The result of the command execution.
     """
     logger.info(f"[Tool] Invoked bash_tool with command: {command}")
 
@@ -184,6 +196,8 @@ async def bash_tool(command: str) -> ToolResult:
     )
 
     result = await _bash_tool_instance(command)
+    if isinstance(result, ToolErrorInfo):
+        return result
 
     logger.info(
         f"[Tool] bash_tool result: output={result.output}, error={result.error}"

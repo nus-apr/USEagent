@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.state.git_repo import GitRepository
-from useagent.tools.base import ToolResult
 from useagent.tools.edit import extract_diff, init_edit_tools
 
 
@@ -16,7 +16,7 @@ async def test_diff_after_repo_init_and_modification(tmp_path: Path):
     (tmp_path / "initial.txt").write_text("changed\n")
     result = await extract_diff(project_dir=tmp_path)
 
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert "diff --git" in result.output
     assert "changed" in result.output
 
@@ -31,7 +31,7 @@ async def test_diff_after_repo_clean(tmp_path: Path):
     repo.repo_clean_changes()
     result = await extract_diff(project_dir=tmp_path)
 
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert result.output.strip() == "No changes detected in the repository."
 
 

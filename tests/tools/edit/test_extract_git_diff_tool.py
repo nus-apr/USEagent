@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from useagent.tools.base import ToolError, ToolResult
+from useagent.pydantic_models.tools.cliresult import CLIResult
+from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.edit import extract_diff, init_edit_tools
 
 # DevNote:
@@ -46,7 +47,7 @@ async def test_extract_diff_real_changes(tmp_path):
 
     result = await extract_diff(project_dir=tmp_path)
 
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert "diff --git" in result.output
     assert "+new line" in result.output
 
@@ -59,17 +60,8 @@ async def test_extract_diff_no_changes_after_commit(tmp_path):
 
     result = await extract_diff(project_dir=tmp_path)
 
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert result.output.strip() == "No changes detected in the repository."
-
-
-@pytest.mark.tool
-@pytest.mark.asyncio
-async def test_extract_diff_git_not_initialized(tmp_path):
-    init_edit_tools(str(tmp_path))
-
-    with pytest.raises(ToolError, match="Failed to extract diff"):
-        await extract_diff(project_dir=tmp_path)
 
 
 @pytest.mark.tool
@@ -85,6 +77,20 @@ async def test_extract_diff_single_file_edit(tmp_path):
     assert "diff --git" in result.output
     assert "+another line" in result.output
     assert "-original content" in result.output or "+modified content" in result.output
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_git_not_initialized(tmp_path):
+    init_edit_tools(str(tmp_path))
+
+    result = await extract_diff(project_dir=tmp_path)
+
+    assert isinstance(result, ToolErrorInfo)
+    assert (
+        "not a git repository" in result.message.lower()
+        or "git" in result.message.lower()
+    )
 
 
 @pytest.mark.tool
@@ -194,7 +200,7 @@ async def test_extract_diff_untracked_file_is_not_included(tmp_path: Path):
     (tmp_path / "untracked.txt").write_text("should not appear\n")
 
     result = await extract_diff(project_dir=tmp_path)
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert "untracked.txt" in result.output
     assert not result.output.strip() == "No changes detected in the repository."
 

@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from useagent.tools.base import ToolError, ToolResult
+from useagent.pydantic_models.tools.cliresult import CLIResult
+from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.edit import create, init_edit_tools
 
 
@@ -15,7 +16,7 @@ async def test_create_file_success(tmp_path: Path):
 
     result = await create(str(file), content)
 
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert "File created successfully" in result.output
     assert file.exists()
     assert file.read_text() == content
@@ -28,8 +29,10 @@ async def test_create_file_already_exists(tmp_path: Path):
     file.write_text("Existing content")
     init_edit_tools(str(tmp_path))
 
-    with pytest.raises(ToolError, match="File already exists"):
-        await create(str(file), "New content")
+    result = await create(str(file), "New content")
+
+    assert isinstance(result, ToolErrorInfo)
+    assert "File already exists" in result.message
 
 
 @pytest.mark.tool
@@ -40,7 +43,7 @@ async def test_create_empty_file(tmp_path: Path):
 
     result = await create(str(file), "")
 
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert "File created successfully" in result.output
     assert file.exists()
     assert file.read_text() == ""
@@ -57,7 +60,7 @@ async def test_create_file_nested_directory(tmp_path: Path):
 
     result = await create(str(file), content)
 
-    assert isinstance(result, ToolResult)
+    assert isinstance(result, CLIResult)
     assert "File created successfully" in result.output
     assert file.exists()
     assert file.read_text() == content
@@ -70,5 +73,6 @@ async def test_create_file_path_is_directory(tmp_path: Path):
     dir_path.mkdir()
     init_edit_tools(str(tmp_path))
 
-    with pytest.raises(ToolError):
-        await create(str(dir_path), "This should fail")
+    result = await create(str(dir_path), "This should fail")
+
+    assert isinstance(result, ToolErrorInfo)
