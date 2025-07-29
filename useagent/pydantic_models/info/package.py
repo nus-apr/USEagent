@@ -20,6 +20,6 @@ class Package:
     @field_validator("version")
     @classmethod
     def check_version(cls, v: str) -> str:
-        if not v[0].isdigit():
-            raise ValueError("Version must start with a digit")
+        if not v[0].isdigit() and not v[0].lower() == "v":
+            raise ValueError("Version must start with a digit or with `v`")
         return v

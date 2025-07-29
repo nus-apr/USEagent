@@ -12,6 +12,12 @@ def test_valid_package(name: str, version: str):
 
 
 @pytest.mark.pydantic_model
+@pytest.mark.parametrize("version", ["v1.0", " V1.0", "V1.0 "])
+def test_versions_can_start_with_v(version: str):
+    Package(name="test-package", version=version, source=Source.PROJECT)
+
+
+@pytest.mark.pydantic_model
 @pytest.mark.parametrize("name", ["", " ", "\t", "\n"])
 def test_invalid_name(name: str):
     with pytest.raises(ValidationError):
@@ -26,7 +32,7 @@ def test_invalid_version_empty(version: str):
 
 
 @pytest.mark.pydantic_model
-@pytest.mark.parametrize("version", ["x1.0", "v2.0", "-1.0"])
+@pytest.mark.parametrize("version", ["x1.0", "-1.0"])
 def test_invalid_version_format(version: str):
     with pytest.raises(ValidationError):
         Package(name="pkg", version=version, source=Source.SYSTEM)

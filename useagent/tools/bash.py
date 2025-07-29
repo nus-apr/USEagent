@@ -168,6 +168,7 @@ class BashTool:
             return ToolErrorInfo(message="No Command Supplied")
         # DevNote: This is a common issue witnessed, it tries to call `grep -r 'some_pattern'` which is invalid.
         # The resulting grep-error-message seems unsufficient for the model to be unerstandable.
+        # TODO: Introduce a global flag alongside 'use-empirical-otpimizations' etc. for these kind of patches based on errors to optimize.
         if command.startswith("grep -r ") and len(command.split()) < 4:
             return ToolErrorInfo(
                 message="The supplied command is a grep -r, but did not specify enough other arguments. Please reconsider your strategy how to supply a string to your grep - or use a different command and approach.",

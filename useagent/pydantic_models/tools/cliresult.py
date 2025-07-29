@@ -18,7 +18,7 @@ class CLIResult:
 
     @field_validator("base64_image")
     @classmethod
-    def validate_base64_image(cls, v: str) -> str:
+    def validate_base64_image(cls, v: str | None) -> str | None:
         if v is None:
             return None  # If there is no image, we don't validate. We only validate if we are given a image.
         try:
