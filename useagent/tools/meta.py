@@ -1,7 +1,7 @@
 from loguru import logger
 from pydantic_ai import RunContext
 
-from useagent.pydantic_models.git import DiffEntry, DiffStore
+from useagent.pydantic_models.artifacts.git import DiffEntry, DiffStore
 from useagent.pydantic_models.task_state import TaskState
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 
@@ -23,16 +23,75 @@ def select_diff_from_diff_store(
     return _select_diff_from_diff_store(diff_store, diff_store_key)
 
 
+def remove_diffs_from_diff_store(
+    ctx: RunContext[TaskState], keys_of_diffs_to_remove: list[str]
+) -> DiffStore | ToolErrorInfo:
+    """
+    Remove all given diffs from the Diff Store.
+    This action can be used if there are many partial diffs that are no longer relevant,
+    if some diffs are known to be faulty / malformed or to keep only the most promising diffs in a growing diffstore.
+    The result will be the newly constructed DiffStore without the specified elements, which will have new keys in place.
+
+    Args:
+        keys_of_diffs_to_remove (List[str]): The keys of which diffs to remove. Must be valid keys for elements in the diff-store.
+
+    Returns:
+        DiffStore: The updated DiffStore - The TaskStates' field will also be updated as a side-effect.
+    """
+    diff_store = ctx.deps.diff_store
+    result = _remove_diffs_from_diff_store(diff_store, keys_of_diffs_to_remove)
+    if isinstance(result, DiffStore):
+        logger.debug(
+            f"Overwritting existing diffstore ({len(diff_store)} entries) with new diffstore ({len(result)} entries)"
+        )
+        ctx.deps.diff_store = result
+    return result
+
+
+def _remove_diffs_from_diff_store(
+    diff_store: DiffStore, keys_of_diffs_to_remove: list[str]
+) -> DiffStore | ToolErrorInfo:
+    logger.info(
+        f"[Tool] Invoked remove_diffs_from_diff_store tool removing {keys_of_diffs_to_remove}"
+    )
+    if not keys_of_diffs_to_remove:
+        return ToolErrorInfo(message="Supplied no keys to remove.")
+    for key in keys_of_diffs_to_remove:
+        if not key.startswith("diff_"):
+            return ToolErrorInfo(
+                message=f"Supplied at least one key ({key}) that does not match the required format 'diff_X'",
+                supplied_arguments={
+                    "keys_of_diffs_to_remove": str(keys_of_diffs_to_remove)
+                },
+            )
+        if key not in diff_store.id_to_diff.keys():
+            return ToolErrorInfo(
+                message=f"Supplied at least one key ({key}) that is not in the existing DiffStore",
+                supplied_arguments={
+                    "keys_of_diffs_to_remove": str(keys_of_diffs_to_remove)
+                },
+            )
+
+    diffs_to_keep = [
+        k for k in diff_store.id_to_diff.keys() if k not in keys_of_diffs_to_remove
+    ]
+    new_diff_store: DiffStore = DiffStore()
+    for diff_to_keep in diffs_to_keep:
+        new_diff_store.add_entry(diff_store.id_to_diff[diff_to_keep])
+
+    return new_diff_store
+
+
 def _select_diff_from_diff_store(
     diff_store: DiffStore, index: str
 ) -> str | ToolErrorInfo:
     logger.info(
-        f"[Tool] Invoked select_diff_from_diff_store tool with index {index} ({len(diff_store)} entries in diff_store)"
+        f"[Tool] Invoked select_diff_from_diff_store tool with index {index} ({len(diff_store)} entries in diff_store [{','.join(list(diff_store.id_to_diff.keys())[:8])}])"
     )
     if len(diff_store) == 0:
         return ToolErrorInfo(
             message="There are currently no diffs stored in the diff-store",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={"diff_store": str(diff_store), "index": str(index)},
         )
     # DevNote: Let's help a little if we got an integer
     if index.isdigit() and int(index) >= 0:
@@ -46,7 +105,7 @@ def _select_diff_from_diff_store(
         )
         return ToolErrorInfo(
             message=f"Key {index} was not in the diff_store. {appendix}",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
+            supplied_arguments={"diff_store": str(diff_store), "index": str(index)},
         )
     else:
         entry: DiffEntry = diff_store.id_to_diff[index]

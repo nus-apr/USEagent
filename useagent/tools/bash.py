@@ -47,10 +47,7 @@ class _BashSession:
     def stop(self):
         """Terminate the bash shell."""
         if not self._started:
-            return ToolErrorInfo(
-                message="Session has not started.",
-                supplied_arguments={k: str(v) for k, v in locals().items()},
-            )
+            return ToolErrorInfo(message="Session has not started.")
         if self._process.returncode is not None:
             return
         self._process.terminate()
@@ -60,7 +57,7 @@ class _BashSession:
         if not self._started:
             return ToolErrorInfo(
                 message="Session has not started.",
-                supplied_arguments={k: str(v) for k, v in locals().items()},
+                supplied_arguments={"command": command},
             )
         if self._process.returncode is not None:
             return CLIResult(
@@ -70,7 +67,7 @@ class _BashSession:
         if self._timed_out:
             return ToolErrorInfo(
                 message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
-                supplied_arguments={k: str(v) for k, v in locals().items()},
+                supplied_arguments={"command": command},
             )
 
         # we know these are not None because we created the process with PIPEs
@@ -102,7 +99,7 @@ class _BashSession:
             self._timed_out = True
             return ToolErrorInfo(
                 message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
-                supplied_arguments={k: str(v) for k, v in locals().items()},
+                supplied_arguments={"command": command},
             )
 
         if output.endswith("\n"):
@@ -117,6 +114,15 @@ class _BashSession:
         # clear the buffers so that the next output can be read correctly
         self._process.stdout._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
         self._process.stderr._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
+
+        error = (
+            error if error else None
+        )  # Make empty output properly None for Type Checking
+        output = (
+            output if output else None
+        )  # Make empty output properly None for Type Checking
+        if not error and not output:
+            output = f"(Command {command} finished silently)"
 
         return CLIResult(output=output, error=error)
 
@@ -158,14 +164,19 @@ class BashTool:
             self._session = _BashSession()
             await self._session.start(self.default_working_dir)
 
-        if command is not None:
-            transformed_command = self.command_transformer(command)
-            return await self._session.run(transformed_command)
+        if not command:
+            return ToolErrorInfo(message="No Command Supplied")
+        # DevNote: This is a common issue witnessed, it tries to call `grep -r 'some_pattern'` which is invalid.
+        # The resulting grep-error-message seems unsufficient for the model to be unerstandable.
+        # TODO: Introduce a global flag alongside 'use-empirical-otpimizations' etc. for these kind of patches based on errors to optimize.
+        if command.startswith("grep -r ") and len(command.split()) < 4:
+            return ToolErrorInfo(
+                message="The supplied command is a grep -r, but did not specify enough other arguments. Please reconsider your strategy how to supply a string to your grep - or use a different command and approach.",
+                supplied_arguments={"command": str(command), "restart": str(restart)},
+            )
 
-        return ToolErrorInfo(
-            message="No Command Supplied",
-            supplied_arguments={k: str(v) for k, v in locals().items()},
-        )
+        transformed_command = self.command_transformer(command)
+        return await self._session.run(transformed_command)
 
 
 _bash_tool_instance: BashTool | None = None
@@ -177,6 +188,15 @@ def init_bash_tool(
     """Initialize a bash tool instance. Must be called before registering any bash tool to any agent."""
     global _bash_tool_instance
     _bash_tool_instance = BashTool(default_working_dir, command_transformer)
+
+
+def __reset_bash_tool():
+    """
+    This method is only used for tests and testing purposes.
+    Otherwise, with our `init_edit_tools` we introduce some side-effects that make tests a bit flaky.
+    """
+    global _bash_tool_instance
+    _bash_tool_instance = None
 
 
 async def bash_tool(command: str) -> CLIResult | ToolErrorInfo:
