@@ -9,6 +9,7 @@ from pydantic_ai.tools import Tool
 from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
 from useagent.agents.probing.agent import init_agent as init_probing_agent
 from useagent.agents.search_code.agent import init_agent as init_search_code_agent
+from useagent.agents.vcs.agent import init_agent as init_vcs_agent
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
@@ -142,6 +143,38 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         diff_id: str = ctx.deps.diff_store.add_entry(diff)
         logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
         return diff
+
+    @meta_agent.tool(retries=4)
+    async def vcs(
+        ctx: RunContext[TaskState], instruction: str
+    ) -> DiffEntry | str | None:
+        """Perform tasks related to version-management given the provided instruction.
+
+        Args:
+            instruction (str): Instruction for the version management. The instruction should be very specific, typically should include the expected outcome and whether or not a action should be performed. Pay special attention to describe the expected start and end state, if a change in the VCS is required.
+
+        Returns:
+            DiffEntry | str | None: A git-diff of the requested entry, a string answering a question or retrieving other information, or None in case the performed action did not need any return value.
+        """
+        logger.info(f"[MetaAgent] Invoked vcs_agent with instruction: {instruction}")
+        vcs_agent = init_vcs_agent()
+
+        vcs_result = await vcs_agent.run(instruction, deps=ctx.deps)
+
+        match vcs_result.output:
+            case DiffEntry():
+                diff: DiffEntry = vcs_result.output
+                logger.info(f"[MetaAgent] vcs_agent diff result: {diff}")
+                # update task state with the diff
+                diff_id: str = ctx.deps.diff_store.add_entry(diff)
+                logger.debug(f"[MetaAgent] Added diff entry with ID: {diff_id}")
+            case str():
+                logger.info(
+                    f"[MetaAgent] VCS-agent returned a string: {vcs_result.output}"
+                )
+            case None:
+                logger.info("[MetaAgent] VCS-agent returned `None`")
+        return vcs_result
 
     ### Action definitions END
 
