@@ -8,13 +8,10 @@ from pydantic_ai import RunContext
 from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.task_state import TaskState
+from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
-
-# DevNote:
-# In theory, we can also use `git status` to identify `both_modified` entries from it.
-# This does work for 'fresh' merges, but once agents start editing files, or worse commit half-baked things, these checks will fail.
-# The safer way is to always check for the markers, regardless of the history.
-# There is a tiny chance that these are part of the normal code, but that is really unlikely.
+from useagent.tools.run import run
+from useagent.utils import cd
 
 
 def check_for_merge_conflict_markers(
@@ -30,6 +27,12 @@ def check_for_merge_conflict_markers(
     Returns:
         bool: True if the path contains any merge marker, false otherwise.
     """
+    # DevNote:
+    # In theory, we can also use `git status` to identify `both_modified` entries from it.
+    # This does work for 'fresh' merges, but once agents start editing files, or worse commit half-baked things, these checks will fail.
+    # The safer way is to always check for the markers, regardless of the history.
+    # There is a tiny chance that these are part of the normal code, but that is really unlikely.
+
     if not _silence_logger:
         logger.debug(
             f"[Tool] Called looking for Merge Conflict Markers in file {path_to_file}"
@@ -91,6 +94,16 @@ def find_merge_conflicts(path_to_check: Path) -> list[Path]:
 def view_commit_as_diff(
     ctx: RunContext[TaskState], commit_reference: NonEmptyStr
 ) -> DiffEntry | ToolErrorInfo:
+    """
+    Retrieve a given commit in the repository and view it as a diff-entry.
+    Any valid commit in the current history can be seen this way.
+
+    Args:
+        commit_reference (str): A non-empty string representing either a git commit hash, or other valid commit references like HEAD. Abbreviated hashes are supported, as long as they are unique.
+
+    Returns:
+        DiffEntry | ToolErrorInfo: Returns a DiffEntry of the specified commit on a succesful retrieval, or a ToolErrorInfo containing a message of the issue if any problem occured.
+    """
     cwd: Path = Path(ctx.deps._git_repo.local_path)
     return _view_commit_as_diff(repository_path=cwd, commit_reference=commit_reference)
 
@@ -170,6 +183,52 @@ def _commit_exists(repo: Path, commit: str) -> bool:
         )
     except subprocess.CalledProcessError:
         return False
+
+
+async def extract_diff(
+    project_dir: Path | str | None = None,
+) -> CLIResult | ToolErrorInfo:
+    """
+    Extract the diff of the current state of the repository.
+    This is achieved using `git diff` for both cached and uncached, i.E. will show all files in the index.
+    This will also add all files in the current repository to the index using `git add .`
+    For extracting other, existing diffs from commits consider `view_commit_as_diff`.
+    This tool does NOT make a commit.
+
+    Args:
+        project_dir(Path|str|None, default None): Path at which to execute the extraction. If None, the current project dir will be used.
+
+    Returns:
+        CLIResult: The result of the diff extraction, or a ToolErrorInfo containing information of a miss-usage or command failure.
+                   The CLIResult will contain all information necessary to form a diff, but it is not a diff itself.
+    """
+    project_dir = project_dir or Path(".").absolute()
+
+    logger.info(
+        f"[Tool] Invoked edit_tool `extract_diff`. Extracting a patch from {project_dir} (type: {type(project_dir)})"
+    )
+
+    with cd(project_dir):
+        await run(
+            "git add ."
+        )  # Git Add is necessary to see changes to newly created files
+        _, cached_out, stderr_1 = await run("git diff --cached")
+        _, working_out, stderr_2 = await run("git diff")
+        stdout = cached_out + working_out
+
+        if stderr_1 or stderr_2:
+            return ToolErrorInfo(
+                message=f"Failed to extract diff: {stderr_1 + stderr_2}",
+                supplied_arguments={"project_dir": str(project_dir)},
+            )
+
+        if not stdout or not stdout.strip():
+            logger.debug("[Tool] edit_tool `extract_diff`: Received empty Diff")
+            return CLIResult(output="No changes detected in the repository.")
+        logger.debug(
+            f"[Tool] edit_tool `extract_diff`: Received {stdout[:25]} ... from {project_dir}"
+        )
+        return CLIResult(output=f"Here's the diff of the current state:\n{stdout}")
 
 
 # DevNote:
