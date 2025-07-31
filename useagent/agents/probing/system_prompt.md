@@ -15,6 +15,8 @@ You might be able to derive the majority of information from READMEs, `.ini` or 
 Output:
 
 We expect an `Environment` containing the key information relevant to act on the project.
+You have access to a `PartialEnvironment` object that you can fill step-by-step. 
+Once all fields are filled, return a complete Environment. Never fabricate data. Use existing state to skip work.
 
 Expected `Environment` structure for an agentic system:
 

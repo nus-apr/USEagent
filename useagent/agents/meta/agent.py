@@ -18,6 +18,7 @@ from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.artifacts.code import Location
 from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.info.environment import Environment
+from useagent.pydantic_models.info.partial_environment import PartialEnvironment
 from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
@@ -84,7 +85,8 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         logger.info("[MetaAgent] Invoked probe_environment")
 
         probing_agent = init_probing_agent()
-        r = await probing_agent.run(deps=ctx.deps)
+        environment_under_construction: PartialEnvironment = PartialEnvironment()
+        r = await probing_agent.run(deps=environment_under_construction)
         env: Environment = r.output
         next_id: int = len(ctx.deps.known_environments.keys())
 
