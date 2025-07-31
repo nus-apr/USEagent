@@ -5,6 +5,7 @@ from pathlib import Path
 from loguru import logger
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.tools import Tool
+from pydantic_ai.usage import UsageLimits
 
 from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
 from useagent.agents.probing.agent import init_agent as init_probing_agent
@@ -138,7 +139,9 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         logger.info(f"[MetaAgent] Invoked edit_code with instruction: {instruction}")
         edit_code_agent = init_edit_code_agent()
 
-        edit_result = await edit_code_agent.run(instruction, deps=ctx.deps)
+        edit_result = await edit_code_agent.run(
+            instruction, deps=ctx.deps, usage_limits=UsageLimits(request_limit=75)
+        )
         diff: DiffEntry = edit_result.output
         logger.info(f"[MetaAgent] edit_code result: {diff}")
         # update task state with the diff
@@ -196,5 +199,7 @@ def agent_loop(task_state: TaskState):
     meta_agent = init_agent()
     # actually running the agent
     prompt = "Invoke tools to complete the task."
-    result = meta_agent.run_sync(prompt, deps=task_state)
+    result = meta_agent.run_sync(
+        prompt, deps=task_state, usage_limits=UsageLimits(request_limit=100)
+    )
     return result.output
