@@ -1,6 +1,6 @@
 ## NOTE: implment MetaAgent with agent delegation
-
 from pathlib import Path
+from typing import Literal
 
 from loguru import logger
 from pydantic_ai import Agent, RunContext
@@ -19,6 +19,10 @@ from useagent.pydantic_models.artifacts.code import Location
 from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.info.partial_environment import PartialEnvironment
+from useagent.pydantic_models.output.code_change import CodeChange
+from useagent.pydantic_models.provides_output_instructions import (
+    ProvidesOutputInstructions,
+)
 from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
@@ -29,12 +33,13 @@ from useagent.tools.meta import (
 )
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
-# TODO: define the output type
 
 
 @conditional_microagents_triggers(load_microagents_from_project_dir())
 @alias_for_microagents("META")
-def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
+def init_agent(
+    config: AppConfig | None = None, output_type: Literal[CodeChange] = CodeChange
+) -> Agent[TaskState, CodeChange]:
     if config is None:
         config = ConfigSingleton.config
     assert config is not None
@@ -48,7 +53,7 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
             Tool(view_task_state, takes_ctx=True, max_retries=0),
             Tool(remove_diffs_from_diff_store, takes_ctx=True, max_retries=5),
         ],
-        output_type=str,
+        output_type=output_type,
     )
 
     ## This adds the task description to instructions (SYSTEM prompt).
@@ -60,6 +65,28 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
             task_description (str): The description of the task to be added.
         """
         return ctx.deps._task.get_issue_statement()
+
+    ## Depending on the output type (if possible), describes the expected output format.
+    @meta_agent.instructions
+    def add_output_description() -> str:
+        if isinstance(output_type, ProvidesOutputInstructions):
+            logger.info(
+                f"[Setup] MetaAgent is expected to output a `{str(output_type)}`, adding output instructions."
+            )
+            return (
+                f"""
+            ---------------------------------------------------
+            Output:
+
+            You are expected to return a `{str(output_type)}`.
+            """
+                + output_type.get_output_instructions()
+            )
+        else:
+            logger.warning(
+                "[Setup] MetaAgent received a output type that did not implement the `get_output_instructions` method and will have less info."
+            )
+            return f"Output: You are expected to return a `{output_type}`"
 
     ### Define actions as tools to meta_agent. Each action interfaces to another agent in Pydantic AI.
 
@@ -141,9 +168,22 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         diff: DiffEntry = edit_result.output
         logger.info(f"[MetaAgent] edit_code result: {diff}")
         # update task state with the diff
-        diff_id: str = ctx.deps.diff_store.add_entry(diff)
-        logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
-        return diff
+        try:
+            diff_id: str = ctx.deps.diff_store.add_entry(diff)
+            logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
+        except ValueError as verr:
+            if "diff already exists" in str(verr):
+                logger.warning(
+                    "[MetaAgent] Edit-Code Agent returned a (already known) diff towards the meta-agent"
+                )
+                existing_diff_id = (ctx.deps.diff_store.diff_to_id())[diff.diff_content]
+                raise ValueError(
+                    f"The edit-code agent returned a diff identical to an existing diff_id {existing_diff_id}. Reconsider your instructions or revisit the existing diff_id {existing_diff_id}."
+                )
+            else:
+                raise verr
+        finally:
+            return diff
 
     ### Action definitions END
 
@@ -164,4 +204,5 @@ def agent_loop(task_state: TaskState):
     # actually running the agent
     prompt = "Invoke tools to complete the task."
     result = meta_agent.run_sync(prompt, deps=task_state)
+    print(result)
     return result.output

@@ -58,9 +58,3 @@ Note that you should include a diff_id even if it contains error, because it can
 3. After deciding on what should be supplied as `pre_patches`, think about what kind of changes should be made on top of them and describe that in the `instructions` argument.
 
 Think step by step.
-
----
-
-Output:
-
-Your final output should be a string containing the final patch that resolves the issue. The string should be in `unified diff` format.
