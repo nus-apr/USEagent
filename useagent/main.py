@@ -8,6 +8,7 @@ from loguru import logger
 
 from useagent import task_runner
 from useagent.config import AppConfig, ConfigSingleton
+from useagent.pydantic_models.output.action import Action
 from useagent.pydantic_models.output.answer import Answer
 from useagent.pydantic_models.output.code_change import CodeChange
 from useagent.tasks.github_task import GithubTask
@@ -212,11 +213,15 @@ def setup_loguru(console_log_level: str, log_file: str | None) -> None:
 
 
 def parse_output_type(value: str) -> type:
-    match value.lower():
+    if not value:
+        raise ArgumentTypeError("Received None for parsing output type")
+    match value.strip().lower():
         case "answer":
             return Answer
         case "codechange":
             return CodeChange
+        case "action":
+            return Action
         case _:
             raise ArgumentTypeError(f"Invalid output type: {value}")
 

@@ -19,6 +19,7 @@ from useagent.pydantic_models.artifacts.code import Location
 from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.info.partial_environment import PartialEnvironment
+from useagent.pydantic_models.output.action import Action
 from useagent.pydantic_models.output.answer import Answer
 from useagent.pydantic_models.output.code_change import CodeChange
 from useagent.pydantic_models.provides_output_instructions import (
@@ -40,7 +41,7 @@ SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 @alias_for_microagents("META")
 def init_agent(
     config: AppConfig | None = None,
-    output_type: Literal[CodeChange, Answer] = CodeChange,
+    output_type: Literal[CodeChange, Answer, Action] = CodeChange,
 ) -> Agent[TaskState, CodeChange | Answer]:
     if config is None:
         config = ConfigSingleton.config
@@ -193,7 +194,7 @@ def init_agent(
 
 
 def agent_loop(
-    task_state: TaskState, output_type: Literal[CodeChange, Answer] = CodeChange
+    task_state: TaskState, output_type: Literal[CodeChange, Answer, Action] = CodeChange
 ):
     """
     Main agent loop.
