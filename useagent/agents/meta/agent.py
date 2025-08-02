@@ -208,5 +208,4 @@ def agent_loop(
     # actually running the agent
     prompt = "Invoke tools to complete the task."
     result = meta_agent.run_sync(prompt, deps=task_state)
-    print(result)
     return result.output
