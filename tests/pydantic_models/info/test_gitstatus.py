@@ -45,3 +45,8 @@ def test_invalid_git_branch(branch: str):
             active_git_branch=branch,
             has_uncommited_changes=True,
         )
+
+
+@pytest.mark.pydantic_model
+def test_get_output_instructions_should_not_return_none():
+    assert GitStatus.get_output_instructions()

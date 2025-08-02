@@ -40,6 +40,17 @@ class GitStatus:
             raise ValueError(f"Invalid git branch name: {v}")
         return v
 
+    @classmethod
+    def get_output_instructions(cls) -> str:
+        return """
+        A `GitStatus` consists of:
+
+        - `active_git_commit`: `str`, current git commit hash.
+        - `active_git_commit_is_Head`: `bool`, whether the commit is HEAD.
+        - `active_git_branch`: `str`, current git branch name.
+        - `has_uncommited_changes`: `bool`, whether there are uncommitted changes.
+        """
+
 
 @dataclass
 class Commands:
@@ -99,6 +110,21 @@ class Commands:
         ]
         return self
 
+    @classmethod
+    def get_output_instructions(cls) -> str:
+        return """
+        A `Commands` object consists of:
+
+        - `build_command`, `test_command`, `run_command`, `linting_command`: `Optional[str]`, project-specific workflow commands.
+        - `reducable_test_scope`: `bool`, whether test scope can be reduced.
+        - `example_reduced_test_command`: `Optional[str]`, an example reduced test command.
+        - `can_install_system_packages`: `bool`, whether system package installation is allowed.
+        - `system_package_manager`: `Optional[str]`, e.g., `"apt"`, `"apk"`.
+        - `can_install_project_packages`: `bool`, whether project-level package installation is allowed.
+        - `project_package_manager`: `Optional[str]`, e.g., `"pip"`, `"npm"`.
+        - `other_important_commands`: `List[str]`, additional relevant commands.
+        """
+
 
 @dataclass(frozen=True)
 class Environment:
@@ -125,4 +151,24 @@ class Environment:
             f"packages={[p.name for p in self.packages]}, "
             f"commands={self.commands}, "
             f"git_status={self.git_status})"
+        )
+
+    @classmethod
+    def get_output_instructions(cls) -> str:
+        return (
+            """
+        Expected `Environment` structure for an agentic system:
+
+        - `project_root`: `Path`, root of the project.
+        - `packages`: `List[Package]`, installed or required packages.
+        - `git_status`: `GitStatus`, holds information about the current git state.
+        - `commands`: `Commands`, holds build, test, run, linting and related execution settings.
+        """
+            + "\n"
+            + Package.get_output_instructions()
+            + "\n"
+            + Commands.get_output_instructions()
+            + "\n"
+            + GitStatus.get_output_instructions()
+            + "\n"
         )

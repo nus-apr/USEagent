@@ -42,3 +42,8 @@ def test_invalid_version_format(version: str):
 def test_version_with_postfix():
     # We do want some postfixes, like .post0 from datutil, .dev or +cpu (like llm packages often do)
     Package(name="python-dateutil", version="2.9.0.post0", source=Source.PROJECT)
+
+
+@pytest.mark.pydantic_model
+def test_get_output_instructions_should_not_return_none():
+    assert Package.get_output_instructions()

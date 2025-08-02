@@ -9,5 +9,8 @@ class ProvidesOutputInstructions(Protocol):
         Return instructions describing the desired output format.
         These should be specific enough to be provided to an agent that targets this type
         as a return type.
+
+        Should not return some --------- or other Markers.
+        Only information on the fields and a header of the object.
         """
         ...

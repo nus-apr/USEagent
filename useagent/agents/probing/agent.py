@@ -46,4 +46,19 @@ def init_agent(
         ],
     )
 
+    @environment_probing_agent.instructions
+    def add_output_description(self) -> str:
+        return (
+            """
+        -----------
+        Output:
+
+        We expect an `Environment` containing the key information relevant to act on the project.
+        You have access to a `PartialEnvironment` object that you can fill step-by-step. 
+        Once all fields are filled, return a complete Environment. Never fabricate data. Use existing state to skip work.
+        """
+            + "\n"
+            + Environment.get_output_instructions()
+        )
+
     return environment_probing_agent

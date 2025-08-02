@@ -92,3 +92,8 @@ def test_known_commands_removed_from_other():
         other_important_commands=["make", "deploy", "pytest", " status "],
     )
     assert sorted(c.other_important_commands) == ["deploy", "status"]
+
+
+@pytest.mark.pydantic_model
+def test_get_output_instructions_should_not_return_none():
+    assert Commands.get_output_instructions()

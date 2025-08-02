@@ -19,6 +19,7 @@ from useagent.pydantic_models.artifacts.code import Location
 from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.info.partial_environment import PartialEnvironment
+from useagent.pydantic_models.output.answer import Answer
 from useagent.pydantic_models.output.code_change import CodeChange
 from useagent.pydantic_models.provides_output_instructions import (
     ProvidesOutputInstructions,
@@ -38,8 +39,9 @@ SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 @conditional_microagents_triggers(load_microagents_from_project_dir())
 @alias_for_microagents("META")
 def init_agent(
-    config: AppConfig | None = None, output_type: Literal[CodeChange] = CodeChange
-) -> Agent[TaskState, CodeChange]:
+    config: AppConfig | None = None,
+    output_type: Literal[CodeChange, Answer] = CodeChange,
+) -> Agent[TaskState, CodeChange | Answer]:
     if config is None:
         config = ConfigSingleton.config
     assert config is not None
@@ -190,7 +192,9 @@ def init_agent(
     return meta_agent
 
 
-def agent_loop(task_state: TaskState):
+def agent_loop(
+    task_state: TaskState, output_type: Literal[CodeChange, Answer] = CodeChange
+):
     """
     Main agent loop.
     """
@@ -200,7 +204,7 @@ def agent_loop(task_state: TaskState):
         command_transformer=task_state._task.command_transformer,
     )
     init_edit_tools(str(task_state._task.get_working_directory()))
-    meta_agent = init_agent()
+    meta_agent = init_agent(output_type=output_type)
     # actually running the agent
     prompt = "Invoke tools to complete the task."
     result = meta_agent.run_sync(prompt, deps=task_state)

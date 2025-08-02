@@ -474,3 +474,8 @@ def test_has_no_newline_eof_marker(diff_content: str, expected_flag: bool):
 def test_wrapped_diff_is_valid(wrapped: str):
     entry = DiffEntry(diff_content=wrapped)
     assert entry.number_of_hunks > 0
+
+
+@pytest.mark.pydantic_model
+def test_get_output_instructions_should_not_return_none():
+    assert DiffEntry.get_output_instructions()

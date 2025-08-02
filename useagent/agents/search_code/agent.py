@@ -46,4 +46,16 @@ def init_agent(
         """
         return ctx.deps._task.get_issue_statement()
 
+    @search_code_agent.instructions
+    def add_output_description(self) -> str:
+        return (
+            """
+        ---------------------------
+        Output:
+        You should give a list of Location as the relevant locations.
+
+        """
+            + Location.get_output_instructions()
+        )
+
     return search_code_agent
