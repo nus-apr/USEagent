@@ -2,8 +2,11 @@ from loguru import logger
 from pydantic_ai import RunContext
 
 from useagent.pydantic_models.artifacts.git import DiffEntry, DiffStore
+from useagent.pydantic_models.common.constrained_types import NonEmptyStr, PositiveInt
 from useagent.pydantic_models.task_state import TaskState
+from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
+from useagent.tools.bash import get_bash_history
 
 
 def select_diff_from_diff_store(
@@ -125,3 +128,18 @@ def view_task_state(ctx: RunContext[TaskState]) -> str:
     res = ctx.deps.to_model_repr()
     logger.debug(f"[Tool] view_task_state result: {res}")
     return res
+
+
+def view_command_history(
+    limit: PositiveInt = 5,
+) -> list[tuple[NonEmptyStr, NonEmptyStr, CLIResult | ToolErrorInfo | Exception]]:
+    """
+    Inspect the recently used commands and their outputs.
+    Can be an empty list, in case you have not used any agent that uses any commandline.
+
+    Args:
+        limit (PositiveInt): additional limitation to the last `limit` entries, default: last 5.
+    Returns:
+        list(Tuple[str,str,CLIResult | ToolErrorInfo | Exception]): A list of (utmost) the last 50 commands used and their output.
+    """
+    return list(get_bash_history())[-limit:]

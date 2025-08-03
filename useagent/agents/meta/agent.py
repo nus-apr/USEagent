@@ -31,6 +31,7 @@ from useagent.tools.edit import init_edit_tools
 from useagent.tools.meta import (
     remove_diffs_from_diff_store,
     select_diff_from_diff_store,
+    view_command_history,
     view_task_state,
 )
 
@@ -55,6 +56,7 @@ def init_agent(
             Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
             Tool(view_task_state, takes_ctx=True, max_retries=0),
             Tool(remove_diffs_from_diff_store, takes_ctx=True, max_retries=5),
+            Tool(view_command_history, max_retries=2),
         ],
         output_type=output_type,
     )

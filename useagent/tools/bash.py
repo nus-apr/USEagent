@@ -14,7 +14,6 @@ from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 
 
-# TODO: Add a Tool for the MetaAgent to see the Bash History
 class _BashSession:
     """A session of a bash shell."""
 
