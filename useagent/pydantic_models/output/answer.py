@@ -19,7 +19,7 @@ class Answer:
 
         - answer (Non Empty String): The answer to the question you were asked.
         - explanation (Non Empty String): Describe what you have done, why you consider the answer sufficient and
-        - doubts (Non Empty String, or None): Optionally, if you think there are any counter arguments to what you have done, or necessary steps missed, or other anomalies, present them here.
+        - doubts (Non Empty String, or None): Optionally, if you think there are any counter arguments to what you have done, or necessary steps missed, or other anomalies, present them here. Keep this based on facts, and do not raise generic doubts.
         - environment (Environment, or None): Optionally, if you can, provide an environment you detected for which this answer holds. Especially take this into account if the answer seems very related to the environment.
         
         """
