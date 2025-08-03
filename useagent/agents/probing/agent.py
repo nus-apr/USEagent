@@ -12,6 +12,7 @@ from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.info.partial_environment import PartialEnvironment
 from useagent.tools.bash import bash_tool
+from useagent.tools.bash import set_current_running_agent as bashtool_set_running_agent
 from useagent.tools.probing import check_and_report_environment
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
@@ -35,6 +36,7 @@ def init_agent(
     # Just using the Environment for incremental building, because that requires a mutable element,
     # Which might lead to consistency issues (i.e. at the moment a environment is a clear tuple that is collected together at one point of time.)
 
+    bashtool_set_running_agent("PROBE")
     environment_probing_agent = Agent(
         config.model,
         instructions=SYSTEM_PROMPT,

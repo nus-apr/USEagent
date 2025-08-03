@@ -4,15 +4,16 @@ Bash tool.
 
 import asyncio
 import os
+from collections import deque
 from collections.abc import Callable
 
 from loguru import logger
 
+from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 
 
-# TODO: Start a History List[Tuple[Command, CLIResult | ToolErrorInfo | ValueError]]
 # TODO: Add a Tool for the MetaAgent to see the Bash History
 class _BashSession:
     """A session of a bash shell."""
@@ -136,6 +137,19 @@ class BashTool:
 
     _session: _BashSession | None
 
+    """ 
+    Bash History gets recorded and consists of:
+        - the command
+        - the agent that called it (if visible / possible)
+        - the result, or error it created 
+    """
+    _bash_history: deque[
+        tuple[NonEmptyStr, NonEmptyStr, CLIResult | ToolErrorInfo | Exception]
+    ]
+
+    """Running Agent keeps track of the agent for history reasons."""
+    _running_agent: NonEmptyStr = "UNK"
+
     """Default working directory for the bash session."""
     default_working_dir: str
 
@@ -150,6 +164,7 @@ class BashTool:
         self._session = None
         self.default_working_dir = default_working_dir
         self.command_transformer = command_transformer
+        self._bash_history = deque(maxlen=50)
 
     async def __call__(
         self, command: str | None = None, restart: bool = False, **kwargs
@@ -192,6 +207,16 @@ def init_bash_tool(
     _bash_tool_instance = BashTool(default_working_dir, command_transformer)
 
 
+def set_current_running_agent(agent: NonEmptyStr) -> None:
+    """
+    Sets the current running agents for history purposes.
+    After this is set, all entries will get this agent as their corresponding author.
+    Stays until either called again, or the BashTool gets reset.
+    """
+    if _bash_tool_instance:
+        _bash_tool_instance._running_agent = agent
+
+
 def __reset_bash_tool():
     """
     This method is only used for tests and testing purposes.
@@ -201,7 +226,7 @@ def __reset_bash_tool():
     _bash_tool_instance = None
 
 
-async def bash_tool(command: str) -> CLIResult | ToolErrorInfo:
+async def bash_tool(command: NonEmptyStr) -> CLIResult | ToolErrorInfo:
     """Execute a bash command in the bash shell.
 
     Args:
@@ -211,14 +236,29 @@ async def bash_tool(command: str) -> CLIResult | ToolErrorInfo:
         CLIResult: The result of the command execution.
     """
     logger.info(f"[Tool] Invoked bash_tool with command: {command}")
-
     assert _bash_tool_instance is not None, (
         "bash_tool_instance is not initialized. "
         "Call init_bash_tool() before using the bash tool."
     )
+    try:
+        result = await _bash_tool(command)
+        _bash_tool_instance._bash_history.append(
+            (command, _bash_tool_instance._running_agent, result)
+        )
+        return result
+    except Exception as exc:
+        # Just store the exception, but then throw it further
+        # e.g. if its a ValueError this is an important part of the workflow
+        _bash_tool_instance._bash_history.append(
+            (command, _bash_tool_instance._running_agent, exc)
+        )
+        raise exc
 
+
+async def _bash_tool(command: NonEmptyStr) -> CLIResult | ToolErrorInfo:
+    assert _bash_tool_instance, "Bash Tool Instance was not set!"
     result = await _bash_tool_instance(command)
-    if isinstance(result, ToolErrorInfo):
+    if result and isinstance(result, ToolErrorInfo):
         return result
 
     logger.info(
@@ -226,3 +266,18 @@ async def bash_tool(command: str) -> CLIResult | ToolErrorInfo:
     )
 
     return result
+
+
+def get_bash_history() -> (
+    list[tuple[NonEmptyStr, NonEmptyStr, CLIResult | ToolErrorInfo | Exception]]
+):
+    """
+    Retrieve information of the BashTool, gathered accross agents.
+
+    Returns:
+        List[Tuple[str,str,CLIResult | ToolErrorInfo | Exception]]: The last 50 recorded commands, the agent that executed it and their results, errors or exceptions.
+
+    """
+    if _bash_tool_instance is None:
+        return []
+    return list(_bash_tool_instance._bash_history)
