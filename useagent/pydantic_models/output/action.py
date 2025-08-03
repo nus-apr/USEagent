@@ -11,6 +11,7 @@ from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 class Action:
     success: bool
     evidence: NonEmptyStr
+    # TODO: Make this a CLIResult | ToolErrorInfo | None
     cli_output: list[CLIResult] = field(default_factory=list)
     errors: list[ToolErrorInfo] = field(default_factory=list)
     doubts: NonEmptyStr | None = None

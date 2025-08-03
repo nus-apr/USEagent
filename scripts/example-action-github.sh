@@ -18,4 +18,4 @@ docker run --rm \
   -e GEMINI_API_KEY=$GEMINI_API_KEY \
   -v ./useagent-turbo-tmp-out:/output \
   useagent-turbo:dev \
-  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py github --output-type answer --model google-gla:gemini-2.0-flash --task-description 'Please use git to checkout the commit 5 commits ago.' --repo-url https://github.com/octocat/Hello-World.git --output-dir /output"
+  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py github --output-type action --model google-gla:gemini-2.0-flash --task-description 'Please use git to checkout the commit 5 commits ago.' --repo-url https://github.com/octocat/Hello-World.git --output-dir /output"
