@@ -2,6 +2,7 @@
 Main entry point for running one task.
 """
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -14,6 +15,7 @@ from useagent.pydantic_models.output.answer import Answer
 from useagent.pydantic_models.output.code_change import CodeChange
 from useagent.pydantic_models.task_state import TaskState
 from useagent.tasks.task import Task
+from useagent.tools.meta import get_bash_history
 
 
 def run(
@@ -30,6 +32,13 @@ def run(
         _run(task, task_output_dir, output_type=output_type)
     except Exception as e:
         logger.error(f"Error running task {task.uid}: {e}")
+    finally:
+        bash_history_file: Path = task_output_dir / "bash_commands.json.log"
+        logger.debug(f"Dumping Bash History to {bash_history_file}")
+        with open(bash_history_file, "w") as f:
+            _bash_history = [list(tupl) for tupl in get_bash_history()]
+            _bash_history = [[a, b, str(c)] for [a, b, c] in _bash_history]
+            json.dump(_bash_history, f, indent=2)
 
 
 def _run(
