@@ -170,7 +170,8 @@ class BashTool:
         # DevNote: This is a common issue witnessed, it tries to call `grep -r 'some_pattern'` which is invalid.
         # The resulting grep-error-message seems unsufficient for the model to be unerstandable.
         if (
-            (ConfigSingleton.config()).optimization_toggles[
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles[
                 "check-grep-command-arguments"
             ]
             and command.startswith("grep -r ")

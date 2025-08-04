@@ -1,7 +1,6 @@
 import pytest
 
 from useagent.pydantic_models.tools.cliresult import CLIResult
-from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.bash import (
     __reset_bash_tool,
     bash_tool,
@@ -27,33 +26,6 @@ async def test_using_tool_without_initialization_raises_assertion(tmp_path):
     __reset_bash_tool()
     with pytest.raises(AssertionError):
         await bash_tool("echo hello")
-
-
-@pytest.mark.asyncio
-@pytest.mark.tool
-async def test_run_valid_command(tmp_path):
-    init_bash_tool(str(tmp_path))
-    result = await bash_tool("echo hello")
-    assert isinstance(result, CLIResult)
-    assert "hello" in result.output
-
-
-@pytest.mark.asyncio
-@pytest.mark.tool
-async def test_run_empty_command_returns_error(tmp_path):
-    init_bash_tool(str(tmp_path))
-    result = await bash_tool("")
-    assert isinstance(result, ToolErrorInfo)
-    assert "No Command Supplied" in result.message
-
-
-@pytest.mark.asyncio
-@pytest.mark.tool
-async def test_run_invalid_grep_command(tmp_path):
-    init_bash_tool(str(tmp_path))
-    result = await bash_tool("grep -r pattern")
-    assert isinstance(result, ToolErrorInfo)
-    assert "grep -r" in result.message
 
 
 @pytest.mark.asyncio

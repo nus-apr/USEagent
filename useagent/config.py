@@ -8,7 +8,10 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 def _default_optimization_toggles() -> dict[str, bool]:
     # Default Dict will return false for any unknown key, but will not give an error.
-    return defaultdict(bool, {"check-grep-command-arguments": True})
+    return defaultdict(
+        bool,
+        {"check-grep-command-arguments": True, "loosen-probing-agent-strictness": True},
+    )
 
 
 @dataclass
@@ -69,3 +72,7 @@ class ConfigSingleton:
     @classmethod
     def reset(cls):
         cls._instance = None
+
+    @classmethod
+    def is_initialized(cls):
+        return cls._instance is not None

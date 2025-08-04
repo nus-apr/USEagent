@@ -1,5 +1,6 @@
 import pytest
 
+from useagent.config import ConfigSingleton
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.bash import (
@@ -28,11 +29,28 @@ async def test_run_empty_command_returns_error(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_run_invalid_grep_command(tmp_path):
+async def test_run_invalid_grep_command_should_not_have_special_outcome_unless_flag_set(
+    tmp_path,
+):
+    init_bash_tool(str(tmp_path))
+    result = await bash_tool("grep -r pattern")
+    assert isinstance(result, CLIResult)
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+async def test_run_invalid_grep_command_should_have_special_outcome_with_optimization_toggle_on(
+    tmp_path,
+):
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["check-grep-command-arguments"] = True
+
     init_bash_tool(str(tmp_path))
     result = await bash_tool("grep -r pattern")
     assert isinstance(result, ToolErrorInfo)
     assert "grep -r" in result.message
+
+    ConfigSingleton.reset()
 
 
 @pytest.mark.asyncio
