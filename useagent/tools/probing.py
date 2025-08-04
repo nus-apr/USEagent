@@ -5,7 +5,26 @@ from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.info.partial_environment import PartialEnvironment
 
 
-def check_and_report_environment(ctx: RunContext[PartialEnvironment]) -> Environment:
+def check_environment(ctx: RunContext[PartialEnvironment]) -> str:
+    """
+    Check the current PartialEnvironment for missing fields.
+
+    Returns:
+        str: Either a short confirmation that the PartialEnvironment is complete, or a list of the missing entries.
+    """
+    logger.info("[Tool] Invoked check_environment")
+    partial_environment: PartialEnvironment = ctx.deps
+    return _check_environment(partial_environment)
+
+
+def _check_environment(partial_environment: PartialEnvironment) -> str:
+    if not partial_environment.is_complete():
+        return f"The given partial environment is not complete and is missing entries. Missing entries: [{','.join(partial_environment.get_missing_fields())}]"
+    else:
+        return "The partial environment is well-formed and can be reported."
+
+
+def report_environment(ctx: RunContext[PartialEnvironment]) -> Environment:
     """
     Try to form a Environment from the current PartialEnvironment.
     Will return a Environment upon success, or raise a ValueError if any fields are missing.
@@ -13,12 +32,12 @@ def check_and_report_environment(ctx: RunContext[PartialEnvironment]) -> Environ
     Returns:
         Environment: The accumulated environment info in the PartialEnvironment presented.
     """
-    logger.info("[Tool] Invoked check_and_report_environment")
+    logger.info("[Tool] Invoked report_environment")
     partial_environment: PartialEnvironment = ctx.deps
-    return _check_and_report_environment(partial_environment)
+    return _report_environment(partial_environment)
 
 
-def _check_and_report_environment(
+def _report_environment(
     partial_environment: PartialEnvironment,
 ) -> Environment:
     if not partial_environment.is_complete():

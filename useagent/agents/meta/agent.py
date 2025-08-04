@@ -99,7 +99,7 @@ def init_agent(
 
     ### Define actions as tools to meta_agent. Each action interfaces to another agent in Pydantic AI.
 
-    @meta_agent.tool(retries=4)
+    @meta_agent.tool(retries=5)
     async def probe_environment(ctx: RunContext[TaskState]) -> Environment:
         """Investigate the currently active environment relevant to the project.
 
@@ -157,7 +157,7 @@ def init_agent(
 
         test_agent = init_test_execution_agent()
         r = await test_agent.run(instruction, deps=ctx.deps)
-        test_result: TestResult = r.Output
+        test_result: TestResult = r.output
 
         logger.info(f"[Test Execution Agent] Tests resulted in {test_result}")
 

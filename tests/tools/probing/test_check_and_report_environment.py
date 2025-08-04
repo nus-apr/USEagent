@@ -5,7 +5,7 @@ import pytest
 from useagent.pydantic_models.info.environment import Commands, Environment, GitStatus
 from useagent.pydantic_models.info.package import Package, Source
 from useagent.pydantic_models.info.partial_environment import PartialEnvironment
-from useagent.tools.probing import _check_and_report_environment
+from useagent.tools.probing import _report_environment
 
 
 @pytest.fixture
@@ -29,15 +29,15 @@ def dummy_packages() -> list[Package]:
 
 
 @pytest.mark.tool
-def test_check_and_report_environment_should_fail_if_incomplete():
+def test_report_environment_should_fail_if_incomplete():
     pe = PartialEnvironment(git_status=None)
     with pytest.raises(ValueError) as exc:
-        _check_and_report_environment(pe)
+        _report_environment(pe)
     assert "missing entries" in str(exc.value)
 
 
 @pytest.mark.tool
-def test_check_and_report_environment_should_succeed_if_complete(
+def test_report_environment_should_succeed_if_complete(
     dummy_git_status, dummy_commands, dummy_packages
 ):
     pe = PartialEnvironment(
@@ -46,6 +46,6 @@ def test_check_and_report_environment_should_succeed_if_complete(
         commands=dummy_commands,
         packages=dummy_packages,
     )
-    env = _check_and_report_environment(pe)
+    env = _report_environment(pe)
     assert isinstance(env, Environment)
     assert env.commands == dummy_commands
