@@ -1,12 +1,14 @@
 from pathlib import Path
+from typing import Any
 
+from loguru import logger
 from pydantic.dataclasses import dataclass
 
 from useagent.pydantic_models.info.environment import Commands, Environment, GitStatus
 from useagent.pydantic_models.info.package import Package
 
 
-@dataclass
+@dataclass(frozen=False)
 class PartialEnvironment:
     """
     Helper Class that we use to construct a running environment,
@@ -18,6 +20,13 @@ class PartialEnvironment:
     git_status: GitStatus | None = None
     commands: Commands | None = None
     packages: list[Package] | None = None
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        # There have been some issues about the the environment building and the management within deps.
+        # This is a smaller change that will print changes to Debug Logging, so we can see after which Tool Call it was changed.
+        if key in {"project_root", "git_status", "commands", "packages"}:
+            logger.info(f"[MODEL] PartialEnvironment {key} set to {value!r}")
+        super().__setattr__(key, value)
 
     def is_complete(self) -> bool:
         return all(
