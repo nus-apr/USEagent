@@ -5,7 +5,7 @@ Bash tool.
 import asyncio
 import os
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from loguru import logger
 
@@ -146,9 +146,6 @@ class BashTool:
         tuple[NonEmptyStr, NonEmptyStr, CLIResult | ToolErrorInfo | Exception]
     ]
 
-    """Running Agent keeps track of the agent for history reasons."""
-    _running_agent: NonEmptyStr = "UNK"
-
     """Default working directory for the bash session."""
     default_working_dir: str
 
@@ -206,16 +203,6 @@ def init_bash_tool(
     _bash_tool_instance = BashTool(default_working_dir, command_transformer)
 
 
-def set_current_running_agent(agent: NonEmptyStr) -> None:
-    """
-    Sets the current running agents for history purposes.
-    After this is set, all entries will get this agent as their corresponding author.
-    Stays until either called again, or the BashTool gets reset.
-    """
-    if _bash_tool_instance:
-        _bash_tool_instance._running_agent = agent
-
-
 def __reset_bash_tool():
     """
     This method is only used for tests and testing purposes.
@@ -225,33 +212,46 @@ def __reset_bash_tool():
     _bash_tool_instance = None
 
 
-async def bash_tool(command: NonEmptyStr) -> CLIResult | ToolErrorInfo:
-    """Execute a bash command in the bash shell.
+def make_bash_tool_for_agent(
+    agent_name: str = "UNK",
+) -> Callable[[NonEmptyStr], Awaitable[CLIResult | ToolErrorInfo]]:
+    # DevNote:
+    # This wrapper allows us to give each Agent its own, labelled (but identical) Bash Tool for logging & recording reasons.
+    # If we just say `bash_tool(command,agent)` then the Agents would call it and use different variables.
+    # If we set it with a _set_running_agent(agent) then only the last agent would be recalled.
+    # I also looked into using the stack trace, but the tools are only in the pydantic ai framework, and do not call e.g. search_code_agent.py:xx
+    #
+    # So this is a bit complex, but it preserves all attributes that we want.
+    async def bash_tool(command: NonEmptyStr) -> CLIResult | ToolErrorInfo:
+        """Execute a bash command in the bash shell.
 
-    Args:
-        command (str): The command to execute.
+        Args:
+            command (str): The command to execute.
 
-    Returns:
-        CLIResult: The result of the command execution.
-    """
-    logger.info(f"[Tool] Invoked bash_tool with command: {command}")
-    assert _bash_tool_instance is not None, (
-        "bash_tool_instance is not initialized. "
-        "Call init_bash_tool() before using the bash tool."
+        Returns:
+            CLIResult: The result of the command execution.
+        """
+        logger.info(f"[{agent_name} - Tool] Invoked bash_tool with command: {command}")
+        assert _bash_tool_instance is not None, "bash_tool_instance is not initialized."
+        try:
+            result = await _bash_tool(command)
+            _bash_tool_instance._bash_history.append((command, agent_name, result))
+            return result
+        except Exception as exc:
+            _bash_tool_instance._bash_history.append((command, agent_name, exc))
+            raise exc
+
+    bash_tool.__name__ = "bash_tool"
+    bash_tool.__doc__ = make_bash_tool_for_agent.__annotations__.get(
+        "__doc__", bash_tool.__doc__
     )
-    try:
-        result = await _bash_tool(command)
-        _bash_tool_instance._bash_history.append(
-            (command, _bash_tool_instance._running_agent, result)
-        )
-        return result
-    except Exception as exc:
-        # Just store the exception, but then throw it further
-        # e.g. if its a ValueError this is an important part of the workflow
-        _bash_tool_instance._bash_history.append(
-            (command, _bash_tool_instance._running_agent, exc)
-        )
-        raise exc
+    return bash_tool
+
+
+# Simple instance to keep backward compatability. Sets the agent to `UNK` but all other functionality is identical.
+bash_tool: Callable[[NonEmptyStr], Awaitable[CLIResult | ToolErrorInfo]] = (
+    make_bash_tool_for_agent()
+)
 
 
 async def _bash_tool(command: NonEmptyStr) -> CLIResult | ToolErrorInfo:

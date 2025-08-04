@@ -3,78 +3,76 @@ import pytest
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.bash import (
-    bash_tool,
     get_bash_history,
     init_bash_tool,
-    set_current_running_agent,
+    make_bash_tool_for_agent,
 )
+
+# Wrap tool creation once per test using a fixed agent name
+AGENT_NAME = "test-agent"
+
+
+@pytest.fixture
+def bash(tmp_path):
+    init_bash_tool(str(tmp_path))
+    return make_bash_tool_for_agent(AGENT_NAME)
 
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_run_valid_command(tmp_path):
-    init_bash_tool(str(tmp_path))
-    result = await bash_tool("echo hello")
+async def test_run_valid_command_should_return_output(bash):
+    result = await bash("echo hello")
     assert isinstance(result, CLIResult)
     assert "hello" in result.output
 
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_run_empty_command_returns_error(tmp_path):
-    init_bash_tool(str(tmp_path))
-    result = await bash_tool("")
+async def test_run_empty_command_should_return_error(bash):
+    result = await bash("")
     assert isinstance(result, ToolErrorInfo)
     assert "No Command Supplied" in result.message
 
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_run_invalid_grep_command(tmp_path):
-    init_bash_tool(str(tmp_path))
-    result = await bash_tool("grep -r pattern")
+async def test_run_invalid_grep_command_should_return_error(bash):
+    result = await bash("grep -r pattern")
     assert isinstance(result, ToolErrorInfo)
     assert "grep -r" in result.message
 
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_restart_session_returns_system_message(tmp_path):
-    init_bash_tool(str(tmp_path))
-    result = await bash_tool("echo test")
+async def test_restart_session_should_succeed(bash):
+    result = await bash("echo test")
     assert isinstance(result, CLIResult)
 
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_pwd_returns_correct_directory(tmp_path):
-    init_bash_tool(str(tmp_path))
-    result = await bash_tool("pwd")
+async def test_pwd_should_return_correct_directory(bash, tmp_path):
+    result = await bash("pwd")
     assert isinstance(result, CLIResult)
     assert result.output.strip() == str(tmp_path)
 
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_pwd_after_restart_returns_correct_directory(tmp_path):
-    init_bash_tool(str(tmp_path))
-    await bash_tool("echo warmup")
-    result = await bash_tool("pwd")
-    assert isinstance(result, CLIResult)
-    # skip the "tool has been restarted" result
-    result = await bash_tool("pwd")
+async def test_pwd_after_restart_should_return_correct_directory(bash, tmp_path):
+    await bash("echo warmup")
+    await bash("pwd")  # discard potential restart message
+    result = await bash("pwd")
     assert result.output.strip() == str(tmp_path)
 
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_cd_and_pwd_reports_new_directory(tmp_path):
+async def test_cd_and_pwd_should_report_new_directory(bash, tmp_path):
     subdir = tmp_path / "subdir"
     subdir.mkdir()
-    init_bash_tool(str(tmp_path))
-
-    await bash_tool(f"cd {subdir}")
-    result = await bash_tool("pwd")
+    await bash(f"cd {subdir}")
+    result = await bash("pwd")
     assert isinstance(result, CLIResult)
     assert result.output.strip() == str(subdir)
 
@@ -83,38 +81,28 @@ async def test_cd_and_pwd_reports_new_directory(tmp_path):
 @pytest.mark.tool
 @pytest.mark.parametrize(
     "command",
-    [
-        "cd .",
-        "true",
-        "mkdir .",
-        "touch dummyfile && rm dummyfile",
-    ],
+    ["cd .", "true", "mkdir .", "touch dummyfile && rm dummyfile"],
 )
-async def test_commands_without_output_do_not_crash(tmp_path, command):
-    # DevNote: After introducing a check that each CLI must have either a output, or an error,
-    # A simple `cd` did not work, because it prints nothing.
-    init_bash_tool(str(tmp_path))
-    result = await bash_tool(command)
+async def test_commands_without_output_should_not_crash(bash, command):
+    result = await bash(command)
     assert isinstance(result, CLIResult)
 
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_history_should_store_cli_result(tmp_path):
-    init_bash_tool(str(tmp_path))
-    await bash_tool("echo test")
+async def test_history_should_store_cli_result(bash):
+    await bash("echo test")
     history = get_bash_history()
     assert len(history) == 1
-    cmd, wd, result = history[0]
+    cmd, agent, result = history[0]
     assert cmd == "echo test"
     assert isinstance(result, CLIResult)
 
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_history_should_store_tool_error(tmp_path):
-    init_bash_tool(str(tmp_path))
-    await bash_tool("")
+async def test_history_should_store_tool_error(bash):
+    await bash("")
     history = get_bash_history()
     assert len(history) == 1
     assert isinstance(history[0][2], ToolErrorInfo)
@@ -124,7 +112,8 @@ async def test_history_should_store_tool_error(tmp_path):
 @pytest.mark.tool
 async def test_history_should_reset_on_tool_reinit(tmp_path):
     init_bash_tool(str(tmp_path))
-    await bash_tool("echo once")
+    tool = make_bash_tool_for_agent(AGENT_NAME)
+    await tool("echo once")
     assert get_bash_history()
     init_bash_tool(str(tmp_path))
     assert get_bash_history() == []
@@ -132,52 +121,33 @@ async def test_history_should_reset_on_tool_reinit(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_agent_field_should_not_be_none_by_default(tmp_path):
-    init_bash_tool(str(tmp_path))
-    await bash_tool("echo one")
+async def test_agent_field_should_reflect_correct_value(bash):
+    await bash("echo one")
     agent = get_bash_history()[0][1]
-    assert agent is not None
+    assert agent == AGENT_NAME
 
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_agent_field_should_reflect_test(tmp_path):
+async def test_agent_field_should_track_multiple_tools(tmp_path):
     init_bash_tool(str(tmp_path))
-    set_current_running_agent("TEST")
-    await bash_tool("echo test")
-    assert get_bash_history()[0][1] == "TEST"
-
-
-@pytest.mark.asyncio
-@pytest.mark.tool
-async def test_agent_field_should_reflect_last_set_value(tmp_path):
-    init_bash_tool(str(tmp_path))
-    set_current_running_agent("TEST")
-    set_current_running_agent("FOO")
-    await bash_tool("echo test")
-    assert get_bash_history()[0][1] == "FOO"
-
-
-@pytest.mark.asyncio
-@pytest.mark.tool
-async def test_agent_field_should_track_multiple_set_values(tmp_path):
-    init_bash_tool(str(tmp_path))
-    set_current_running_agent("TEST")
-    await bash_tool("echo first")
-    set_current_running_agent("FOO")
-    await bash_tool("echo second")
+    tool1 = make_bash_tool_for_agent("AGENT1")
+    tool2 = make_bash_tool_for_agent("AGENT2")
+    await tool1("echo first")
+    await tool2("echo second")
     history = get_bash_history()
-    assert history[0][1] == "TEST"
-    assert history[1][1] == "FOO"
+    assert history[0][1] == "AGENT1"
+    assert history[1][1] == "AGENT2"
 
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_agent_field_should_not_persist_across_reset(tmp_path):
+async def test_agent_field_should_not_persist_after_reset(tmp_path):
     init_bash_tool(str(tmp_path))
-    set_current_running_agent("TEST")
-    await bash_tool("echo before")
+    tool = make_bash_tool_for_agent("AGENT1")
+    await tool("echo before")
     init_bash_tool(str(tmp_path))
-    await bash_tool("echo after")
+    tool = make_bash_tool_for_agent("AGENT2")
+    await tool("echo after")
     agent = get_bash_history()[0][1]
-    assert agent is not None and agent != "TEST"
+    assert agent == "AGENT2"

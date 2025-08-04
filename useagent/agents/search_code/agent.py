@@ -11,8 +11,7 @@ from useagent.microagents.decorators import (
 from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.artifacts.code import Location
 from useagent.pydantic_models.task_state import TaskState
-from useagent.tools.bash import bash_tool
-from useagent.tools.bash import set_current_running_agent as bashtool_set_running_agent
+from useagent.tools.bash import make_bash_tool_for_agent
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
@@ -27,13 +26,12 @@ def init_agent(
         config = ConfigSingleton.config
     assert config is not None
 
-    bashtool_set_running_agent("SEARCH")
     search_code_agent = Agent(
         config.model,
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
         output_type=list[Location],
-        tools=[Tool(bash_tool, max_retries=4)],
+        tools=[Tool(make_bash_tool_for_agent("SEARCH"), max_retries=4)],
     )
 
     @search_code_agent.instructions
