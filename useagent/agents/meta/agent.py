@@ -9,6 +9,7 @@ from pydantic_ai.tools import Tool
 from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
 from useagent.agents.probing.agent import init_agent as init_probing_agent
 from useagent.agents.search_code.agent import init_agent as init_search_code_agent
+from useagent.agents.test_execution.agent import init_agent as init_test_execution_agent
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
@@ -17,6 +18,7 @@ from useagent.microagents.decorators import (
 from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.artifacts.code import Location
 from useagent.pydantic_models.artifacts.git import DiffEntry
+from useagent.pydantic_models.artifacts.test_result import TestResult
 from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.info.partial_environment import PartialEnvironment
 from useagent.pydantic_models.output.action import Action
@@ -130,6 +132,36 @@ def init_agent(
         ctx.deps.known_environments["env_" + str(next_id)] = env
 
         return env
+
+    @meta_agent.tool(retries=3)
+    async def execute_tests(ctx: RunContext[TaskState], instruction: str) -> TestResult:
+        """Execute the projects tests or a subset of the tests.
+
+        The required instructions should contain a detailed description of
+        - The goal of the tests that you want to execute (i.e. what is it that you want to test)
+        - any test files you already know to be relevant
+        - whether you expect to need the whole test-suite, or only a subset
+        - any code-locations that you want to be tested
+
+        This test execution might be costly, so consider gathering information first on what to execute.
+
+        Args:
+            instruction (str): Comprehensive instruction for the test execution, including tests, files, test-goals, relevant locations. Give as many details as possible.
+
+        Returns:
+            TestResult: A summary of the executed tests and their output, as well as the actually executed command.
+        """
+        logger.info("[MetaAgent] Invoked execute_tests")
+
+        test_agent = init_test_execution_agent()
+        r = await test_agent.run(instruction, deps=ctx.deps)
+        test_result: TestResult = r.Output
+
+        logger.info(f"[Test Execution Agent] Tests resulted in {test_result}")
+
+        # TODO: Also add a test-result lookup and storage? It should be relative to environment / git commit to be useful
+
+        return test_result
 
     @meta_agent.tool(retries=6)
     async def search_code(
