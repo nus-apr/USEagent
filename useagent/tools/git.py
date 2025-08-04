@@ -9,7 +9,7 @@ from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.task_state import TaskState
 from useagent.pydantic_models.tools.cliresult import CLIResult
-from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
+from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
 from useagent.tools.run import run
 from useagent.utils import cd
 
@@ -115,28 +115,28 @@ def _view_commit_as_diff(
     if not repository_path.is_dir():
         return ToolErrorInfo(
             message=f"Invalid repository path - this Tool seems to have been invoked out of place. You are trying to execute it at {repository_path}",
-            supplied_arguments={
-                "repository_path": str(repository_path),
-                "commit_reference": str(commit_reference),
-            },
+            supplied_arguments=[
+                ArgumentEntry("repository_path", str(repository_path)),
+                ArgumentEntry("commit_reference", str(commit_reference)),
+            ],
         )
 
     if not (repository_path / ".git").is_dir():
         return ToolErrorInfo(
             message=f"The repository path {repository_path} is not a git repository",
-            supplied_arguments={
-                "repository_path": str(repository_path),
-                "commit_reference": str(commit_reference),
-            },
+            supplied_arguments=[
+                ArgumentEntry("repository_path", str(repository_path)),
+                ArgumentEntry("commit_reference", str(commit_reference)),
+            ],
         )
 
     if not _commit_exists(repo=repository_path, commit=commit_reference):
         return ToolErrorInfo(
             message=f"Failed to identify commit {commit_reference} within the repository {repository_path.absolute()} - it likely does not exist",
-            supplied_arguments={
-                "repository_path": str(repository_path),
-                "commit_reference": str(commit_reference),
-            },
+            supplied_arguments=[
+                ArgumentEntry("repository_path", str(repository_path)),
+                ArgumentEntry("commit_reference", str(commit_reference)),
+            ],
         )
 
     try:
@@ -153,19 +153,19 @@ def _view_commit_as_diff(
     except subprocess.CalledProcessError as e:
         return ToolErrorInfo(
             message=f"Failed to retrieve diff for commit {commit_reference}: {e.stderr.strip()}",
-            supplied_arguments={
-                "repository_path": str(repository_path),
-                "commit_reference": str(commit_reference),
-            },
+            supplied_arguments=[
+                ArgumentEntry("repository_path", str(repository_path)),
+                ArgumentEntry("commit_reference", str(commit_reference)),
+            ],
         )
 
     if not result.strip():
         return ToolErrorInfo(
             message=f"Commit {commit_reference} exists but contains no diff",
-            supplied_arguments={
-                "repository_path": str(repository_path),
-                "commit_reference": str(commit_reference),
-            },
+            supplied_arguments=[
+                ArgumentEntry("repository_path", str(repository_path)),
+                ArgumentEntry("commit_reference", str(commit_reference)),
+            ],
         )
     return DiffEntry(result)
 
@@ -219,7 +219,7 @@ async def extract_diff(
         if stderr_1 or stderr_2:
             return ToolErrorInfo(
                 message=f"Failed to extract diff: {stderr_1 + stderr_2}",
-                supplied_arguments={"project_dir": str(project_dir)},
+                supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
             )
 
         if not stdout or not stdout.strip():
