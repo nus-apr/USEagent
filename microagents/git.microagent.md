@@ -59,3 +59,4 @@ git restore --staged <file>   # Unstage a file
 
 - When using `git diff` you will likely only see staged changes. This means that newly created files are not immediately visible until they get staged. 
 - Assume your active branch is the main branch, and refrain from using or creating different branches. 
+- Sometimes you will try to switch branches but if you have pending changes this can fail. Consider this only if you attempt checking out branches without success. 
