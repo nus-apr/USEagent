@@ -67,3 +67,34 @@ def test_reset_allows_reinit(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "dummy")
     ConfigSingleton.init("openai:gpt-4o")
     assert "openai" in str(ConfigSingleton.config.model.__class__).lower()
+
+
+def test_init_should_have_non_empty_optimization_toggles():
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    assert ConfigSingleton.config.optimization_toggles
+    assert (
+        ConfigSingleton.config.optimization_toggles["check-grep-command-arguments"]
+        is True
+    )
+
+
+def test_get_should_return_false_for_unknown_key():
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    assert ConfigSingleton.config.optimization_toggles["non-existent-flag"] is False
+
+
+def test_add_and_get_should_return_correct_value():
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    flags = ConfigSingleton.config.optimization_toggles
+    flags["new-flag"] = True
+    flags["other-flag"] = False
+    assert flags["new-flag"] is True
+    assert flags["other-flag"] is False
+
+
+def test_reset_should_restore_default_flags():
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["temp-flag"] = True
+    ConfigSingleton.reset()
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    assert ConfigSingleton.config.optimization_toggles["temp-flag"] is False
