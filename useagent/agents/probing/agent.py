@@ -11,7 +11,7 @@ from useagent.microagents.decorators import (
 from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.info.partial_environment import PartialEnvironment
-from useagent.tools.bash import bash_tool
+from useagent.tools.bash import make_bash_tool_for_agent
 from useagent.tools.probing import check_and_report_environment
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
@@ -41,7 +41,7 @@ def init_agent(
         deps_type=PartialEnvironment,
         output_type=Environment,
         tools=[
-            Tool(bash_tool, max_retries=5),
+            Tool(make_bash_tool_for_agent("PROBE"), max_retries=5),
             Tool(check_and_report_environment, takes_ctx=True, max_retries=1),
         ],
     )
@@ -63,5 +63,19 @@ def init_agent(
             Unless you see it especially specified in e.g. a README or toml, you can assume the project does not contain a linting command.
             """
         return ""  # Toggle is off, do nothing.
+
+    def add_output_description(self) -> str:
+        return (
+            """
+        -----------
+        Output:
+
+        We expect an `Environment` containing the key information relevant to act on the project.
+        You have access to a `PartialEnvironment` object that you can fill step-by-step. 
+        Once all fields are filled, return a complete Environment. Never fabricate data. Use existing state to skip work.
+        """
+            + "\n"
+            + Environment.get_output_instructions()
+        )
 
     return environment_probing_agent

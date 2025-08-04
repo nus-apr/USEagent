@@ -1,6 +1,6 @@
 import os
 import sys
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, ArgumentTypeError, Namespace
 from pathlib import Path
 from tempfile import mkdtemp
 
@@ -8,6 +8,9 @@ from loguru import logger
 
 from useagent import task_runner
 from useagent.config import AppConfig, ConfigSingleton
+from useagent.pydantic_models.output.action import Action
+from useagent.pydantic_models.output.answer import Answer
+from useagent.pydantic_models.output.code_change import CodeChange
 from useagent.tasks.github_task import GithubTask
 from useagent.tasks.local_task import LocalTask
 from useagent.tasks.usebench_task import UseBenchTask
@@ -18,6 +21,13 @@ def add_common_args(parser: ArgumentParser) -> None:
         "--output-dir",
         type=str,
         help="Path to the directory that stores the run results.",
+    )
+
+    parser.add_argument(
+        "--output-type",
+        type=parse_output_type,
+        default=CodeChange,
+        help="Output model type to use. Options: answer, codechange.",
     )
 
     parser.add_argument(
@@ -162,13 +172,13 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
             uid=uid,
             project_path=local_path,
         )
-        task_runner.run(usebench_task, args.output_dir)
+        task_runner.run(usebench_task, args.output_dir, output_type=CodeChange)
 
     elif subcommand == "local":
         local_path = args.project_directory
         task_desc = _get_task_description(args)
         local_task = LocalTask(issue_statement=task_desc, project_path=local_path)
-        task_runner.run(local_task, args.output_dir)
+        task_runner.run(local_task, args.output_dir, output_type=args.output_type)
 
     elif subcommand == "github":
         task_desc = _get_task_description(args)
@@ -178,7 +188,7 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
             working_dir=args.working_dir,
             commit=args.commit,
         )
-        task_runner.run(task, args.output_dir)
+        task_runner.run(task, args.output_dir, output_type=args.output_type)
 
     else:
         raise ValueError(f"Unknown command: {subcommand}")
@@ -200,6 +210,20 @@ def setup_loguru(console_log_level: str, log_file: str | None) -> None:
     logger.info(
         f"Loguru initialized: console={console_log_level.upper()}, file={'enabled @ DEBUG level' if log_file else 'disabled'}"
     )
+
+
+def parse_output_type(value: str) -> type:
+    if not value:
+        raise ArgumentTypeError("Received None for parsing output type")
+    match value.strip().lower():
+        case "answer":
+            return Answer
+        case "codechange":
+            return CodeChange
+        case "action":
+            return Action
+        case _:
+            raise ArgumentTypeError(f"Invalid output type: {value}")
 
 
 def main():

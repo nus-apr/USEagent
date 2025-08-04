@@ -38,3 +38,17 @@ class Location:
         if self.end_line < self.start_line:
             raise ValueError("end_line must be greater or equal than start_line")
         return self
+
+    @classmethod
+    def get_output_instructions(cls) -> str:
+        return """
+        A location contains the following fields:
+
+        - rel_file_path (Path): Relative file path (to the project root) of the location.
+        - start_line (Non-Negative Integer): Start line number of the relevant code region in the file. Must be 1-based (i.e. the first line in the file is line 1).
+        - end_line (Non-Negative Integer): End line number of the relevant code region in the file.
+        - code_content (Non-Empty String): The actual code content within start_line and end_line.
+        - reason_why_relevant (Non-Empty String): Why do you think this location is relevant.
+
+        You should specify start_line and end_line such that they contain all the relevant code.
+        """

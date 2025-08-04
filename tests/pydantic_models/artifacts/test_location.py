@@ -69,3 +69,8 @@ def test_invalid_line_order():
             code_content="print()",
             reason_why_relevant="fail",
         )
+
+
+@pytest.mark.pydantic_model
+def test_get_output_instructions_should_not_return_none():
+    assert Location.get_output_instructions()

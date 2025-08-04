@@ -52,6 +52,18 @@ class DiffEntry:
     diff_content: NonEmptyStr
     notes: NonEmptyStr | None = None
 
+    @classmethod
+    def get_output_instructions(cls) -> str:
+        return """
+        A `DiffEntry` contains two fields:
+
+        1. `diff_content`: A string containing the code edits you made, in `unified diff` format.I should be able to use `git apply` directly with the content of this string to apply the edits again to the codebase.
+        You are given a tool called `extract_diff`, which will generate a unified diff of the current changes in the codebase.
+        You should use that tool after making all the sufficient changes, and then return the unified diff content as output.
+
+        2. `notes`: Optional notes if you want to summarize what was done in this diff and what was the goal. This is optional, you can choose to omit it if you think there is nothing worth summarizing.
+        """
+
     @computed_field(return_type=bool)
     def has_index(self) -> bool:
         return bool(

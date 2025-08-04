@@ -39,4 +39,16 @@ def init_agent(
             Tool(extract_diff),
         ],
     )
+
+    @agent.instructions
+    def add_output_instructions(self) -> str:
+        return (
+            """
+        ------------------------------------------------
+        Output:
+        Your expected output is a `DiffEntry`. 
+        """
+            + DiffEntry.get_output_instructions()
+        )
+
     return agent

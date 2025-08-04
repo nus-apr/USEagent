@@ -1,6 +1,6 @@
 ## NOTE: implment MetaAgent with agent delegation
-
 from pathlib import Path
+from typing import Literal
 
 from loguru import logger
 from pydantic_ai import Agent, RunContext
@@ -10,6 +10,7 @@ from pydantic_ai.usage import UsageLimits
 from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
 from useagent.agents.probing.agent import init_agent as init_probing_agent
 from useagent.agents.search_code.agent import init_agent as init_search_code_agent
+from useagent.agents.test_execution.agent import init_agent as init_test_execution_agent
 from useagent.agents.vcs.agent import init_agent as init_vcs_agent
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
@@ -19,24 +20,34 @@ from useagent.microagents.decorators import (
 from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.artifacts.code import Location
 from useagent.pydantic_models.artifacts.git import DiffEntry
+from useagent.pydantic_models.artifacts.test_result import TestResult
 from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.info.partial_environment import PartialEnvironment
+from useagent.pydantic_models.output.action import Action
+from useagent.pydantic_models.output.answer import Answer
+from useagent.pydantic_models.output.code_change import CodeChange
+from useagent.pydantic_models.provides_output_instructions import (
+    ProvidesOutputInstructions,
+)
 from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
 from useagent.tools.meta import (
     remove_diffs_from_diff_store,
     select_diff_from_diff_store,
+    view_command_history,
     view_task_state,
 )
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
-# TODO: define the output type
 
 
 @conditional_microagents_triggers(load_microagents_from_project_dir())
 @alias_for_microagents("META")
-def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
+def init_agent(
+    config: AppConfig | None = None,
+    output_type: Literal[CodeChange, Answer, Action] = CodeChange,
+) -> Agent[TaskState, CodeChange | Answer]:
     if config is None:
         config = ConfigSingleton.config
     assert config is not None
@@ -49,8 +60,9 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
             Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
             Tool(view_task_state, takes_ctx=True, max_retries=0),
             Tool(remove_diffs_from_diff_store, takes_ctx=True, max_retries=5),
+            Tool(view_command_history, max_retries=2),
         ],
-        output_type=str,
+        output_type=output_type,
     )
 
     ## This adds the task description to instructions (SYSTEM prompt).
@@ -62,6 +74,28 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
             task_description (str): The description of the task to be added.
         """
         return ctx.deps._task.get_issue_statement()
+
+    ## Depending on the output type (if possible), describes the expected output format.
+    @meta_agent.instructions
+    def add_output_description() -> str:
+        if isinstance(output_type, ProvidesOutputInstructions):
+            logger.info(
+                f"[Setup] MetaAgent is expected to output a `{str(output_type)}`, adding output instructions."
+            )
+            return (
+                f"""
+            ---------------------------------------------------
+            Output:
+
+            You are expected to return a `{str(output_type)}`.
+            """
+                + output_type.get_output_instructions()
+            )
+        else:
+            logger.warning(
+                "[Setup] MetaAgent received a output type that did not implement the `get_output_instructions` method and will have less info."
+            )
+            return f"Output: You are expected to return a `{output_type}`"
 
     ### Define actions as tools to meta_agent. Each action interfaces to another agent in Pydantic AI.
 
@@ -100,6 +134,36 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         ctx.deps.known_environments["env_" + str(next_id)] = env
 
         return env
+
+    @meta_agent.tool(retries=3)
+    async def execute_tests(ctx: RunContext[TaskState], instruction: str) -> TestResult:
+        """Execute the projects tests or a subset of the tests.
+
+        The required instructions should contain a detailed description of
+        - The goal of the tests that you want to execute (i.e. what is it that you want to test)
+        - any test files you already know to be relevant
+        - whether you expect to need the whole test-suite, or only a subset
+        - any code-locations that you want to be tested
+
+        This test execution might be costly, so consider gathering information first on what to execute.
+
+        Args:
+            instruction (str): Comprehensive instruction for the test execution, including tests, files, test-goals, relevant locations. Give as many details as possible.
+
+        Returns:
+            TestResult: A summary of the executed tests and their output, as well as the actually executed command.
+        """
+        logger.info("[MetaAgent] Invoked execute_tests")
+
+        test_agent = init_test_execution_agent()
+        r = await test_agent.run(instruction, deps=ctx.deps)
+        test_result: TestResult = r.Output
+
+        logger.info(f"[Test Execution Agent] Tests resulted in {test_result}")
+
+        # TODO: Also add a test-result lookup and storage? It should be relative to environment / git commit to be useful
+
+        return test_result
 
     @meta_agent.tool(retries=6)
     async def search_code(
@@ -145,9 +209,22 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         diff: DiffEntry = edit_result.output
         logger.info(f"[MetaAgent] edit_code result: {diff}")
         # update task state with the diff
-        diff_id: str = ctx.deps.diff_store.add_entry(diff)
-        logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
-        return diff
+        try:
+            diff_id: str = ctx.deps.diff_store.add_entry(diff)
+            logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
+        except ValueError as verr:
+            if "diff already exists" in str(verr):
+                logger.warning(
+                    "[MetaAgent] Edit-Code Agent returned a (already known) diff towards the meta-agent"
+                )
+                existing_diff_id = (ctx.deps.diff_store.diff_to_id())[diff.diff_content]
+                raise ValueError(
+                    f"The edit-code agent returned a diff identical to an existing diff_id {existing_diff_id}. Reconsider your instructions or revisit the existing diff_id {existing_diff_id}."
+                )
+            else:
+                raise verr
+        finally:
+            return diff
 
     @meta_agent.tool(retries=4)
     async def vcs(
@@ -186,7 +263,9 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
     return meta_agent
 
 
-def agent_loop(task_state: TaskState):
+def agent_loop(
+    task_state: TaskState, output_type: Literal[CodeChange, Answer, Action] = CodeChange
+):
     """
     Main agent loop.
     """
@@ -196,7 +275,7 @@ def agent_loop(task_state: TaskState):
         command_transformer=task_state._task.command_transformer,
     )
     init_edit_tools(str(task_state._task.get_working_directory()))
-    meta_agent = init_agent()
+    meta_agent = init_agent(output_type=output_type)
     # actually running the agent
     prompt = "Invoke tools to complete the task."
     result = meta_agent.run_sync(
