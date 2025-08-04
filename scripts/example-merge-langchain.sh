@@ -15,6 +15,7 @@ if [[ "$1" == "--build" ]]; then
   fi
   DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
 fi
+
 PROJECT_DIR=~/langchain-example
 
 cat > ~/langchain-example/task.md <<'EOF'
@@ -29,4 +30,4 @@ docker run --rm \
   -v $PROJECT_DIR:/input:rw \
   -v ./useagent-turbo-tmp-out:/output:rw \
   useagent-turbo:dev \
-  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py local --model google-gla:gemini-2.0-flash --task-file /input/task.md --output-dir /output --project-directory /input"
+  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py local --output-type action --model google-gla:gemini-2.0-flash --task-file /input/task.md --output-dir /output --project-directory /input"
