@@ -11,7 +11,7 @@ from loguru import logger
 
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.tools.cliresult import CLIResult
-from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
+from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
 
 
 class _BashSession:
@@ -59,7 +59,7 @@ class _BashSession:
         if not self._started:
             return ToolErrorInfo(
                 message="Session has not started.",
-                supplied_arguments={"command": command},
+                supplied_arguments=[ArgumentEntry("command", command)],
             )
         if self._process.returncode is not None:
             return CLIResult(
@@ -69,7 +69,7 @@ class _BashSession:
         if self._timed_out:
             return ToolErrorInfo(
                 message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
-                supplied_arguments={"command": command},
+                supplied_arguments=[ArgumentEntry("command", command)],
             )
 
         # we know these are not None because we created the process with PIPEs
@@ -101,7 +101,7 @@ class _BashSession:
             self._timed_out = True
             return ToolErrorInfo(
                 message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
-                supplied_arguments={"command": command},
+                supplied_arguments=[ArgumentEntry("command", command)],
             )
 
         if output.endswith("\n"):
@@ -185,7 +185,10 @@ class BashTool:
         if command.startswith("grep -r ") and len(command.split()) < 4:
             return ToolErrorInfo(
                 message="The supplied command is a grep -r, but did not specify enough other arguments. Please reconsider your strategy how to supply a string to your grep - or use a different command and approach.",
-                supplied_arguments={"command": str(command), "restart": str(restart)},
+                supplied_arguments=[
+                    ArgumentEntry("command", command),
+                    ArgumentEntry("restart", str(restart)),
+                ],
             )
 
         transformed_command = self.command_transformer(command)

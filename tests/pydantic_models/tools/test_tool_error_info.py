@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
+from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
 
 
 @pytest.mark.pydantic_model
@@ -9,7 +9,7 @@ def test_valid_tool_error_info():
     ToolErrorInfo(
         message="Something failed",
         other_info="details here",
-        supplied_arguments={"arg1": "value1"},
+        supplied_arguments=[ArgumentEntry("arg1", "value1")],
     )
 
 

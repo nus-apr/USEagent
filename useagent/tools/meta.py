@@ -5,7 +5,7 @@ from useagent.pydantic_models.artifacts.git import DiffEntry, DiffStore
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr, PositiveInt
 from useagent.pydantic_models.task_state import TaskState
 from useagent.pydantic_models.tools.cliresult import CLIResult
-from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
+from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
 from useagent.tools.bash import get_bash_history
 
 
@@ -63,16 +63,20 @@ def _remove_diffs_from_diff_store(
         if not key.startswith("diff_"):
             return ToolErrorInfo(
                 message=f"Supplied at least one key ({key}) that does not match the required format 'diff_X'",
-                supplied_arguments={
-                    "keys_of_diffs_to_remove": str(keys_of_diffs_to_remove)
-                },
+                supplied_arguments=[
+                    ArgumentEntry(
+                        "keys_of_diffs_to_remove", str(keys_of_diffs_to_remove)
+                    )
+                ],
             )
         if key not in diff_store.id_to_diff.keys():
             return ToolErrorInfo(
                 message=f"Supplied at least one key ({key}) that is not in the existing DiffStore",
-                supplied_arguments={
-                    "keys_of_diffs_to_remove": str(keys_of_diffs_to_remove)
-                },
+                supplied_arguments=[
+                    ArgumentEntry(
+                        "keys_of_diffs_to_remove", str(keys_of_diffs_to_remove)
+                    )
+                ],
             )
 
     diffs_to_keep = [
@@ -94,7 +98,10 @@ def _select_diff_from_diff_store(
     if len(diff_store) == 0:
         return ToolErrorInfo(
             message="There are currently no diffs stored in the diff-store",
-            supplied_arguments={"diff_store": str(diff_store), "index": str(index)},
+            supplied_arguments=[
+                ArgumentEntry("diff_store", str(diff_store)),
+                ArgumentEntry("index", str(index)),
+            ],
         )
     # DevNote: Let's help a little if we got an integer
     if index.isdigit() and int(index) >= 0:
@@ -108,7 +115,10 @@ def _select_diff_from_diff_store(
         )
         return ToolErrorInfo(
             message=f"Key {index} was not in the diff_store. {appendix}",
-            supplied_arguments={"diff_store": str(diff_store), "index": str(index)},
+            supplied_arguments=[
+                ArgumentEntry("diff_store", str(diff_store)),
+                ArgumentEntry("index", str(index)),
+            ],
         )
     else:
         entry: DiffEntry = diff_store.id_to_diff[index]

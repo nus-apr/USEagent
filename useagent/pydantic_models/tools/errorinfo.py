@@ -3,6 +3,12 @@ from pydantic.dataclasses import dataclass
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 
 
+@dataclass(frozen=True)
+class ArgumentEntry:
+    key: NonEmptyStr
+    value: NonEmptyStr
+
+
 @dataclass(kw_only=True, frozen=True)
 class ToolErrorInfo:
     """
@@ -20,4 +26,4 @@ class ToolErrorInfo:
     message: NonEmptyStr
 
     other_info: NonEmptyStr | None = None
-    supplied_arguments: dict[NonEmptyStr, NonEmptyStr] | None = None
+    supplied_arguments: list[ArgumentEntry] | None = None
