@@ -56,6 +56,8 @@ def init_agent(
         config.model,
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
+        retries=3,
+        output_retries=5,
         tools=[
             Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
             Tool(view_task_state, takes_ctx=True, max_retries=0),

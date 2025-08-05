@@ -40,6 +40,8 @@ def init_agent(
         instructions=SYSTEM_PROMPT,
         deps_type=PartialEnvironment,
         output_type=Environment,
+        retries=2,
+        output_retries=5,
         tools=[
             Tool(make_bash_tool_for_agent("PROBE"), max_retries=5),
             Tool(report_environment, takes_ctx=True, max_retries=2),

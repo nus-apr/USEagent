@@ -36,6 +36,8 @@ def init_agent(
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
         output_type=DiffEntry,
+        retries=2,
+        output_retries=5,
         tools=[
             Tool(make_bash_tool_for_agent("VCS"), max_retries=4),
             Tool(view_commit_as_diff),

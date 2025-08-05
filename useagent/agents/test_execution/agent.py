@@ -30,6 +30,8 @@ def init_agent(
     test_execution_agent = Agent(
         config.model,
         instructions=SYSTEM_PROMPT,
+        retries=2,
+        output_retries=3,
         deps_type=TaskState,
         output_type=TestResult,
         tools=[Tool(make_bash_tool_for_agent("TESTEXEC"), max_retries=7)],
