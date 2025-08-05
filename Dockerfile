@@ -1,7 +1,7 @@
 ARG BASE_IMAGE=ubuntu:24.04
 FROM ${BASE_IMAGE}
 LABEL maintainer.Yuntong="Yuntong Zhang <ang.unong@gmail.com>"
-LABEL maintainer.Leonhard="Bob <bob@example.com>"
+LABEL maintainer.Leonhard="Leonhard Applis <leonhard.applis@protonmail.com>"
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
