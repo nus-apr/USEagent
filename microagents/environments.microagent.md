@@ -12,7 +12,7 @@ triggers:
 ---
 
 
-This information is meant to help you navigate a new, and unkown, environment wiht some example commands that might come in handy. 
+This information is meant to help you navigate a new, and unkown, environment with some example commands that might come in handy. 
 Do not assume that any of the information here is 100% correct, you should always try to verify it explicitly for your system. 
 
 # Basics - Environment Checking 
