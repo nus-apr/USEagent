@@ -5,8 +5,7 @@ from pathlib import Path
 import pytest
 
 from useagent.pydantic_models.tools.cliresult import CLIResult
-from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
-from useagent.tools.edit import extract_diff, init_edit_tools
+from useagent.tools.git import extract_diff
 
 # DevNote:
 # These tests will require that Git is installed and working.
@@ -20,7 +19,6 @@ def _setup_git_repo_with_change(repo_path: Path):
     Returns:
         Path to the modified file.
     """
-    init_edit_tools(str(repo_path))
     subprocess.run(["git", "init"], cwd=repo_path, check=True)
     subprocess.run(
         ["git", "config", "user.name", "Test User"], cwd=repo_path, check=True
@@ -81,22 +79,7 @@ async def test_extract_diff_single_file_edit(tmp_path):
 
 @pytest.mark.tool
 @pytest.mark.asyncio
-async def test_extract_diff_git_not_initialized(tmp_path):
-    init_edit_tools(str(tmp_path))
-
-    result = await extract_diff(project_dir=tmp_path)
-
-    assert isinstance(result, ToolErrorInfo)
-    assert (
-        "not a git repository" in result.message.lower()
-        or "git" in result.message.lower()
-    )
-
-
-@pytest.mark.tool
-@pytest.mark.asyncio
 async def test_extract_diff_respects_gitignore(tmp_path):
-    init_edit_tools(str(tmp_path))
     (tmp_path / ".gitignore").write_text("ignored.txt\n")
     (tmp_path / "tracked.txt").write_text("t\n")
 
@@ -182,7 +165,6 @@ async def test_extract_diff_untracked_file_is_not_included(tmp_path: Path):
     # DevNote:
     # This tests for the case that a completely new file was added, not a change but a `create`
     # These do NOT appear in a git diff, unless there was a git add (they were not added to the index)
-    init_edit_tools(str(tmp_path))
     (tmp_path / "tracked.txt").write_text("initial\n")
 
     # Initialize repo and commit
@@ -214,7 +196,6 @@ async def test_extract_diff_tracked_file_change_included_untracked_ignored(
     # DevNote:
     # This tests for the case that a completely new file was added, not a change but a `create`
     # These do NOT appear in a git diff, unless there was a git add (they were not added to the index)
-    init_edit_tools(str(tmp_path))
     (tmp_path / "a.txt").write_text("a\n")
     import subprocess
 

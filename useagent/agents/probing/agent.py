@@ -12,7 +12,7 @@ from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.info.partial_environment import PartialEnvironment
 from useagent.tools.bash import bash_tool
-from useagent.tools.probing import check_and_report_environment
+from useagent.tools.probing import check_environment, report_environment
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
@@ -42,7 +42,8 @@ def init_agent(
         output_type=Environment,
         tools=[
             Tool(bash_tool, max_retries=5),
-            Tool(check_and_report_environment, takes_ctx=True, max_retries=1),
+            Tool(report_environment, takes_ctx=True, max_retries=2),
+            Tool(check_environment, takes_ctx=True, max_retries=1),
         ],
     )
 
