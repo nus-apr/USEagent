@@ -74,6 +74,17 @@ def _make_output(
 async def view(
     file_path: str, view_range: list[int] | None = None
 ) -> CLIResult | ToolErrorInfo:
+    """
+    View the content of a file or directory at the specified path.
+    If view_range is provided, only the specified lines will be returned.
+
+    Args:
+        file_path (str): The relative path to the file or directory.
+        view_range (list[int] | None): A list of two integers specifying the range of lines to view. Only applicable to files, not directories.
+
+    Returns:
+        CLIResult: The result of the view operation, containing the output and a short header summarizing the used command.
+    """
     logger.info(
         f"[Tool] Invoked edit_tool `view`. Viewing {file_path}, range {view_range}"
     )
@@ -165,6 +176,18 @@ async def view(
 
 
 async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
+    """
+    Create a new file at the specified path with the given text content.
+    Text content can be empty.
+    Path must be a valid path that does not exist, path cannot be empty or 'None'.
+
+    Args:
+        file_path (str): The path where the new file will be created.
+        file_text (str): The text content to write into the new file.
+
+    Returns:
+        CLIResult: The result of the create operation, indicating success or failure.
+    """
     logger.info(
         f"[Tool] Invoked edit_tool `create`. Creating {file_path}, content preview: {file_text[:15]} ..."
     )
@@ -194,6 +217,17 @@ async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
 
 
 async def str_replace(file_path: str, old_str: str, new_str: str):
+    """
+    Replace old_str with new_str in the content of the file at the specified path.
+
+    Args:
+        file_path (str): The path to the file where the replacement will occur.
+        old_str (str): The string to be replaced.
+        new_str (str): The string to replace with.
+
+    Returns:
+        CLIResult: The result of the str_replace operation, containing the output or error.
+    """
     logger.info(
         f"[Tool] Invoked edit_tool `str_replace`. Replacing {old_str} for {new_str} in {file_path}"
     )
@@ -269,6 +303,17 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
 async def insert(
     file_path: str, insert_line: int, new_str: str
 ) -> CLIResult | ToolErrorInfo:
+    """
+    Insert new_str at the specified line in the file at the given path.
+
+    Args:
+        file_path (str): The path to the file where the insertion will occur.
+        insert_line (int): The line number at which to insert new_str (0-indexed).
+        new_str (str): The string to insert into the file.
+
+    Returns:
+        CLIResult: The result of the insert operation, containing the output or error.
+    """
     logger.info(
         f"[Tool] Invoked edit_tool `insert`. Inserting {new_str} at L{insert_line} in {file_path}"
     )
@@ -340,6 +385,12 @@ async def insert(
 async def extract_diff(
     project_dir: Path | str | None = None,
 ) -> CLIResult | ToolErrorInfo:
+    """
+    Extract the diff of the current state of the repository.
+
+    Returns:
+        CLIResult: The result of the diff extraction, containing the output or error.
+    """
     assert _project_dir is not None, "Project directory must be initialized first."
     project_dir = project_dir or _project_dir
 
@@ -372,5 +423,9 @@ async def extract_diff(
 
 
 def __reset_project_dir():
+    """
+    This project is only used for tests and testing purposes.
+    Otherwise, with our `init_edit_tools` we introduce some side-effects that make tests a bit flaky.
+    """
     global _project_dir
     _project_dir = None
