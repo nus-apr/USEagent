@@ -30,6 +30,7 @@ from useagent.pydantic_models.provides_output_instructions import (
     ProvidesOutputInstructions,
 )
 from useagent.pydantic_models.task_state import TaskState
+from useagent.state.usage_tracker import UsageTracker
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
 from useagent.tools.meta import (
@@ -40,6 +41,8 @@ from useagent.tools.meta import (
 )
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
+
+USAGE_TRACKER = UsageTracker()
 
 
 @conditional_microagents_triggers(load_microagents_from_project_dir())
@@ -124,8 +127,10 @@ def init_agent(
 
         probing_agent = init_probing_agent()
         environment_under_construction: PartialEnvironment = PartialEnvironment()
-        r = await probing_agent.run(deps=environment_under_construction)
-        env: Environment = r.output
+        probing_agent_result = await probing_agent.run(
+            deps=environment_under_construction
+        )
+        env: Environment = probing_agent_result.output
         next_id: int = len(ctx.deps.known_environments.keys())
 
         logger.info(f"[ProbingAgent] identified {env}")
@@ -134,6 +139,8 @@ def init_agent(
         )
         ctx.deps.active_environment = env
         ctx.deps.known_environments["env_" + str(next_id)] = env
+
+        USAGE_TRACKER.add(probing_agent.name, probing_agent_result.usage())
 
         return env
 
@@ -158,11 +165,12 @@ def init_agent(
         logger.info("[MetaAgent] Invoked execute_tests")
 
         test_agent = init_test_execution_agent()
-        r = await test_agent.run(instruction, deps=ctx.deps)
-        test_result: TestResult = r.output
+        test_agent_output = await test_agent.run(instruction, deps=ctx.deps)
+        test_result: TestResult = test_agent_output.output
 
         logger.info(f"[Test Execution Agent] Tests resulted in {test_result}")
 
+        USAGE_TRACKER.add(test_agent.name, test_agent_output.usage())
         # TODO: Also add a test-result lookup and storage? It should be relative to environment / git commit to be useful
 
         return test_result
@@ -181,14 +189,17 @@ def init_agent(
         """
         logger.info(f"[MetaAgent] Invoked search_code with instruction: {instruction}")
         search_code_agent = init_search_code_agent()
-        r = await search_code_agent.run(instruction, deps=ctx.deps)
-        res = r.output
-        logger.info(f"[MetaAgent] search_code result: {res}")
+        search_code_agent_result = await search_code_agent.run(
+            instruction, deps=ctx.deps
+        )
+        locations = search_code_agent_result.output
+        logger.info(f"[MetaAgent] search_code result: {locations}")
 
         # update task state with the found code locations
-        ctx.deps.code_locations.extend(res)
+        ctx.deps.code_locations.extend(locations)
 
-        return res
+        USAGE_TRACKER.add(search_code_agent.name, search_code_agent_result.usage())
+        return locations
 
     @meta_agent.tool(retries=4)
     async def edit_code(
@@ -226,6 +237,7 @@ def init_agent(
             else:
                 raise verr
         finally:
+            USAGE_TRACKER.add(edit_code_agent.name, edit_result.usage())
             return diff
 
     @meta_agent.tool(retries=4)
@@ -258,7 +270,8 @@ def init_agent(
                 )
             case None:
                 logger.info("[MetaAgent] VCS-agent returned `None`")
-        return vcs_result
+        USAGE_TRACKER.add(vcs_agent.name, vcs_result.usage())
+        return vcs_result.output
 
     ### Action definitions END
 
@@ -283,4 +296,5 @@ def agent_loop(
     result = meta_agent.run_sync(
         prompt, deps=task_state, usage_limits=UsageLimits(request_limit=100)
     )
-    return result.output
+    USAGE_TRACKER.add(meta_agent.name, result.usage())
+    return result.output, USAGE_TRACKER
