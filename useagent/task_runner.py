@@ -33,12 +33,12 @@ def run(
     except Exception as e:
         logger.error(f"Error running task {task.uid}: {e}")
     finally:
-        bash_history_file: Path = task_output_dir / "bash_commands.json.log"
+        bash_history_file: Path = task_output_dir / "bash_commands.jsonl.log"
         logger.debug(f"Dumping Bash History to {bash_history_file}")
         with open(bash_history_file, "w") as f:
-            _bash_history = [list(tupl) for tupl in get_bash_history()]
-            _bash_history = [[a, b, str(c)] for [a, b, c] in _bash_history]
-            json.dump(_bash_history, f, indent=2)
+            for a, b, c in get_bash_history():
+                json.dump({"command": a, "agent": b, "output": str(c)}, f)
+                f.write("\n")
 
 
 def _run(
