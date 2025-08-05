@@ -61,7 +61,7 @@ def find_merge_conflicts(path_to_check: Path) -> list[Path]:
     Iterate over the given path to a folder, and look for any file that contains a merge marker.
 
     Args:
-        path_to_check (Path): The path pointing to a folder to investigate. Will
+        path_to_check (Path): The path pointing to a folder to investigate.
 
     Returns:
         List[Path]: A list of all files that contain at least one merge marker. Can be empty if there are none.
