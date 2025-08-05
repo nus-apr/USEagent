@@ -165,7 +165,9 @@ def init_agent(
         logger.info("[MetaAgent] Invoked execute_tests")
 
         test_agent = init_test_execution_agent()
-        test_agent_output = await test_agent.run(instruction, deps=ctx.deps)
+        test_agent_output = await test_agent.run(
+            instruction, deps=ctx.deps, usage_limits=UsageLimits(request_limit=105)
+        )
         test_result: TestResult = test_agent_output.output
 
         logger.info(f"[Test Execution Agent] Tests resulted in {test_result}")
