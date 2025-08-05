@@ -348,6 +348,7 @@ async def extract_diff(
     )
 
     with cd(project_dir):
+        # Git Add is necessary to see changes to newly created files with the git diff
         await run("git add .")
         _, cached_out, stderr_1 = await run("git diff --cached")
         _, working_out, stderr_2 = await run("git diff")
