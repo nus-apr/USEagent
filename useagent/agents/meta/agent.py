@@ -20,6 +20,7 @@ from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.info.partial_environment import PartialEnvironment
 from useagent.pydantic_models.task_state import TaskState
+from useagent.state.usage_tracker import UsageTracker
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
 from useagent.tools.meta import (
@@ -30,6 +31,8 @@ from useagent.tools.meta import (
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 # TODO: define the output type
+
+USAGE_TRACKER = UsageTracker()
 
 
 @conditional_microagents_triggers(load_microagents_from_project_dir())
@@ -43,6 +46,8 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         config.model,
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
+        retries=3,
+        output_retries=5,
         tools=[
             Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
             Tool(view_task_state, takes_ctx=True, max_retries=0),
@@ -86,8 +91,10 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
 
         probing_agent = init_probing_agent()
         environment_under_construction: PartialEnvironment = PartialEnvironment()
-        r = await probing_agent.run(deps=environment_under_construction)
-        env: Environment = r.output
+        probing_agent_result = await probing_agent.run(
+            deps=environment_under_construction
+        )
+        env: Environment = probing_agent_result.output
         next_id: int = len(ctx.deps.known_environments.keys())
 
         logger.info(f"[ProbingAgent] identified {env}")
@@ -96,6 +103,8 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         )
         ctx.deps.active_environment = env
         ctx.deps.known_environments["env_" + str(next_id)] = env
+
+        USAGE_TRACKER.add(probing_agent.name, probing_agent_result.usage())
 
         return env
 
@@ -113,14 +122,17 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         """
         logger.info(f"[MetaAgent] Invoked search_code with instruction: {instruction}")
         search_code_agent = init_search_code_agent()
-        r = await search_code_agent.run(instruction, deps=ctx.deps)
-        res = r.output
-        logger.info(f"[MetaAgent] search_code result: {res}")
+        search_code_agent_result = await search_code_agent.run(
+            instruction, deps=ctx.deps
+        )
+        locations = search_code_agent_result.output
+        logger.info(f"[MetaAgent] search_code result: {locations}")
 
         # update task state with the found code locations
-        ctx.deps.code_locations.extend(res)
+        ctx.deps.code_locations.extend(locations)
 
-        return res
+        USAGE_TRACKER.add(search_code_agent.name, search_code_agent_result.usage())
+        return locations
 
     @meta_agent.tool(retries=4)
     async def edit_code(
@@ -143,6 +155,7 @@ def init_agent(config: AppConfig | None = None) -> Agent[TaskState, str]:
         # update task state with the diff
         diff_id: str = ctx.deps.diff_store.add_entry(diff)
         logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
+        USAGE_TRACKER.add(edit_code_agent.name, edit_result.usage())
         return diff
 
     ### Action definitions END
@@ -164,4 +177,5 @@ def agent_loop(task_state: TaskState):
     # actually running the agent
     prompt = "Invoke tools to complete the task."
     result = meta_agent.run_sync(prompt, deps=task_state)
-    return result.output
+    USAGE_TRACKER.add(meta_agent.name, result.usage())
+    return result.output, USAGE_TRACKER
