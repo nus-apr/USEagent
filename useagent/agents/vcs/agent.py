@@ -11,7 +11,7 @@ from useagent.microagents.decorators import (
 from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.task_state import TaskState
-from useagent.tools.bash import bash_tool
+from useagent.tools.bash import make_bash_tool_for_agent
 from useagent.tools.git import (
     check_for_merge_conflict_markers,
     extract_diff,
@@ -37,7 +37,10 @@ def init_agent(
         deps_type=TaskState,
         output_type=DiffEntry,
         tools=[
-            Tool(bash_tool, max_retries=4),
+            Tool(
+                make_bash_tool_for_agent("VCS", bash_call_delay_in_seconds=0.15),
+                max_retries=3,
+            ),
             Tool(view_commit_as_diff),
             Tool(find_merge_conflicts),
             Tool(check_for_merge_conflict_markers),
