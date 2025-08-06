@@ -4,6 +4,7 @@ Bash tool.
 
 import asyncio
 import os
+import time
 from collections import deque
 from collections.abc import Awaitable, Callable
 
@@ -223,7 +224,7 @@ def __reset_bash_tool():
 
 
 def make_bash_tool_for_agent(
-    agent_name: str = "UNK",
+    agent_name: str = "UNK", bash_call_delay_in_seconds: float = 0.0
 ) -> Callable[[NonEmptyStr], Awaitable[CLIResult | ToolErrorInfo]]:
     # DevNote:
     # This wrapper allows us to give each Agent its own, labelled (but identical) Bash Tool for logging & recording reasons.
@@ -232,6 +233,7 @@ def make_bash_tool_for_agent(
     # I also looked into using the stack trace, but the tools are only in the pydantic ai framework, and do not call e.g. search_code_agent.py:xx
     #
     # So this is a bit complex, but it preserves all attributes that we want.
+    # In general, we can pass more `closures` into the bash tool this way, while keeping the same interface towards the agent.
     async def bash_tool(command: NonEmptyStr) -> CLIResult | ToolErrorInfo:
         """Execute a bash command in the bash shell.
 
@@ -244,7 +246,7 @@ def make_bash_tool_for_agent(
         logger.info(f"[{agent_name} - Tool] Invoked bash_tool with command: {command}")
         assert _bash_tool_instance is not None, "bash_tool_instance is not initialized."
         try:
-            result = await _bash_tool(command)
+            result = await _bash_tool(command, bash_call_delay_in_seconds)
             _bash_tool_instance._bash_history.append((command, agent_name, result))
             return result
         except Exception as exc:
@@ -264,8 +266,27 @@ bash_tool: Callable[[NonEmptyStr], Awaitable[CLIResult | ToolErrorInfo]] = (
 )
 
 
-async def _bash_tool(command: NonEmptyStr) -> CLIResult | ToolErrorInfo:
+async def _bash_tool(
+    command: NonEmptyStr, delay_in_seconds: float = 0.0
+) -> CLIResult | ToolErrorInfo:
     assert _bash_tool_instance, "Bash Tool Instance was not set!"
+
+    # DevNote:
+    # Depending on your Provider and Account, there might be a limit on how many requests you can send to the model per second / minute.
+    # For most calls, this is not a big issue, because the calls will take a while etc.
+    # But for some of our agents and tools, it can rapid-fire simple commands (like looking for dependencies, echoing things, etc.)
+    # And we'll hit this limit. So, for some agents (Probing Agent, VCS Agent) we add a speed bumper. Also: See Issue #16
+    if (
+        ConfigSingleton.is_initialized()
+        and ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"]
+        and delay_in_seconds > 0
+    ):
+        if delay_in_seconds > 2.0:
+            logger.warning(
+                f"[Tool] Received a high {delay_in_seconds}s timeout between bash calls."
+            )
+        time.sleep(delay_in_seconds)
+
     result = await _bash_tool_instance(command)
     if result and isinstance(result, ToolErrorInfo):
         return result

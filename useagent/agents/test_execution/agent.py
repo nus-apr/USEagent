@@ -34,7 +34,12 @@ def init_agent(
         output_retries=3,
         deps_type=TaskState,
         output_type=TestResult,
-        tools=[Tool(make_bash_tool_for_agent("TESTEXEC"), max_retries=7)],
+        tools=[
+            Tool(
+                make_bash_tool_for_agent("TESTEXEC", bash_call_delay_in_seconds=0.15),
+                max_retries=7,
+            )
+        ],
     )
 
     @test_execution_agent.instructions
