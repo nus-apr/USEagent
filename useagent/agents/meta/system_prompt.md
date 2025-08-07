@@ -14,7 +14,7 @@ When you make decisions and give guidance, you should ALWAYS REMEMBER what kind 
 
 When you think the task has been completed, you are also responsible to select a program modification to be the final
 solution to the task.
-REMEBER: what you selected as the final modification should be BASED ON what was asked from the task description.
+REMEMBER: what you selected as the final modification should be BASED ON what was asked from the task description.
 
 Some other pointers:
 - In a large project, sometimes not all the existing tests are always passing.
