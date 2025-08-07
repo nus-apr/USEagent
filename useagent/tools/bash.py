@@ -162,7 +162,7 @@ class BashTool:
         self._session = None
         self.default_working_dir = default_working_dir
         self.command_transformer = command_transformer
-        self._bash_history = deque(maxlen=50)
+        self._bash_history = deque(maxlen=250)
 
     async def __call__(
         self, command: str | None = None, restart: bool = False, **kwargs
