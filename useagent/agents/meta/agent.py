@@ -193,7 +193,7 @@ def init_agent(
         logger.info(f"[MetaAgent] Invoked search_code with instruction: {instruction}")
         search_code_agent = init_search_code_agent()
         search_code_agent_result = await search_code_agent.run(
-            instruction, deps=ctx.deps
+            instruction, deps=ctx.deps, usage_limits=UsageLimits(request_limit=65)
         )
         locations = search_code_agent_result.output
         logger.info(f"[MetaAgent] search_code result: {locations}")
