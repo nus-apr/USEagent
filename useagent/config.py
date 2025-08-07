@@ -10,7 +10,11 @@ def _default_optimization_toggles() -> dict[str, bool]:
     # Default Dict will return false for any unknown key, but will not give an error.
     return defaultdict(
         bool,
-        {"check-grep-command-arguments": True, "loosen-probing-agent-strictness": True},
+        {
+            "check-grep-command-arguments": True,
+            "loosen-probing-agent-strictness": True,
+            "stress-probing-agent-partial-environment": True,
+        },
     )
 
 
