@@ -1,3 +1,4 @@
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -88,3 +89,16 @@ def test_to_environment_should_return_environment_instance(
     env = pe.to_environment()
     assert isinstance(env, Environment)
     assert env.git_status == dummy_git_status
+
+
+def test_setattr_should_log_changes():
+    log_output = StringIO()
+    from loguru import logger
+
+    token = logger.add(log_output, level="INFO")
+    env = PartialEnvironment()
+    env.project_root = Path("/tmp")
+    logger.remove(token)
+
+    logs = log_output.getvalue()
+    assert "project_root" in logs

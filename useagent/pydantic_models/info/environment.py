@@ -58,6 +58,7 @@ class Commands:
     Info on the most relevant commands.
     """
 
+    setup_command: NonEmptyStr | None = None
     build_command: NonEmptyStr | None = None
     test_command: NonEmptyStr | None = None
     run_command: NonEmptyStr | None = None
@@ -77,6 +78,7 @@ class Commands:
     @model_validator(mode="after")
     def check_at_least_one_command(self) -> "Commands":
         command_fields = [
+            self.setup_command,
             self.build_command,
             self.test_command,
             self.run_command,
@@ -94,6 +96,7 @@ class Commands:
     @model_validator(mode="after")
     def remove_duplicates_from_other_commands(self) -> "Commands":
         known = {
+            self.setup_command,
             self.build_command,
             self.test_command,
             self.run_command,
@@ -115,7 +118,7 @@ class Commands:
         return """
         A `Commands` object consists of:
 
-        - `build_command`, `test_command`, `run_command`, `linting_command`: `Optional[str]`, project-specific workflow commands.
+        - `setup_command`, `build_command`, `test_command`, `run_command`, `linting_command`: `Optional[str]`, project-specific workflow commands.
         - `reducable_test_scope`: `bool`, whether test scope can be reduced.
         - `example_reduced_test_command`: `Optional[str]`, an example reduced test command.
         - `can_install_system_packages`: `bool`, whether system package installation is allowed.
