@@ -52,6 +52,9 @@ class _BashSession:
         if self._process.returncode is not None:
             return
         self._process.terminate()
+        self._started = False
+        if self._timed_out:
+            self._timed_out = False
 
     async def run(self, command: str):
         """Execute a command in the bash shell."""
