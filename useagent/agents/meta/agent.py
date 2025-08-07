@@ -163,6 +163,7 @@ def init_agent(
             TestResult: A summary of the executed tests and their output, as well as the actually executed command.
         """
         logger.info("[MetaAgent] Invoked execute_tests")
+        logger.debug(f"[MetaAgent] Instructions to Execute Tests: {instruction}")
 
         test_agent = init_test_execution_agent()
         test_agent_output = await test_agent.run(
