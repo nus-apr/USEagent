@@ -93,6 +93,27 @@ def init_agent(
             """
         return ""  # Toggle is off, do nothing.
 
+    @environment_probing_agent.instructions
+    def add_brevity_instructions() -> str:
+        # The probing agent sometimes asks for dumb commands over and over again, but we maybe want to limit our requests.
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles[
+                "probing-agent-instructions-for-saving-requests"
+            ]
+        ):
+            return """
+            You might be able to merge commands to do less requests and achieve more tasks at once. 
+            An example when you are trying to call a tool for its version, but you are not sure whether its installed, you can do 
+            `foo -version 2>/dev/null || echo "foo not installed"`
+
+            You might also want to read multiple files at once or other similar combined actions. 
+            Important: If you choose to do so, be considerate of the amount of output and that it stays traceable to a command. 
+            Combining too many requests might introduce too much complexity or confusion at once. 
+            """
+        return ""  # Toggle is off, do nothing.
+
+    @environment_probing_agent.instructions
     def add_output_description(self) -> str:
         return (
             """
