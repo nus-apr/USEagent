@@ -39,6 +39,7 @@ def check_for_merge_conflict_markers(
         )
     if not path_to_file or not isinstance(path_to_file, Path):
         raise ValueError("Received Empty, None or Non-Path Argument for path_to_file")
+
     abs_path_to_file: Path = path_to_file.absolute()
     if not abs_path_to_file.exists():
         raise ValueError(f"The path {abs_path_to_file} does not exist")
@@ -80,7 +81,7 @@ def find_merge_conflicts(path_to_check: Path) -> list[Path]:
     Iterate over the given path to a folder, and look for any file that contains a merge marker.
 
     Args:
-        path_to_check (Path): The path pointing to a folder to investigate. Will
+        path_to_check (Path): The path pointing to a folder to investigate.
 
     Returns:
         List[Path]: A list of all files that contain at least one merge marker. Can be empty if there are none.
