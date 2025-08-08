@@ -1,21 +1,14 @@
-from enum import Enum
-
 from pydantic import field_validator
 from pydantic.dataclasses import dataclass
 
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 
 
-class Source(str, Enum):
-    SYSTEM = "system"
-    PROJECT = "project"
-
-
 @dataclass
 class Package:
     name: NonEmptyStr
     version: NonEmptyStr
-    source: Source
+    source: NonEmptyStr
 
     @field_validator("version")
     @classmethod
@@ -31,5 +24,5 @@ class Package:
 
         - `name`: `str`, the name of the package.
         - `version`: `str`, the currently installed version.
-        - `source`: one of `"system"` or `"project"`, whether it's a system-level (e.g., apt) or project-level (e.g., pip, mvn) package.
+        - `source`: `str`, whether it's a system-level (e.g. apt) or project-level (e.g. pip, mvn) package.
         """
