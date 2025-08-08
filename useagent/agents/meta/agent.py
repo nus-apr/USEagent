@@ -128,7 +128,8 @@ def init_agent(
         probing_agent = init_probing_agent()
         environment_under_construction: PartialEnvironment = PartialEnvironment()
         probing_agent_result = await probing_agent.run(
-            deps=environment_under_construction
+            deps=environment_under_construction,
+            usage_limits=UsageLimits(request_limit=115),
         )
         env: Environment = probing_agent_result.output
         next_id: int = len(ctx.deps.known_environments.keys())
