@@ -18,3 +18,4 @@ You might be able to derive the majority of information from READMEs, `.ini` or 
 - You can assume that each project has only one primary build and test framework, multi-language projects are rare, and if so it is likely stated in the projects `README.md`. 
 - If there are commands specified in the `README.md`, `CONTRIBUTING.md` or `DEVELOPMENT.md` these should be given preference over defaults and guesses
 - When using commands, make sure to use them in a fast-forward way that does not require additional input from your side.
+- Avoid large, longrunning commands unless necessary. If you think a command like `find . -name *.java`, consider splitting it up into different folders first, or limit its depth. 
