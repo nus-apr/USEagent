@@ -44,7 +44,7 @@ def init_agent(
         output_retries=5,
         tools=[
             Tool(
-                make_bash_tool_for_agent("PROBE", bash_call_delay_in_seconds=0.2),
+                make_bash_tool_for_agent("PROBE", bash_call_delay_in_seconds=0.35),
                 max_retries=5,
             ),
             Tool(report_environment, takes_ctx=True, max_retries=2),

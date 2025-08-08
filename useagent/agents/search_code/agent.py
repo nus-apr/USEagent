@@ -31,7 +31,12 @@ def init_agent(
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
         output_type=list[Location],
-        tools=[Tool(make_bash_tool_for_agent("SEARCH"), max_retries=4)],
+        tools=[
+            Tool(
+                make_bash_tool_for_agent("SEARCH", bash_call_delay_in_seconds=0.3),
+                max_retries=4,
+            )
+        ],
     )
 
     @search_code_agent.instructions

@@ -36,7 +36,7 @@ def init_agent(
         output_type=TestResult,
         tools=[
             Tool(
-                make_bash_tool_for_agent("TESTEXEC", bash_call_delay_in_seconds=0.15),
+                make_bash_tool_for_agent("TESTEXEC", bash_call_delay_in_seconds=0.25),
                 max_retries=7,
             )
         ],

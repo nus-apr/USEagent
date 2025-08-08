@@ -40,7 +40,7 @@ def init_agent(
         output_retries=5,
         tools=[
             Tool(
-                make_bash_tool_for_agent("VCS", bash_call_delay_in_seconds=0.15),
+                make_bash_tool_for_agent("VCS", bash_call_delay_in_seconds=0.25),
                 max_retries=3,
             ),
             Tool(view_commit_as_diff),
