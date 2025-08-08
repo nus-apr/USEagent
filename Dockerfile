@@ -10,6 +10,7 @@ RUN apt-get update && \
     curl \
     git \
     lsb-release \
+    apt-utils \
     openssh-client && \
     rm -rf /var/lib/apt/lists/*
 
