@@ -6,6 +6,7 @@ LABEL maintainer.Leonhard="Leonhard Applis <leonhard.applis@protonmail.com>"
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
+    tzdata \
     curl \
     git \
     lsb-release \
@@ -23,6 +24,7 @@ RUN mkdir -p /root/.ssh && \
     chmod 600 /root/.ssh/config
 RUN ssh-keyscan -p 443 ssh.github.com >> /root/.ssh/known_hosts
 
+RUN  ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime
 WORKDIR /useagent
 
 # Copy only dependency files first for cached install
