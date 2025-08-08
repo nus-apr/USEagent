@@ -1,6 +1,9 @@
+import time
+
 from loguru import logger
 from pydantic_ai import RunContext
 
+from useagent.config import ConfigSingleton
 from useagent.pydantic_models.artifacts.git import DiffEntry, DiffStore
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr, PositiveInt
 from useagent.pydantic_models.task_state import TaskState
@@ -22,6 +25,11 @@ def select_diff_from_diff_store(
     Returns:
         str: A string representation of a git diff originating fro mthe current TaskStates diff_store
     """
+    if (
+        ConfigSingleton.is_initialized()
+        and ConfigSingleton.config.optimization_toggles["meta-agent-speed-bumps"]
+    ):
+        time.sleep(0.25)
     diff_store = ctx.deps.diff_store
     return _select_diff_from_diff_store(diff_store, diff_store_key)
 
@@ -41,6 +49,11 @@ def remove_diffs_from_diff_store(
     Returns:
         DiffStore: The updated DiffStore - The TaskStates' field will also be updated as a side-effect.
     """
+    if (
+        ConfigSingleton.is_initialized()
+        and ConfigSingleton.config.optimization_toggles["meta-agent-speed-bumps"]
+    ):
+        time.sleep(0.25)
     diff_store = ctx.deps.diff_store
     result = _remove_diffs_from_diff_store(diff_store, keys_of_diffs_to_remove)
     if isinstance(result, DiffStore):
@@ -134,6 +147,11 @@ def view_task_state(ctx: RunContext[TaskState]) -> str:
     Returns:
         str: The string representation of the current task state.
     """
+    if (
+        ConfigSingleton.is_initialized()
+        and ConfigSingleton.config.optimization_toggles["meta-agent-speed-bumps"]
+    ):
+        time.sleep(0.25)
     logger.info("[Tool] Invoked view_task_state")
     res = ctx.deps.to_model_repr()
     logger.debug(f"[Tool] view_task_state result: {res}")
