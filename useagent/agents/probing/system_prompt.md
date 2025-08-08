@@ -17,3 +17,4 @@ You might be able to derive the majority of information from READMEs, `.ini` or 
 - Depending on your guess of build or test frameworks, you can try to investigate it using `which foo` first, instead of calling it directly. If the `which foo` does not yield a result, you can assume that either one of two cases is true: (1) the dependency is in a virtual environment or (2) it is not installed. You can safely assume it is not hidden behind any alias, and only (1) or (2) can be the case. 
 - You can assume that each project has only one primary build and test framework, multi-language projects are rare, and if so it is likely stated in the projects `README.md`. 
 - If there are commands specified in the `README.md`, `CONTRIBUTING.md` or `DEVELOPMENT.md` these should be given preference over defaults and guesses
+- When using commands, make sure to use them in a fast-forward way that does not require additional input from your side.
