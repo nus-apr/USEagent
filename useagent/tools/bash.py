@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 
 from loguru import logger
 
+from useagent.config import ConfigSingleton
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
@@ -53,6 +54,9 @@ class _BashSession:
         if self._process.returncode is not None:
             return
         self._process.terminate()
+        self._started = False
+        if self._timed_out:
+            self._timed_out = False
 
     async def run(self, command: str):
         """Execute a command in the bash shell."""
@@ -181,8 +185,14 @@ class BashTool:
             return ToolErrorInfo(message="No Command Supplied")
         # DevNote: This is a common issue witnessed, it tries to call `grep -r 'some_pattern'` which is invalid.
         # The resulting grep-error-message seems unsufficient for the model to be unerstandable.
-        # TODO: Introduce a global flag alongside 'use-empirical-otpimizations' etc. for these kind of patches based on errors to optimize.
-        if command.startswith("grep -r ") and len(command.split()) < 4:
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles[
+                "check-grep-command-arguments"
+            ]
+            and command.startswith("grep -r ")
+            and len(command.split()) < 4
+        ):
             return ToolErrorInfo(
                 message="The supplied command is a grep -r, but did not specify enough other arguments. Please reconsider your strategy how to supply a string to your grep - or use a different command and approach.",
                 supplied_arguments=[

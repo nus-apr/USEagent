@@ -11,17 +11,22 @@ from useagent.microagents.decorators import (
 from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.task_state import TaskState
-from useagent.tools.edit import create, insert, str_replace, view
-from useagent.tools.git import extract_diff
+from useagent.tools.bash import bash_tool
+from useagent.tools.git import (
+    check_for_merge_conflict_markers,
+    extract_diff,
+    find_merge_conflicts,
+    view_commit_as_diff,
+)
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
 
 @conditional_microagents_triggers(load_microagents_from_project_dir())
-@alias_for_microagents("EDIT")
+@alias_for_microagents("VCS")
 def init_agent(
     config: AppConfig | None = None,
-) -> Agent[TaskState, DiffEntry]:
+) -> Agent[TaskState, DiffEntry | str | None]:
     if config is None:
         config = ConfigSingleton.config
     assert config is not None
@@ -32,23 +37,11 @@ def init_agent(
         deps_type=TaskState,
         output_type=DiffEntry,
         tools=[
-            Tool(view),
-            Tool(create),
-            Tool(str_replace),
-            Tool(insert),
+            Tool(bash_tool, max_retries=4),
+            Tool(view_commit_as_diff),
+            Tool(find_merge_conflicts),
+            Tool(check_for_merge_conflict_markers),
             Tool(extract_diff),
         ],
     )
-
-    @agent.instructions
-    def add_output_instructions(self) -> str:
-        return (
-            """
-        ------------------------------------------------
-        Output:
-        Your expected output is a `DiffEntry`. 
-        """
-            + DiffEntry.get_output_instructions()
-        )
-
     return agent

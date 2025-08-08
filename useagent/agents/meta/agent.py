@@ -10,6 +10,7 @@ from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
 from useagent.agents.probing.agent import init_agent as init_probing_agent
 from useagent.agents.search_code.agent import init_agent as init_search_code_agent
 from useagent.agents.test_execution.agent import init_agent as init_test_execution_agent
+from useagent.agents.vcs.agent import init_agent as init_vcs_agent
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
@@ -28,6 +29,7 @@ from useagent.pydantic_models.provides_output_instructions import (
     ProvidesOutputInstructions,
 )
 from useagent.pydantic_models.task_state import TaskState
+from useagent.state.usage_tracker import UsageTracker
 from useagent.tools.bash import init_bash_tool
 from useagent.tools.edit import init_edit_tools
 from useagent.tools.meta import (
@@ -38,6 +40,8 @@ from useagent.tools.meta import (
 )
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
+
+USAGE_TRACKER = UsageTracker()
 
 
 @conditional_microagents_triggers(load_microagents_from_project_dir())
@@ -54,6 +58,8 @@ def init_agent(
         config.model,
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
+        retries=3,
+        output_retries=5,
         tools=[
             Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
             Tool(view_task_state, takes_ctx=True, max_retries=0),
@@ -97,7 +103,7 @@ def init_agent(
 
     ### Define actions as tools to meta_agent. Each action interfaces to another agent in Pydantic AI.
 
-    @meta_agent.tool(retries=4)
+    @meta_agent.tool(retries=5)
     async def probe_environment(ctx: RunContext[TaskState]) -> Environment:
         """Investigate the currently active environment relevant to the project.
 
@@ -120,8 +126,10 @@ def init_agent(
 
         probing_agent = init_probing_agent()
         environment_under_construction: PartialEnvironment = PartialEnvironment()
-        r = await probing_agent.run(deps=environment_under_construction)
-        env: Environment = r.output
+        probing_agent_result = await probing_agent.run(
+            deps=environment_under_construction
+        )
+        env: Environment = probing_agent_result.output
         next_id: int = len(ctx.deps.known_environments.keys())
 
         logger.info(f"[ProbingAgent] identified {env}")
@@ -130,6 +138,8 @@ def init_agent(
         )
         ctx.deps.active_environment = env
         ctx.deps.known_environments["env_" + str(next_id)] = env
+
+        USAGE_TRACKER.add(probing_agent.name, probing_agent_result.usage())
 
         return env
 
@@ -177,14 +187,17 @@ def init_agent(
         """
         logger.info(f"[MetaAgent] Invoked search_code with instruction: {instruction}")
         search_code_agent = init_search_code_agent()
-        r = await search_code_agent.run(instruction, deps=ctx.deps)
-        res = r.output
-        logger.info(f"[MetaAgent] search_code result: {res}")
+        search_code_agent_result = await search_code_agent.run(
+            instruction, deps=ctx.deps
+        )
+        locations = search_code_agent_result.output
+        logger.info(f"[MetaAgent] search_code result: {locations}")
 
         # update task state with the found code locations
-        ctx.deps.code_locations.extend(res)
+        ctx.deps.code_locations.extend(locations)
 
-        return res
+        USAGE_TRACKER.add(search_code_agent.name, search_code_agent_result.usage())
+        return locations
 
     @meta_agent.tool(retries=4)
     async def edit_code(
@@ -220,7 +233,40 @@ def init_agent(
             else:
                 raise verr
         finally:
+            USAGE_TRACKER.add(edit_code_agent.name, edit_result.usage())
             return diff
+
+    @meta_agent.tool(retries=4)
+    async def vcs(
+        ctx: RunContext[TaskState], instruction: str
+    ) -> DiffEntry | str | None:
+        """Perform tasks related to version-management given the provided instruction.
+
+        Args:
+            instruction (str): Instruction for the version management. The instruction should be very specific, typically should include the expected outcome and whether or not a action should be performed. Pay special attention to describe the expected start and end state, if a change in the VCS is required.
+
+        Returns:
+            DiffEntry | str | None: A git-diff of the requested entry, a string answering a question or retrieving other information, or None in case the performed action did not need any return value.
+        """
+        logger.info(f"[MetaAgent] Invoked vcs_agent with instruction: {instruction}")
+        vcs_agent = init_vcs_agent()
+
+        vcs_result = await vcs_agent.run(instruction, deps=ctx.deps)
+
+        match vcs_result.output:
+            case DiffEntry():
+                diff: DiffEntry = vcs_result.output
+                logger.info(f"[MetaAgent] vcs_agent diff result: {diff}")
+                # update task state with the diff
+                diff_id: str = ctx.deps.diff_store.add_entry(diff)
+                logger.debug(f"[MetaAgent] Added diff entry with ID: {diff_id}")
+            case str():
+                logger.info(
+                    f"[MetaAgent] VCS-agent returned a string: {vcs_result.output}"
+                )
+            case None:
+                logger.info("[MetaAgent] VCS-agent returned `None`")
+        return vcs_result
 
     ### Action definitions END
 
@@ -243,4 +289,5 @@ def agent_loop(
     # actually running the agent
     prompt = "Invoke tools to complete the task."
     result = meta_agent.run_sync(prompt, deps=task_state)
-    return result.output
+    USAGE_TRACKER.add(meta_agent.name, result.usage())
+    return result.output, USAGE_TRACKER

@@ -46,7 +46,13 @@ def check_for_merge_conflict_markers(
         raise ValueError(
             f"Received a path_to_file {abs_path_to_file} that points to a folder, but a file is expected."
         )
-
+    if not _is_utf_8_encoded(abs_path_to_file):
+        # In case there is a non utf-8 file, we just assume there cannot be a merge marker.
+        if not _silence_logger:
+            logger.debug(
+                f"[Tool] Skipping a non-utf-8 file at {abs_path_to_file} - assuming no merge markers"
+            )
+        return False
     with open(abs_path_to_file, encoding="utf-8") as f:
         for line in f:
             if line.startswith(("<<<<<<<", "=======", ">>>>>>>")):
@@ -56,12 +62,25 @@ def check_for_merge_conflict_markers(
     return False
 
 
+def _is_utf_8_encoded(path: Path) -> bool:
+    # DevNote:
+    # We can see issues if the file tries to be opened with utf-8 but it's e.g. an image or just spanish.
+    # This is more common than you would think, because some projects have translation files.
+    try:
+        with open(path, "rb") as f:
+            for line in f:
+                line.decode("utf-8")
+        return True
+    except UnicodeDecodeError:
+        return False
+
+
 def find_merge_conflicts(path_to_check: Path) -> list[Path]:
     """
     Iterate over the given path to a folder, and look for any file that contains a merge marker.
 
     Args:
-        path_to_check (Path): The path pointing to a folder to investigate. Will
+        path_to_check (Path): The path pointing to a folder to investigate.
 
     Returns:
         List[Path]: A list of all files that contain at least one merge marker. Can be empty if there are none.

@@ -34,6 +34,6 @@ class TaskState(BaseModel):
             f"Code Locations: {self.code_locations}\n"
             f"Test Locations: {self.test_locations}\n"
             f"Diff Store: {self.diff_store.id_to_diff}\n"
-            f"Active Environment: {self.active_environment}"
+            f"Active Environment: {self.active_environment}\n"
             f"Additional Knowledge: {self.additional_knowledge}\n"
         )

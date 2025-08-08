@@ -12,7 +12,7 @@ from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.info.environment import Environment
 from useagent.pydantic_models.info.partial_environment import PartialEnvironment
 from useagent.tools.bash import make_bash_tool_for_agent
-from useagent.tools.probing import check_and_report_environment
+from useagent.tools.probing import check_environment, report_environment
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
@@ -42,7 +42,8 @@ def init_agent(
         output_type=Environment,
         tools=[
             Tool(make_bash_tool_for_agent("PROBE"), max_retries=5),
-            Tool(check_and_report_environment, takes_ctx=True, max_retries=1),
+            Tool(report_environment, takes_ctx=True, max_retries=2),
+            Tool(check_environment, takes_ctx=True, max_retries=1),
         ],
     )
 
@@ -60,5 +61,46 @@ def init_agent(
             + "\n"
             + Environment.get_output_instructions()
         )
+
+    @environment_probing_agent.instructions
+    def stress_partial_environment() -> str:
+        # The Probing Agent was struggling to build the partial environment,
+        # largely due to it's complexity.
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles[
+                "stress-probing-agent-partial-environment"
+            ]
+        ):
+            return """
+            The task you are facing is quite elaborate and I want you to report a lot of details. 
+            You are unlikely to achieve this all at once, so you are given a `PartialEnvironment` in your deps, 
+            which is a mutable object for you to construct the information step by step. 
+            Its fields are identical to your final outcome so once you finished it you can safely use it. 
+            Consider populating the fields after each command. 
+            You can get feedback on the missing fields in your PartialEnvironment using the `check_environment` tool.
+
+            You can formulate your final answers using the `report_environment` tool, 
+            but NEVER use this without first considering the response from `check_environment` tool. 
+            """
+        return ""  # Toggle is off, do nothing
+
+    @environment_probing_agent.instructions
+    def defuse_probing_strictness() -> str:
+        # The probing agent sometimes just considers the given Microagent options as a form of checklist.
+        # This leads to it trying all possible commands, instead of aborting and continuing after a good find.
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles[
+                "loosen-probing-agent-strictness"
+            ]
+        ):
+            return """
+            Be considerate in how much probing you will do. 
+            Do not treat commands that you know or have been presented with as a `checklist` that you have to fully investigate. 
+            The chance that a project has multiple build or test commands is very unlikely, so after you have identified (and verified) a command continue to investigate other aspects.
+            Unless you see it especially specified in e.g. a README or toml, you can assume the project does not contain a linting command.
+            """
+        return ""  # Toggle is off, do nothing.
 
     return environment_probing_agent

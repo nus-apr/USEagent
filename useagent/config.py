@@ -1,14 +1,31 @@
-from dataclasses import dataclass
+from collections import defaultdict
+from dataclasses import dataclass, field
 
 from pydantic_ai.models import Model, infer_model
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 
+def _default_optimization_toggles() -> dict[str, bool]:
+    # Default Dict will return false for any unknown key, but will not give an error.
+    return defaultdict(
+        bool,
+        {
+            "check-grep-command-arguments": True,
+            "loosen-probing-agent-strictness": True,
+            "stress-probing-agent-partial-environment": True,
+        },
+    )
+
+
 @dataclass
 class AppConfig:
     model: Model
     output_dir: str | None = None
+
+    optimization_toggles: dict[str, bool] = field(
+        default_factory=_default_optimization_toggles
+    )
 
 
 class ConfigSingleton:
@@ -59,3 +76,7 @@ class ConfigSingleton:
     @classmethod
     def reset(cls):
         cls._instance = None
+
+    @classmethod
+    def is_initialized(cls):
+        return cls._instance is not None

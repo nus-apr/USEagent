@@ -2,6 +2,7 @@
 Main entry point for running one task.
 """
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -55,5 +56,10 @@ def _run(
 
     # start main agent loop
     logger.info("Starting main agent loop")
-    result = agent_loop(task_state, output_type=output_type)
+    result, usage_tracker = agent_loop(task_state, output_type=output_type)
     logger.info(f"Task {task} completed with result: {result}")
+
+    usage_info_file: Path = task_output_dir / "usage.json.log"
+    logger.debug(f"Storing Usage Information to {usage_info_file}")
+    with open(usage_info_file, "w") as f:
+        json.dump(usage_tracker.to_json(), f)

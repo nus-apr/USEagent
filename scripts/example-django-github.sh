@@ -13,7 +13,10 @@ repo_url=https://github.com/django/django.git
 
 if [[ "$1" == "--build" ]]; then
   docker rm -f useagent-turbo-test 2>/dev/null
-  docker image rm -f useagent-turbo:dev 2>/dev/null
+  if [[ "$2" == "--rm-image" ]]; then
+    #This will delete the image, but you will loose caching.
+    docker image rm -f useagent-turbo:dev 2>/dev/null
+  fi
   DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
 fi
 
