@@ -19,6 +19,9 @@ def check_environment(ctx: RunContext[PartialEnvironment]) -> str:
 
 def _check_environment(partial_environment: PartialEnvironment) -> str:
     if not partial_environment.is_complete():
+        logger.debug(
+            f"[Tool] check environment reports the following fields still missing: { [{','.join(partial_environment.get_missing_fields())}]}"
+        )
         return f"The given partial environment is not complete and is missing entries. Missing entries: [{','.join(partial_environment.get_missing_fields())}]"
     else:
         return "The partial environment is well-formed and can be reported."

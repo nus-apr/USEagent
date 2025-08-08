@@ -106,6 +106,9 @@ class _BashSession:
                         break
         except TimeoutError:
             self._timed_out = True
+            logger.warning(
+                f"[Tool] Bash timed out after {self._timeout} for command {command}"
+            )
             return ToolErrorInfo(
                 message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
                 supplied_arguments=[ArgumentEntry("command", command)],
