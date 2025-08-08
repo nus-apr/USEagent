@@ -247,7 +247,18 @@ def make_bash_tool_for_agent(
         logger.info(f"[{agent_name} - Tool] Invoked bash_tool with command: {command}")
         assert _bash_tool_instance is not None, "bash_tool_instance is not initialized."
         try:
-            result = await _bash_tool(command)
+            # DevNote:
+            # It might be possible to have a `restart bash tool`, but to be honest why would you ever not want to restart it?
+            # Automatically restart the tool if it had timed out before calling again.
+            if _bash_tool_instance._session and _bash_tool_instance._session._timed_out:
+                logger.warning(
+                    "Current Bash Tool was in a timed-out state - restarting it"
+                )
+                _bash_tool_instance._session.stop()
+                await _bash_tool_instance._session.start()
+                logger.debug("Successfully restarted Bash Tool")
+
+            result = await _bash_tool(command, bash_call_delay_in_seconds)
             _bash_tool_instance._bash_history.append((command, agent_name, result))
             return result
         except Exception as exc:

@@ -4,6 +4,7 @@ from useagent.config import ConfigSingleton
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.bash import (
+    __reset_bash_tool,
     bash_tool,
     get_bash_history,
     init_bash_tool,
@@ -12,6 +13,15 @@ from useagent.tools.bash import (
 
 # Wrap tool creation once per test using a fixed agent name
 AGENT_NAME = "test-agent"
+
+
+@pytest.fixture(autouse=True)
+def run_foo_each_test():
+    __reset_bash_tool()
+    ConfigSingleton.reset()
+    yield
+    __reset_bash_tool()
+    ConfigSingleton.reset()
 
 
 @pytest.fixture
@@ -171,3 +181,153 @@ async def test_agent_field_should_not_persist_after_reset(tmp_path):
     await tool("echo after")
     agent = get_bash_history()[0][1]
     assert agent == "AGENT2"
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_bash_tool_should_wait_at_least_delay_seconds(tmp_path):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"] = True
+
+    delay = 1.2
+    start = time.monotonic()
+
+    test_bash_tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=delay)
+
+    result = await test_bash_tool("echo timing")
+    duration = time.monotonic() - start
+
+    assert isinstance(result, CLIResult)
+    assert duration >= delay
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_bash_tool_should_not_wait_when_speed_bumper_disabled(tmp_path):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"] = False
+
+    delay = 1.2
+    start = time.monotonic()
+
+    test_bash_tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=delay)
+    result = await test_bash_tool("echo quick")
+
+    duration = time.monotonic() - start
+    assert isinstance(result, CLIResult)
+    assert duration < 1.0  # allow slight overhead
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_bash_tool_should_not_wait_when_delay_is_zero(tmp_path):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"] = True
+
+    start = time.monotonic()
+
+    test_bash_tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=0.0)
+    result = await test_bash_tool("echo zero")
+
+    duration = time.monotonic() - start
+    assert isinstance(result, CLIResult)
+    assert duration < 1.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_bash_tool_should_not_wait_when_delay_is_negative(tmp_path):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"] = True
+
+    start = time.monotonic()
+
+    test_bash_tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=-2.0)
+    result = await test_bash_tool("echo negative")
+
+    duration = time.monotonic() - start
+    assert isinstance(result, CLIResult)
+    assert duration < 1.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_bash_tool_should_wait_for_3_seconds_if_set(tmp_path):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"] = True
+
+    delay = 3.0
+    start = time.monotonic()
+
+    test_bash_tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=delay)
+    result = await test_bash_tool("echo longdelay")
+
+    duration = time.monotonic() - start
+    assert isinstance(result, CLIResult)
+    assert duration >= delay
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_bash_tool_can_cause_a_timeout(tmp_path):
+    # See Issue 19 on this matter
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"] = True
+
+    test_bash_tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=0.1)
+    result = await test_bash_tool("echo hello")
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+
+    assert not _bash_tool_instance._session._timed_out
+    _bash_tool_instance._session._timeout = 1
+
+    result = await test_bash_tool("sleep 2")
+
+    assert isinstance(result, ToolErrorInfo)
+    assert "time" in result.message
+    assert _bash_tool_instance._session._timed_out
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_bash_tool_can_cause_a_timeout_but_will_recover(tmp_path):
+    # See Issue 19 on this matter
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"] = True
+
+    test_bash_tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=0.1)
+    # This will just pass
+    await test_bash_tool("echo hello")
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+
+    # This will Error / Timeout
+    await test_bash_tool("sleep 2")
+
+    # This should pass again, as the shell ought to be restarted
+    result = await test_bash_tool("echo hello")
+    assert result and isinstance(result, CLIResult)
+    assert not _bash_tool_instance._session._timed_out
