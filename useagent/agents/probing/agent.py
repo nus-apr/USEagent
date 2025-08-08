@@ -68,6 +68,9 @@ def init_agent(
             You can get feedback on the missing fields in your PartialEnvironment using the `check_environment` tool.
             You can formulate your final answers using the `report_environment` tool, 
             but NEVER use this without first considering the response from `check_environment` tool. 
+
+            You **MUST** use the PartialEnvironment and set its fields. You can ONLY Solve the task using it and filling it gradually. 
+            There is no other way for you to solve this task UNLESS YOU FILL THE PARTIALENVIRONMENT, check it, and use the `report_environment`. 
             """
         return ""  # Toggle is off, do nothing
 
