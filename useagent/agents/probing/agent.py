@@ -10,7 +10,7 @@ from useagent.microagents.decorators import (
     conditional_microagents_triggers,
 )
 from useagent.microagents.management import load_microagents_from_project_dir
-from useagent.pydantic_models.info.environment import Commands
+from useagent.pydantic_models.info.environment import Commands, Package
 from useagent.pydantic_models.provides_output_instructions import (
     ProvidesOutputInstructions,
 )
@@ -93,6 +93,11 @@ def init_agent(output_type, config: AppConfig | None = None, deps_type=None) -> 
     def add_output_description(self) -> str:
         if output_type is Path:
             return "You are supposed to return a pathlib.Path that specifies the projects root."
+        if output_type is list[Package]:
+            return (
+                "You are supposed to find packages installed on the system and the development environment. These are meant to be available in path or by common package managers, and not file-based. \n"
+                + Package.get_output_instructions()
+            )
         if isinstance(output_type, ProvidesOutputInstructions):
             return (
                 """
