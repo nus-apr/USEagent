@@ -18,6 +18,7 @@ Assume that you are reporting to someone who will need a final result that will 
 
 Important: 
 - Only present commands you executed. Do not tell me to execute them. 
+- When using commands, never use commands that require interactive input / feedback. 
 - Do not use any placeholders like `<config file>`. Always fill all placeholders you need. 
 - Do not fabricate data at any point. 
 - Continue until you are sure that you use the correct test-command. There can be valid test-failures you can report, but these are different than a poor setup or a poor command from your side. 
