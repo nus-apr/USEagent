@@ -77,6 +77,19 @@ def init_agent(output_type, config: AppConfig | None = None, deps_type=None) -> 
         return ""  # Toggle is off, do nothing.
 
     @environment_probing_agent.instructions
+    def add_useagent_stopper_instructions() -> str:
+        # We have seen the (rare) case that useagent tried to work on itself.
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles["useagent-stopper-file"]
+        ):
+            return """
+            You are supposed to work on a different project than yourself (USEAgent). 
+            If you are seeing any folder called `useagent` or a file called `.useagent-stopper` you are in the wrong repository. 
+            """
+        return ""  # Toggle is off, do nothing.
+
+    @environment_probing_agent.instructions
     def add_output_description(self) -> str:
         if output_type is Path:
             return "You are supposed to return a pathlib.Path that specifies the projects root."

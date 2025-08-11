@@ -43,6 +43,19 @@ def init_agent(
     )
 
     @test_execution_agent.instructions
+    def add_useagent_stopper_instructions() -> str:
+        # We have seen the (rare) case that useagent tried to work on itself.
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles["useagent-stopper-file"]
+        ):
+            return """
+            You are supposed to work on a different project than yourself (USEAgent). 
+            If you are seeing any folder called `useagent` or a file called `.useagent-stopper` you are in the wrong repository. 
+            """
+        return ""  # Toggle is off, do nothing.
+
+    @test_execution_agent.instructions
     def add_environment_command_information(ctx: RunContext[TaskState]) -> str:
         """Add a Info on the commands, if the TaskState contains an active Environment with them.
 

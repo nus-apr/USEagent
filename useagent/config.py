@@ -15,6 +15,7 @@ def _default_optimization_toggles() -> dict[str, bool]:
             "check-grep-command-arguments": True,
             "loosen-probing-agent-strictness": True,
             "bash-tool-speed-bumper": True,
+            "useagent-stopper-file": True,
         },
     )
 
