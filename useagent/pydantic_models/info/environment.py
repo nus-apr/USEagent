@@ -12,7 +12,7 @@ HexCommit = constr(
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class GitStatus:
     """
     Info on the current git status.
@@ -52,7 +52,7 @@ class GitStatus:
         """
 
 
-@dataclass
+@dataclass(frozen=False)
 class Commands:
     """
     Info on the most relevant commands.

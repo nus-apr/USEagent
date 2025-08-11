@@ -3,6 +3,7 @@ Main entry point for running one task.
 """
 
 import json
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -31,7 +32,8 @@ def run(
     try:
         _run(task, task_output_dir, output_type=output_type)
     except Exception as e:
-        logger.error(f"Error running task {task.uid}: {e}")
+        tb = traceback.format_exc()
+        logger.error(f"Error running task {task.uid}: {e} \n{tb}", exception=e)
     finally:
         bash_history_file: Path = task_output_dir / "bash_commands.jsonl.log"
         logger.debug(f"Dumping Bash History to {bash_history_file}")
