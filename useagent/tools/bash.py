@@ -207,6 +207,20 @@ class BashTool:
                 ],
             )
 
+        # It can run into greps that take ages because it checks all files in hidden repositories.
+        # A good example is `grep -r 'test' .` that will also look into all files of .venv and .git
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles[
+                "hide-hidden-folders-from-greps"
+            ]
+            and command.startswith("grep")
+        ):
+            logger.debug(
+                "[Tool] Bash Tool added exceptions for hidden folders and files to a grep command."
+            )
+            command = 'grep --exclude-dir=".*" --exclude=".*" ' + command[4:]
+
         transformed_command = self.command_transformer(command)
         return await self._session.run(transformed_command)
 

@@ -16,6 +16,7 @@ def _default_optimization_toggles() -> dict[str, bool]:
             "loosen-probing-agent-strictness": True,
             "bash-tool-speed-bumper": True,
             "useagent-stopper-file": True,
+            "hide-hidden-folders-from-greps": True,
         },
     )
 
