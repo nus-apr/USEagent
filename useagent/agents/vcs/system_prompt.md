@@ -16,7 +16,12 @@ When working with `git`, consider the following principles:
 In case you are using the generic bash tool, limit your activities to: 
 - Version Control Activities, i.E. `svn` or `git` commands
 - Read only operations to gather information
+- Try not to generate new branches, and prefer working on existing branches. 
 At no point, use it to edit files, execute tests etc. 
+
+**Important**:
+
+- When performing any task, only use commands that do not need interactive feedback from you. 
 
 ---
 
