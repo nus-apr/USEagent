@@ -5,6 +5,7 @@ from typing import Literal
 from loguru import logger
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.tools import Tool
+from pydantic_ai.usage import Usage, UsageLimits
 
 from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
 from useagent.agents.probing.agent import init_agent as init_probing_agent
@@ -20,8 +21,12 @@ from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.artifacts.code import Location
 from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.artifacts.test_result import TestResult
-from useagent.pydantic_models.info.environment import Environment
-from useagent.pydantic_models.info.partial_environment import PartialEnvironment
+from useagent.pydantic_models.info.environment import (
+    Commands,
+    Environment,
+    GitStatus,
+    Package,
+)
 from useagent.pydantic_models.output.action import Action
 from useagent.pydantic_models.output.answer import Answer
 from useagent.pydantic_models.output.code_change import CodeChange
@@ -115,7 +120,7 @@ def init_agent(
             - switched environments
             - altered the environment, e.g. by performing installations
 
-        This action can be considered safe, but you might want to avoid calling it too often in favour of costs.
+        This action can be considered safe, but you might want to avoid calling it too often in favour of costs and runtime.
 
         Returns:
             Environment: Currently active environment, as detected by the sub-agent.
@@ -124,12 +129,50 @@ def init_agent(
         """
         logger.info("[MetaAgent] Invoked probe_environment")
 
-        probing_agent = init_probing_agent()
-        environment_under_construction: PartialEnvironment = PartialEnvironment()
-        probing_agent_result = await probing_agent.run(
-            deps=environment_under_construction
+        logger.info("[Probing Agent] Looking for Project root (Path)")
+        path_probing_agent = init_probing_agent(output_type=Path, deps_type=None)
+        path_probing_agent_result = await path_probing_agent.run(
+            deps=None,
+            usage_limits=UsageLimits(request_limit=25),
         )
-        env: Environment = probing_agent_result.output
+        project_root = path_probing_agent_result.output
+
+        logger.debug("[Probing Agent] Looking for Git Information")
+        git_probing_agent = init_probing_agent(output_type=GitStatus, deps_type=None)
+        git_probing_agent_result = await git_probing_agent.run(
+            #    deps=starting_status,
+            usage_limits=UsageLimits(request_limit=50),
+        )
+        git_status = git_probing_agent_result.output
+
+        logger.debug("[Probing Agent] Looking for Important Commands")
+        dep_commands = Commands(build_command='echo "TODO: Identify" && :')
+        command_probing_agent = init_probing_agent(
+            output_type=Commands, deps_type=Commands
+        )
+        command_probing_agent_result = await command_probing_agent.run(
+            deps=dep_commands,
+            usage_limits=UsageLimits(request_limit=110),
+        )
+        commands = command_probing_agent_result.output
+
+        logger.debug("[Probing Agent] Looking for Packages")
+        package_probing_agent = init_probing_agent(
+            output_type=list[Package], deps_type=list[Package]
+        )
+        package_probing_agent_result = await package_probing_agent.run(
+            deps=[],
+            usage_limits=UsageLimits(request_limit=50),
+        )
+        packages = package_probing_agent_result.output
+
+        env = Environment(
+            project_root=project_root,
+            git_status=git_status,
+            commands=commands,
+            packages=packages,
+        )
+
         next_id: int = len(ctx.deps.known_environments.keys())
 
         logger.info(f"[ProbingAgent] identified {env}")
@@ -139,7 +182,14 @@ def init_agent(
         ctx.deps.active_environment = env
         ctx.deps.known_environments["env_" + str(next_id)] = env
 
-        USAGE_TRACKER.add(probing_agent.name, probing_agent_result.usage())
+        probing_usage: Usage = (
+            path_probing_agent_result.usage()
+            + git_probing_agent_result.usage()
+            + command_probing_agent_result.usage()
+            + package_probing_agent_result.usage()
+        )
+
+        USAGE_TRACKER.add("PROBE", probing_usage)
 
         return env
 

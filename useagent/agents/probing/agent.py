@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from loguru import logger
 from pydantic_ai import Agent
 from pydantic_ai.tools import Tool
 
@@ -9,81 +10,52 @@ from useagent.microagents.decorators import (
     conditional_microagents_triggers,
 )
 from useagent.microagents.management import load_microagents_from_project_dir
-from useagent.pydantic_models.info.environment import Environment
-from useagent.pydantic_models.info.partial_environment import PartialEnvironment
+from useagent.pydantic_models.info.environment import Commands
+from useagent.pydantic_models.provides_output_instructions import (
+    ProvidesOutputInstructions,
+)
 from useagent.tools.bash import make_bash_tool_for_agent
-from useagent.tools.probing import check_environment, report_environment
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
 
 @conditional_microagents_triggers(load_microagents_from_project_dir())
 @alias_for_microagents("PROBE")
-def init_agent(
-    config: AppConfig | None = None,
-) -> Agent[PartialEnvironment, Environment]:
+def init_agent(output_type, config: AppConfig | None = None, deps_type=None) -> Agent:
+    # DevNote (See Issue #17):
+    # We had two previous attempts:
+    # (1) Produce a full environment at once --- failed because task is too large
+    # (2) Produce a partial environment, fill up, combine into larger environment --- failed because deps was not used properly. No fields filled.
+    # Now the approach is to split up the probing-agent calls for the different environment parts,
+    # each run reporting a different aspect, and after successful search merge them upstream in the USEAgent.
+    # This means potentially high costs / calls, but all other attempts seemed to regularly fail.
 
     if config is None:
         config = ConfigSingleton.config
     assert config is not None
 
-    # DevNote:
-    # Initially, the probing agent was just meant to return a `Environment` using Bash,
-    # but that is too difficult for the agent without doing it `step by step`.
-    # To support this incremental building, we introduced a PartialEnvironment that is stored in the deps.
-    # It can be checked and transformed with a little tool.
-    # Just using the Environment for incremental building, because that requires a mutable element,
-    # Which might lead to consistency issues (i.e. at the moment a environment is a clear tuple that is collected together at one point of time.)
+    if output_type is None:
+        logger.error("[Probing Agent] Recieved no Output Type - aborting")
+        raise ValueError("Unsupported Output_Type None received for init_agent")
 
     environment_probing_agent = Agent(
         config.model,
         instructions=SYSTEM_PROMPT,
-        deps_type=PartialEnvironment,
-        output_type=Environment,
+        deps_type=deps_type,  # type: ignore
+        output_type=output_type,
+        retries=2,
+        output_retries=3,
         tools=[
-            Tool(make_bash_tool_for_agent("PROBE"), max_retries=5),
-            Tool(report_environment, takes_ctx=True, max_retries=2),
-            Tool(check_environment, takes_ctx=True, max_retries=1),
+            Tool(
+                make_bash_tool_for_agent("PROBE", bash_call_delay_in_seconds=0.35),
+                max_retries=4,
+            ),
         ],
     )
 
-    @environment_probing_agent.instructions
-    def add_output_description(self) -> str:
-        return (
-            """
-        -----------
-        Output:
-
-        We expect an `Environment` containing the key information relevant to act on the project.
-        You have access to a `PartialEnvironment` object that you can fill step-by-step. 
-        Once all fields are filled, return a complete Environment. Never fabricate data. Use existing state to skip work.
-        """
-            + "\n"
-            + Environment.get_output_instructions()
-        )
-
-    @environment_probing_agent.instructions
-    def stress_partial_environment() -> str:
-        # The Probing Agent was struggling to build the partial environment,
-        # largely due to it's complexity.
-        if (
-            ConfigSingleton.is_initialized()
-            and ConfigSingleton.config.optimization_toggles[
-                "stress-probing-agent-partial-environment"
-            ]
-        ):
-            return """
-            The task you are facing is quite elaborate and I want you to report a lot of details. 
-            You are unlikely to achieve this all at once, so you are given a `PartialEnvironment` in your deps, 
-            which is a mutable object for you to construct the information step by step. 
-            Its fields are identical to your final outcome so once you finished it you can safely use it. 
-            Consider populating the fields after each command. 
-            You can get feedback on the missing fields in your PartialEnvironment using the `check_environment` tool.
-
-            You can formulate your final answers using the `report_environment` tool, 
-            but NEVER use this without first considering the response from `check_environment` tool. 
-            """
-        return ""  # Toggle is off, do nothing
+    logger.debug(
+        f"[Probing Agent] Initialized basic Probing Agent for output {str(output_type)} with deps-type {str(deps_type)}"
+    )
 
     @environment_probing_agent.instructions
     def defuse_probing_strictness() -> str:
@@ -94,6 +66,7 @@ def init_agent(
             and ConfigSingleton.config.optimization_toggles[
                 "loosen-probing-agent-strictness"
             ]
+            and output_type is Commands
         ):
             return """
             Be considerate in how much probing you will do. 
@@ -102,5 +75,24 @@ def init_agent(
             Unless you see it especially specified in e.g. a README or toml, you can assume the project does not contain a linting command.
             """
         return ""  # Toggle is off, do nothing.
+
+    @environment_probing_agent.instructions
+    def add_output_description(self) -> str:
+        if output_type is Path:
+            return "You are supposed to return a pathlib.Path that specifies the projects root."
+        if isinstance(output_type, ProvidesOutputInstructions):
+            return (
+                """
+            -----------
+            Output:
+            """
+                + "\n"
+                + output_type.get_output_instructions()
+            )
+        else:
+            logger.warning(
+                f"[Agent] Probing Agent received an output type that does not provide a `get_output_instructions`: {str(output_type)}"
+            )
+        return ""
 
     return environment_probing_agent

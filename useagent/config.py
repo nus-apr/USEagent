@@ -14,7 +14,7 @@ def _default_optimization_toggles() -> dict[str, bool]:
             "meta-agent-speed-bumps": True,
             "check-grep-command-arguments": True,
             "loosen-probing-agent-strictness": True,
-            "stress-probing-agent-partial-environment": True,
+            "bash-tool-speed-bumper": True,
         },
     )
 
