@@ -165,7 +165,7 @@ def init_agent(
         path_probing_agent = init_probing_agent(output_type=Path, deps_type=None)
         path_probing_agent_result = await path_probing_agent.run(
             deps=None,
-            usage_limits=UsageLimits(request_limit=25),
+            usage_limits=UsageLimits(request_limit=35),
         )
         project_root = path_probing_agent_result.output
 
@@ -173,7 +173,7 @@ def init_agent(
         git_probing_agent = init_probing_agent(output_type=GitStatus, deps_type=None)
         git_probing_agent_result = await git_probing_agent.run(
             #    deps=starting_status,
-            usage_limits=UsageLimits(request_limit=50),
+            usage_limits=UsageLimits(request_limit=60),
         )
         git_status = git_probing_agent_result.output
 
@@ -194,7 +194,7 @@ def init_agent(
         )
         package_probing_agent_result = await package_probing_agent.run(
             deps=[],
-            usage_limits=UsageLimits(request_limit=50),
+            usage_limits=UsageLimits(request_limit=65),
         )
         packages = package_probing_agent_result.output
 
@@ -248,7 +248,7 @@ def init_agent(
 
         test_agent = init_test_execution_agent()
         test_agent_output = await test_agent.run(
-            instruction, deps=ctx.deps, usage_limits=UsageLimits(request_limit=105)
+            instruction, deps=ctx.deps, usage_limits=UsageLimits(request_limit=115)
         )
         test_result: TestResult = test_agent_output.output
 
@@ -274,7 +274,7 @@ def init_agent(
         logger.info(f"[MetaAgent] Invoked search_code with instruction: {instruction}")
         search_code_agent = init_search_code_agent()
         search_code_agent_result = await search_code_agent.run(
-            instruction, deps=ctx.deps, usage_limits=UsageLimits(request_limit=65)
+            instruction, deps=ctx.deps, usage_limits=UsageLimits(request_limit=120)
         )
         locations = search_code_agent_result.output
         logger.info(f"[MetaAgent] search_code result: {locations}")
