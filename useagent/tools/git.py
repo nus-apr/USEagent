@@ -40,7 +40,6 @@ def check_for_merge_conflict_markers(
         )
     if not path_to_file or not isinstance(path_to_file, Path):
         raise ValueError("Received Empty, None or Non-Path Argument for path_to_file")
-
     abs_path_to_file: Path = path_to_file.absolute()
     if not abs_path_to_file.exists():
         raise ValueError(f"The path {abs_path_to_file} does not exist")

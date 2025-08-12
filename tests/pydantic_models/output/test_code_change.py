@@ -1,45 +1,47 @@
 import pytest
 
-from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.output.code_change import CodeChange
-
-NEW_FILE_ONE_LINE = """\
-diff --git a/newfile.txt b/newfile.txt
-new file mode 100644
-index 0000000..e69de29
---- /dev/null
-+++ b/newfile.txt
-@@
-+Hello world
-"""
 
 
 @pytest.fixture
-def valid_diff_entry() -> DiffEntry:
-    return DiffEntry(NEW_FILE_ONE_LINE)
+def valid_diff_entry() -> str:
+    return "diff_0"
 
 
 @pytest.mark.parametrize("bad_str", ["", " ", "   ", "\n", "\t"])
 @pytest.mark.pydantic_model
 def test_constructor_should_raise_on_invalid_explanation(
-    bad_str: str, valid_diff_entry: DiffEntry
+    bad_str: str, valid_diff_entry: str
 ):
     with pytest.raises(ValueError):
-        CodeChange(explanation=bad_str, change=valid_diff_entry, doubts="valid")
+        CodeChange(explanation=bad_str, diff_id=valid_diff_entry, doubts="valid")
+
+
+@pytest.mark.parametrize("bad_str", ["", " ", "   ", "\n", "\t", "test", "_diff_0"])
+@pytest.mark.pydantic_model
+def test_constructor_should_raise_on_invalid_diffs(bad_str: str):
+    with pytest.raises(ValueError):
+        CodeChange(explanation="thinking", diff_id=bad_str, doubts="valid")
 
 
 @pytest.mark.parametrize("bad_str", ["", " ", "   ", "\n", "\t"])
 @pytest.mark.pydantic_model
 def test_constructor_should_raise_on_invalid_doubts(
-    bad_str: str, valid_diff_entry: DiffEntry
+    bad_str: str, valid_diff_entry: str
 ):
     with pytest.raises(ValueError):
-        CodeChange(explanation="valid", change=valid_diff_entry, doubts=bad_str)
+        CodeChange(explanation="valid", diff_id=valid_diff_entry, doubts=bad_str)
 
 
 @pytest.mark.pydantic_model
-def test_constructor_should_allow_none_doubts(valid_diff_entry: DiffEntry):
-    c = CodeChange(explanation="valid", change=valid_diff_entry, doubts=None)
+def test_constructor_should_allow_none_doubts(valid_diff_entry: str):
+    c = CodeChange(explanation="valid", diff_id=valid_diff_entry, doubts=None)
+    assert isinstance(c, CodeChange)
+
+
+@pytest.mark.pydantic_model
+def test_constructor_should_allow_none_doubts_2(valid_diff_entry: str):
+    c = CodeChange(explanation="valid", diff_id="diff_2", doubts="None")
     assert isinstance(c, CodeChange)
 
 

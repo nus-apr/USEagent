@@ -66,7 +66,7 @@ def _run(
 
     # start main agent loop
     logger.info("Starting main agent loop")
-    result, usage_tracker = agent_loop(task_state)
+    result, usage_tracker = agent_loop(task_state, output_type=output_type)
     logger.info(f"Task {task} completed with result: {result}")
 
     usage_info_file: Path = task_output_dir / "usage.json.log"

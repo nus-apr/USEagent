@@ -95,7 +95,7 @@ def init_agent(
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
         retries=3,
-        output_retries=5,
+        output_retries=10,
         tools=[
             Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
             Tool(view_task_state, takes_ctx=True, max_retries=0),
@@ -380,5 +380,16 @@ def agent_loop(
     result = meta_agent.run_sync(
         prompt, deps=task_state, usage_limits=UsageLimits(request_limit=100)
     )
+
+    if output_type is CodeChange:
+        diff_id = result.output.diff_id
+        logger.info(f"Resolving {diff_id} in DiffStore:")
+        try:
+            diff_content = task_state.diff_store.id_to_diff[diff_id]
+            logger.info(f"{diff_content}")
+        except Exception as e:
+            logger.error(f"Issue finding {diff_id} in DiffStore")
+            logger.error(e)
+
     USAGE_TRACKER.add(meta_agent.name, result.usage())
     return result.output, USAGE_TRACKER
