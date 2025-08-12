@@ -15,6 +15,8 @@ if [[ "$1" == "--build" ]]; then
   DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
 fi
 
+TASK_DESC='write a shell file that prints a vegan tiramisu recipe'
+MODEL_NAME=google-gla:gemini-2.5-flash
 
 rm -rf ./useagent-turbo-tmp
 mkdir ./useagent-turbo-tmp
@@ -24,8 +26,12 @@ mkdir ./useagent-turbo-tmp-out
 
 docker run --rm \
   --name useagent-turbo-test \
-  -e GEMINI_API_KEY=$GEMINI_API_KEY \
+  -e GEMINI_API_KEY="$GEMINI_API_KEY" \
   -v ./useagent-turbo-tmp:/input:rw \
   -v ./useagent-turbo-tmp-out:/output:rw \
   useagent-turbo:dev \
-  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py local --model google-gla:gemini-2.0-flash --task-description 'write a shell file that prints a vegan tiramisu recipe' --output-dir /output --project-directory /input"
+  useagent local \
+    --model $MODEL_NAME \
+    --output-dir /output \
+    --project-directory /input \
+    --task-description "$TASK_DESC"

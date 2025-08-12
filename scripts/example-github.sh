@@ -8,9 +8,6 @@ source .env
 set +a
 
 
-task_desc='write a shell file that prints a vegan tiramisu recipe'
-repo_url=https://github.com/octocat/Hello-World.git
-
 if [[ "$1" == "--build" ]]; then
   docker rm -f useagent-turbo-test 2>/dev/null
   if [[ "$2" == "--rm-image" ]]; then
@@ -20,9 +17,17 @@ if [[ "$1" == "--build" ]]; then
   DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
 fi
 
-docker run --rm \ 
+TASK_DESC='write a shell file that prints a vegan tiramisu recipe'
+REPO_URL=https://github.com/octocat/Hello-World.git
+MODEL_NAME=google-gla:gemini-2.5-flash
+
+docker run --rm \
   --name useagent-turbo-test \
   -e GEMINI_API_KEY=$GEMINI_API_KEY \
   -v ./useagent-turbo-tmp-out:/output \
   useagent-turbo:dev \
-  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py github --model google-gla:gemini-2.0-flash --task-description '$task_desc' --repo-url $repo_url --output-dir /output"
+  useagent github \
+    --model $MODEL_NAME \
+    --repo-url $REPO_URL \
+    --output-dir /output \
+    --task-description "$TASK_DESC"

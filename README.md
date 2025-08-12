@@ -150,6 +150,9 @@ PYTHONPATH=. uv run python app/main.py usebench --model llama3.3:70b  --provider
 PYTHONPATH=. uv run python app/main.py usebench --model llama3.2 --provider-url http://host.docker.internal:11434 --task-id swe_django__django-10914 --output-dir /output
 ```
 
+*Note:* 
+You can also `uv build` and `uv run` this project - this is not recommended and meant to be used in and for the docker images. 
+
 ## Tests
 
 ```shell
