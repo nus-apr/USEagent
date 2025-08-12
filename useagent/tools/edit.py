@@ -5,6 +5,7 @@ from loguru import logger
 
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
+from useagent.tools.common import useagent_guard_rail
 from useagent.tools.run import maybe_truncate, run
 from useagent.utils import cd
 
@@ -88,33 +89,39 @@ async def view(
     logger.info(
         f"[Tool] Invoked edit_tool `view`. Viewing {file_path}, range {view_range}"
     )
+    try:
+        supplied_arguments = [
+            ArgumentEntry("file_path", str(file_path)),
+            ArgumentEntry("view_range", str(view_range)),
+        ]
+    except ValueError:
+        supplied_arguments = []
+
     if not file_path or not file_path.strip():
         return ToolErrorInfo(
             message="Received an empty or None file_path",
-            supplied_arguments=[
-                ArgumentEntry("file_path", str(file_path)),
-                ArgumentEntry("view_range", str(view_range)),
-            ],
+            supplied_arguments=supplied_arguments,
         )
 
     path = _make_path_absolute(file_path)
 
+    if (
+        guard_rail_tool_error := useagent_guard_rail(
+            file_path, supplied_arguments=supplied_arguments
+        )
+    ) is not None:
+        return guard_rail_tool_error
+
     if not path.exists():
         return ToolErrorInfo(
             message=f"Filepath {file_path} does not exist.",
-            supplied_arguments=[
-                ArgumentEntry("file_path", str(file_path)),
-                ArgumentEntry("view_range", str(view_range)),
-            ],
+            supplied_arguments=supplied_arguments,
         )
     if path.is_dir():
         if view_range:
             return ToolErrorInfo(
                 message="The `view_range` parameter is not allowed when `path` points to a directory.",
-                supplied_arguments=[
-                    ArgumentEntry("file_path", str(file_path)),
-                    ArgumentEntry("view_range", str(view_range)),
-                ],
+                supplied_arguments=supplied_arguments,
             )
 
         _, stdout, stderr = await run(rf"find {path} -maxdepth 2 -not -path '*/\.*'")
@@ -134,10 +141,7 @@ async def view(
         if len(view_range) != 2 or not all(isinstance(i, int) for i in view_range):
             return ToolErrorInfo(
                 message="Invalid `view_range`. It should be a list of two integers.",
-                supplied_arguments=[
-                    ArgumentEntry("file_path", str(file_path)),
-                    ArgumentEntry("view_range", str(view_range)),
-                ],
+                supplied_arguments=supplied_arguments,
             )
         file_lines = file_content.split("\n")
         n_lines_file = len(file_lines)
@@ -145,26 +149,17 @@ async def view(
         if init_line < 1 or init_line > n_lines_file:
             return ToolErrorInfo(
                 message=f"Invalid `view_range`: {view_range}. Its first element `{init_line}` should be within the range of lines of the file: {[1, n_lines_file]}",
-                supplied_arguments=[
-                    ArgumentEntry("file_path", str(file_path)),
-                    ArgumentEntry("view_range", str(view_range)),
-                ],
+                supplied_arguments=supplied_arguments,
             )
         if final_line > n_lines_file:
             return ToolErrorInfo(
                 message=f"Invalid `view_range`: {view_range}. Its second element `{final_line}` should be smaller than the number of lines in the file: `{n_lines_file}`",
-                supplied_arguments=[
-                    ArgumentEntry("file_path", str(file_path)),
-                    ArgumentEntry("view_range", str(view_range)),
-                ],
+                supplied_arguments=supplied_arguments,
             )
         if final_line != -1 and final_line < init_line:
             return ToolErrorInfo(
                 message=f"Invalid `view_range`: {view_range}. Its second element `{final_line}` should be larger or equal than its first `{init_line}`",
-                supplied_arguments=[
-                    ArgumentEntry("file_path", str(file_path)),
-                    ArgumentEntry("view_range", str(view_range)),
-                ],
+                supplied_arguments=supplied_arguments,
             )
 
         if final_line == -1:
@@ -192,6 +187,13 @@ async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
         f"[Tool] Invoked edit_tool `create`. Creating {file_path}, content preview: {file_text[:15]} ..."
     )
 
+    try:
+        supplied_arguments = [
+            ArgumentEntry("file_path", str(file_path)),
+            ArgumentEntry("file_text", str(file_text)),
+        ]
+    except ValueError:
+        supplied_arguments = []
     if not file_path or not file_path.strip():
         return ToolErrorInfo(
             message="Received an None or Empty file_path argument.",
@@ -203,13 +205,17 @@ async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
 
     path = _make_path_absolute(file_path)
 
+    if (
+        guard_rail_tool_error := useagent_guard_rail(
+            file_path, supplied_arguments=supplied_arguments
+        )
+    ) is not None:
+        return guard_rail_tool_error
+
     if path.exists():
         return ToolErrorInfo(
             message=f"File already exists at: {path}. Cannot overwrite files using command `create`.",
-            supplied_arguments=[
-                ArgumentEntry("file_path", str(file_path)),
-                ArgumentEntry("file_text", str(file_text)),
-            ],
+            supplied_arguments=supplied_arguments,
         )
 
     _write_file(path, file_text)
@@ -234,23 +240,30 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
 
     path = _make_path_absolute(file_path)
 
+    try:
+        supplied_arguments = [
+            ArgumentEntry("file_path", str(file_path)),
+            ArgumentEntry("old_str", str(old_str if old_str else "empty string")),
+            ArgumentEntry("new_str", str(new_str if new_str else "empty string")),
+        ]
+    except ValueError:
+        supplied_arguments = []
+
+    if (
+        guard_rail_tool_error := useagent_guard_rail(
+            file_path, supplied_arguments=supplied_arguments
+        )
+    ) is not None:
+        return guard_rail_tool_error
     if not path.exists():
         return ToolErrorInfo(
             message=f"Filepath {file_path} does not exist, it has to be created first. `str_replace` only works for existing files.",
-            supplied_arguments=[
-                ArgumentEntry("file_path", str(file_path)),
-                ArgumentEntry("old_str", str(old_str)),
-                ArgumentEntry("new_str", str(new_str)),
-            ],
+            supplied_arguments=supplied_arguments,
         )
     if path.is_dir():
         return ToolErrorInfo(
             message=f"Filepath {file_path} is a directory - `str_replace` can only be applied to files.",
-            supplied_arguments=[
-                ArgumentEntry("file_path", str(file_path)),
-                ArgumentEntry("old_str", str(old_str)),
-                ArgumentEntry("new_str", str(new_str)),
-            ],
+            supplied_arguments=supplied_arguments,
         )
 
     _read_file_result = _read_file(path)
@@ -264,11 +277,7 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
     if occurrences == 0:
         return ToolErrorInfo(
             message=f"No replacement was performed, old_str `{old_str}` did not appear verbatim in {path}.",
-            supplied_arguments=[
-                ArgumentEntry("file_path", str(file_path)),
-                ArgumentEntry("old_str", str(old_str)),
-                ArgumentEntry("new_str", str(new_str)),
-            ],
+            supplied_arguments=supplied_arguments,
         )
     elif occurrences > 1:
         file_content_lines = file_content.split("\n")
@@ -277,11 +286,7 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
         ]
         return ToolErrorInfo(
             message=f"No replacement was performed. Multiple occurrences of old_str `{old_str}` in lines {lines}. Please ensure it is unique",
-            supplied_arguments=[
-                ArgumentEntry("file_path", str(file_path)),
-                ArgumentEntry("old_str", str(old_str)),
-                ArgumentEntry("new_str", str(new_str)),
-            ],
+            supplied_arguments=supplied_arguments,
         )
 
     new_file_content = file_content.replace(old_str, new_str)
@@ -320,23 +325,31 @@ async def insert(
 
     path = _make_path_absolute(file_path)
 
+    try:
+        supplied_arguments = [
+            ArgumentEntry("file_path", str(file_path)),
+            ArgumentEntry("insert_line", str(insert_line)),
+            ArgumentEntry("new_str", str(new_str)),
+        ]
+    except ValueError:
+        supplied_arguments = []
+
+    if (
+        guard_rail_tool_error := useagent_guard_rail(
+            file_path, supplied_arguments=supplied_arguments
+        )
+    ) is not None:
+        return guard_rail_tool_error
+
     if not path.exists():
         return ToolErrorInfo(
             message=f"Filepath {file_path} does not exist, it has to be created first. `insert` only works for existing files.",
-            supplied_arguments=[
-                ArgumentEntry("file_path", str(file_path)),
-                ArgumentEntry("insert_line", str(insert_line)),
-                ArgumentEntry("new_str", str(new_str)),
-            ],
+            supplied_arguments=supplied_arguments,
         )
     if path.is_dir():
         return ToolErrorInfo(
             message=f"Filepath {file_path} is a directory - `insert` can only be applied to files.",
-            supplied_arguments=[
-                ArgumentEntry("file_path", str(file_path)),
-                ArgumentEntry("insert_line", str(insert_line)),
-                ArgumentEntry("new_str", str(new_str)),
-            ],
+            supplied_arguments=supplied_arguments,
         )
 
     _read_file_result = _read_file(path)
@@ -350,11 +363,7 @@ async def insert(
     if insert_line < 0 or insert_line > n_lines_file:
         return ToolErrorInfo(
             message=f"Invalid `insert_line` parameter: {insert_line}. It should be within the range of lines of the file: {[0, n_lines_file]}",
-            supplied_arguments=[
-                ArgumentEntry("file_path", str(file_path)),
-                ArgumentEntry("insert_line", str(insert_line)),
-                ArgumentEntry("new_str", str(new_str)),
-            ],
+            supplied_arguments=supplied_arguments,
         )
 
     new_str_lines = new_str.split("\n")
@@ -397,6 +406,16 @@ async def extract_diff(
     logger.info(
         f"[Tool] Invoked edit_tool `extract_diff`. Extracting a patch from {project_dir} (type: {type(project_dir)})"
     )
+
+    if (
+        guard_rail_tool_error := useagent_guard_rail(
+            project_dir,
+            supplied_arguments=[
+                ArgumentEntry("project_dir", str(project_dir)),
+            ],
+        )
+    ) is not None:
+        return guard_rail_tool_error
 
     with cd(project_dir):
         # Git Add is necessary to see changes to newly created files with the git diff

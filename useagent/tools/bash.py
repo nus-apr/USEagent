@@ -14,6 +14,7 @@ from useagent.config import ConfigSingleton
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
+from useagent.tools.common import useagent_guard_rail
 
 
 class _BashSession:
@@ -37,15 +38,23 @@ class _BashSession:
         if self._started:
             return
 
-        self._process = await asyncio.create_subprocess_shell(
-            self.command,
-            preexec_fn=os.setsid,
-            shell=True,
-            bufsize=0,
-            cwd=init_dir,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        if (
+            init_dir
+            and (guard_rail_tool_error := useagent_guard_rail(init_dir)) is not None
+        ):
+            return guard_rail_tool_error
+
+        self._process: asyncio.subprocess.Process = (
+            await asyncio.create_subprocess_shell(
+                self.command,
+                preexec_fn=os.setsid,
+                shell=True,
+                bufsize=0,
+                cwd=init_dir,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
         )
 
         self._started = True
@@ -78,6 +87,13 @@ class _BashSession:
                 message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
                 supplied_arguments=[ArgumentEntry("command", command)],
             )
+
+        if (
+            guard_rail_tool_error := useagent_guard_rail(
+                command, supplied_arguments=[ArgumentEntry("command", command)]
+            )
+        ) is not None:
+            return guard_rail_tool_error
 
         # we know these are not None because we created the process with PIPEs
         assert self._process.stdin
@@ -220,6 +236,17 @@ class BashTool:
                 "[Tool] Bash Tool added exceptions for hidden folders and files to a grep command."
             )
             command = 'grep --exclude-dir=".*" --exclude=".*" ' + command[4:]
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles[
+                "hide-hidden-folders-from-finds"
+            ]
+            and command.startswith("find .")
+        ):
+            logger.debug(
+                "[Tool] Bash Tool added exceptions for hidden folders and files to a find command."
+            )
+            command = 'find . -type d -name ".*" -prune -o ' + command[6:]
 
         transformed_command = self.command_transformer(command)
         return await self._session.run(transformed_command)

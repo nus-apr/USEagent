@@ -18,7 +18,7 @@ AGENT_NAME = "test-agent"
 
 
 @pytest.fixture(autouse=True)
-def run_foo_each_test():
+def reset_config_and_bash_tool_each_test():
     __reset_bash_tool()
     ConfigSingleton.reset()
     yield

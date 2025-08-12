@@ -18,7 +18,8 @@ if [[ "$1" == "--build" ]]; then
 fi
 
 
-REPO_URL=https://github.com/google/guava.git
+#REPO_URL=https://github.com/google/guava.git
+REPO_URL=https://github.com/ansible/ansible.git
 MODEL_NAME=google-gla:gemini-2.0-flash
 
 mkdir ./tmp

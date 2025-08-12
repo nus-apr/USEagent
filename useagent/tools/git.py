@@ -10,6 +10,7 @@ from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.task_state import TaskState
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
+from useagent.tools.common import useagent_guard_rail
 from useagent.tools.run import run
 from useagent.utils import cd
 
@@ -227,6 +228,14 @@ async def extract_diff(
     logger.info(
         f"[Tool] Invoked edit_tool `extract_diff`. Extracting a patch from {project_dir} (type: {type(project_dir)})"
     )
+
+    if (
+        guard_rail_tool_error := useagent_guard_rail(
+            project_dir,
+            supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
+        )
+    ) is not None:
+        return guard_rail_tool_error
 
     with cd(project_dir):
         await run(
