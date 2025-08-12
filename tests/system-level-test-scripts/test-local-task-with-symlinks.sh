@@ -31,7 +31,7 @@ EOF
 
 rm -rf ./useagent-turbo-tmp
 mkdir ./useagent-turbo-tmp
-git pull $REPO_URL ./useagent-turbo-tmp
+git clone $REPO_URL ./useagent-turbo-tmp
 rm -rf ./useagent-turbo-tmp-out
 mkdir ./useagent-turbo-tmp-out
 
