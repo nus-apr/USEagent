@@ -31,6 +31,8 @@ def init_agent(
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
         output_type=DiffEntry,
+        retries=3,
+        output_retries=12,  # DevNote: The diff-entries are hard to get right for the model. But they must fit their schema to make any sense.
         tools=[
             Tool(view),
             Tool(create),
