@@ -289,5 +289,16 @@ def agent_loop(
     # actually running the agent
     prompt = "Invoke tools to complete the task."
     result = meta_agent.run_sync(prompt, deps=task_state)
+
+    if output_type is CodeChange:
+        diff_id = result.output.diff_id
+        logger.info(f"Resolving {diff_id} in DiffStore:")
+        try:
+            diff_content = task_state.diff_store.id_to_diff[diff_id]
+            logger.info(f"{diff_content}")
+        except Exception as e:
+            logger.error(f"Issue finding {diff_id} in DiffStore")
+            logger.error(e)
+
     USAGE_TRACKER.add(meta_agent.name, result.usage())
     return result.output, USAGE_TRACKER
