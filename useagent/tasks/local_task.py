@@ -1,4 +1,5 @@
 import shutil
+import os
 from pathlib import Path
 
 from useagent.state.git_repo import GitRepository
@@ -14,7 +15,7 @@ class LocalTask(Task):
 
     project_path: str
     issue_statement: str
-    uid: str = "local"
+    uid: str = os.getenv("INSTANCE_ID", "local")
     _working_dir: Path  # All files will be copied to this directory, before the git repository is initialized there.
 
     def __init__(
