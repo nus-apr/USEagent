@@ -79,12 +79,12 @@ Run agent in the container. Assuming at path `/useagent`:
 
 ```shell
 export GEMINI_API_KEY=...
-PYTHONPATH=. uv run python app/main.py usebench --model google-gla:gemini-2.0-flash --task-id swe_django__django-10914 --output-dir /output
+PYTHONPATH=. useagent usebench --model google-gla:gemini-2.0-flash --task-id swe_django__django-10914 --output-dir /output
 ```
 
 ```shell
 export OPENAI_API_KEY=...
-PYTHONPATH=. uv run python app/main.py usebench --model openai:gpt-4o --task-id swe_django__django-10914 --output-dir /output
+PYTHONPATH=. useagent usebench --model openai:gpt-4o --task-id swe_django__django-10914 --output-dir /output
 ```
 
 Cleanup:
@@ -105,7 +105,7 @@ docker run --rm \
   -e GEMINI_API_KEY=YOUR_KEY_GOES_HERE \
   -v ./useagent-turbo-tmp:/input \
   useagent-turbo:dev \
-  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py local --model google-gla:gemini-2.0-flash --task-description 'write a shell file that prints a vegan tiramisu recipe' --output-dir /output --project-directory /input"
+  useagent local --model google-gla:gemini-2.0-flash --task-description 'write a shell file that prints a vegan tiramisu recipe' --output-dir /output --project-directory /input"
 ```
 
 ### Github
@@ -119,7 +119,7 @@ docker run --rm \
   -e GEMINI_API_KEY=YOUR_KEY_GOES_HERE \
   -v ./useagent-turbo-tmp-out:/output \
   useagent-turbo:dev \
-  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py github --model google-gla:gemini-2.0-flash --task-description 'write a shell file that prints a vegan tiramisu recipe' --repo-url https://github.com/octocat/Hello-World.git --output-dir /output"
+  useagent github --model google-gla:gemini-2.0-flash --task-description 'write a shell file that prints a vegan tiramisu recipe' --repo-url https://github.com/octocat/Hello-World.git --output-dir /output"
 ```
 
 ### CONFIGURATION
@@ -143,11 +143,11 @@ docker run -it --network=host --name useagent-turbo-test useagent-turbo:dev
 
 *Linux*
 ```shell
-PYTHONPATH=. uv run python app/main.py usebench --model llama3.3:70b  --provider-url http://localhost:11434/v1 --task-id swe_django__django-10914 --output-dir /output
+PYTHONPATH=. uv run useagent usebench --model llama3.3:70b  --provider-url http://localhost:11434/v1 --task-id swe_django__django-10914 --output-dir /output
 ```
 *Macos*
 ```shell
-PYTHONPATH=. uv run python app/main.py usebench --model llama3.2 --provider-url http://host.docker.internal:11434 --task-id swe_django__django-10914 --output-dir /output
+PYTHONPATH=. uv run useagent usebench --model llama3.2 --provider-url http://host.docker.internal:11434 --task-id swe_django__django-10914 --output-dir /output
 ```
 
 *Note:* 
