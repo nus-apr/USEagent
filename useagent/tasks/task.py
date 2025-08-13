@@ -43,3 +43,7 @@ class Task:
         Example: The USEBench requires a conda environment, so all commands should be within the conda environment.
         """
         return command
+
+    @classmethod
+    def get_default_working_dir(cls) -> Path:
+        raise NotImplementedError("Subclasses need to implement this")

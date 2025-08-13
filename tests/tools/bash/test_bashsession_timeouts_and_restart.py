@@ -190,3 +190,22 @@ async def test_bash_session_should_fail_due_to_session_not_started(tmp_path):
     result = await session.run("echo test")
     assert isinstance(result, ToolErrorInfo)
     assert "Session has not started" in result.message
+
+
+@pytest.mark.time_sensitive
+@pytest.mark.tool
+@pytest.mark.regression
+@pytest.mark.asyncio
+async def test_bash_session_timeout_sets_new_folder(tmp_path):
+    session = _BashSession()
+    session._timeout = 1.0
+    await session.start(str(tmp_path))
+
+    result1 = await session.run("sleep 2")
+    assert isinstance(result1, ToolErrorInfo)
+    assert "timed out" in result1.message
+
+    # DevNote: This is a benign command, that should never fail, but if the shell already timed out it will fail unless restarted.
+    result2 = await session.run("pwd")
+    assert isinstance(result2, ToolErrorInfo)
+    assert "timed out" in result2.message

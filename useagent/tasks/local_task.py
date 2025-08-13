@@ -4,6 +4,8 @@ from pathlib import Path
 from useagent.state.git_repo import GitRepository
 from useagent.tasks.task import Task
 
+_default_working_dir = Path("/tmp/working_dir")
+
 
 class LocalTask(Task):
     """
@@ -21,7 +23,7 @@ class LocalTask(Task):
         self,
         issue_statement: str,
         project_path: str,
-        working_dir: Path = Path("/tmp/working_dir"),
+        working_dir: Path = _default_working_dir,
     ):
         if not issue_statement:
             raise ValueError("issue_statement must be a non-empty string")
@@ -54,3 +56,7 @@ class LocalTask(Task):
         if self._working_dir.exists():
             shutil.rmtree(self._working_dir)
         shutil.copytree(self.project_path, self._working_dir)
+
+    @classmethod
+    def get_default_working_dir(cls) -> Path:
+        return _default_working_dir

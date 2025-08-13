@@ -7,6 +7,7 @@ import os
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 from loguru import logger
 
@@ -257,8 +258,17 @@ def make_bash_tool_for_agent(
                     "Current Bash Tool was in a timed-out state - restarting it"
                 )
                 _bash_tool_instance._session.stop()
-                await _bash_tool_instance._session.start()
-                logger.debug("Successfully restarted Bash Tool")
+                bash_tool_init_dir: Path | None = (
+                    ConfigSingleton.config.task_type.get_default_working_dir()
+                    if ConfigSingleton.is_initialized()
+                    else None
+                )
+                await _bash_tool_instance._session.start(
+                    init_dir=str(bash_tool_init_dir)
+                )
+                logger.debug(
+                    f"Successfully restarted Bash Tool. New session starts in {str(bash_tool_init_dir) if bash_tool_init_dir else '<<UNKNOWN>>'}"
+                )
 
             result = await _bash_tool(command, bash_call_delay_in_seconds)
             _bash_tool_instance._bash_history.append((command, agent_name, result))

@@ -3,6 +3,7 @@ import sys
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
 from pathlib import Path
 from tempfile import mkdtemp
+from typing import Literal
 
 from loguru import logger
 
@@ -27,7 +28,7 @@ def add_common_args(parser: ArgumentParser) -> None:
         "--output-type",
         type=parse_output_type,
         default=CodeChange,
-        help="Output model type to use. Options: answer, codechange.",
+        help="Output model type to use. Options: answer, action, codechange.",
     )
 
     parser.add_argument(
@@ -197,8 +198,34 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
 def build_and_register_config(args: Namespace) -> AppConfig:
     output_dir = os.path.abspath(args.output_dir) if args.output_dir else None
     ollama_kwargs = {} if not args.provider_url else {"provider_url": args.provider_url}
-    ConfigSingleton.init(model=args.model, output_dir=output_dir, **ollama_kwargs)
+    subcommand = args.command
+    task_type = _subcommand_to_task_type(subcommand=subcommand)
+    output_type = args.output_type
+    ConfigSingleton.init(
+        model=args.model,
+        output_dir=output_dir,
+        task_type=task_type,
+        output_type=output_type,
+        **ollama_kwargs,
+    )
+
     return ConfigSingleton.config
+
+
+def _subcommand_to_task_type(
+    subcommand: str,
+) -> Literal[GithubTask, LocalTask, UseBenchTask]:
+    match subcommand.strip().lower():
+        case "github":
+            return GithubTask
+        case "local":
+            return LocalTask
+        case "usebench":
+            return UseBenchTask
+        case _:
+            raise ArgumentTypeError(
+                f"Received unsuppert subcommand {subcommand} - cannot parse to supported Task Types"
+            )
 
 
 def setup_loguru(console_log_level: str, log_file: str | None) -> None:
@@ -212,7 +239,7 @@ def setup_loguru(console_log_level: str, log_file: str | None) -> None:
     )
 
 
-def parse_output_type(value: str) -> type:
+def parse_output_type(value: str) -> Literal[Answer, CodeChange, Action]:
     if not value:
         raise ArgumentTypeError("Received None for parsing output type")
     match value.strip().lower():

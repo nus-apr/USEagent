@@ -21,3 +21,7 @@ class TestTask(Task):
 
     def get_issue_statement(self) -> str:
         return self._issue_statement
+
+    @classmethod
+    def get_default_working_dir(cls) -> Path:
+        return Path("./test")
