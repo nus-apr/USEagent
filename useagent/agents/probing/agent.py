@@ -80,7 +80,7 @@ def init_agent(output_type, config: AppConfig | None = None, deps_type=None) -> 
     def add_output_description(self) -> str:
         if output_type is Path:
             return "You are supposed to return a pathlib.Path that specifies the projects root."
-        if output_type is list[Package]:
+        if output_type is list[Package] or "package" in str(output_type):
             return (
                 "You are supposed to find packages installed on the system and the development environment. These are meant to be available in path or by common package managers, and not file-based. \n"
                 + Package.get_output_instructions()
