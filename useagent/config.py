@@ -15,6 +15,7 @@ def _default_optimization_toggles() -> dict[str, bool]:
             "check-grep-command-arguments": True,
             "loosen-probing-agent-strictness": True,
             "stress-probing-agent-partial-environment": True,
+            "shorten-log-output": True,
         },
     )
 
