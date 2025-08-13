@@ -28,7 +28,7 @@ class _BashSession:
     _output_delay: float = 0.2  # seconds
     # DevNote: The timeout is quite large, but we have seen commands that need so long
     # An example is `apt-get install openjdk-jdk-8` or similar large packages.
-    _timeout: float = 2100.0  # seconds
+    _timeout: float = 2400.0  # seconds
     _sentinel: str = "<<exit>>"
 
     def __init__(self):

@@ -36,7 +36,7 @@ from useagent.pydantic_models.provides_output_instructions import (
 )
 from useagent.pydantic_models.task_state import TaskState
 from useagent.state.usage_tracker import UsageTracker
-from useagent.tools.bash import init_bash_tool
+from useagent.tools.bash import init_bash_tool, make_bash_tool_for_agent
 from useagent.tools.edit import init_edit_tools
 from useagent.tools.meta import (
     remove_diffs_from_diff_store,
@@ -101,6 +101,10 @@ def init_agent(
             Tool(view_task_state, takes_ctx=True, max_retries=0),
             Tool(remove_diffs_from_diff_store, takes_ctx=True, max_retries=5),
             Tool(view_command_history, max_retries=2),
+            Tool(
+                make_bash_tool_for_agent("META", bash_call_delay_in_seconds=0.25),
+                max_retries=4,
+            ),
         ],
         output_type=output_type,
         history_processors=[summarize_old_messages],
