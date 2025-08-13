@@ -1,9 +1,17 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import Literal
 
 from pydantic_ai.models import Model, infer_model
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
+
+from useagent.pydantic_models.output.action import Action
+from useagent.pydantic_models.output.answer import Answer
+from useagent.pydantic_models.output.code_change import CodeChange
+from useagent.tasks.github_task import GithubTask
+from useagent.tasks.local_task import LocalTask
+from useagent.tasks.usebench_task import UseBenchTask
 
 
 def _default_optimization_toggles() -> dict[str, bool]:
@@ -33,6 +41,9 @@ class AppConfig:
         default_factory=_default_optimization_toggles
     )
 
+    task_type: Literal[GithubTask, LocalTask, UseBenchTask] = (LocalTask,)
+    output_type: Literal[Action, CodeChange, Answer] = CodeChange
+
 
 class ConfigSingleton:
     _instance: AppConfig | None = None
@@ -59,6 +70,8 @@ class ConfigSingleton:
         model: str | Model,
         output_dir: str | None = None,
         provider_url: str | None = None,
+        task_type: Literal[GithubTask, LocalTask, UseBenchTask] = LocalTask,
+        output_type: Literal[Action, CodeChange, Answer] = CodeChange,
     ):
         if cls._instance is not None:
             raise RuntimeError("Config already initialized")
@@ -77,7 +90,12 @@ class ConfigSingleton:
             else:
                 model = infer_model(model)
 
-        cls._instance = AppConfig(model=model, output_dir=output_dir)
+        cls._instance = AppConfig(
+            model=model,
+            output_dir=output_dir,
+            task_type=task_type,
+            output_type=output_type,
+        )
 
     @classmethod
     def reset(cls):

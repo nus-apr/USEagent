@@ -8,6 +8,8 @@ from loguru import logger
 from useagent.state.git_repo import GitRepository
 from useagent.tasks.task import Task
 
+_default_working_dir = Path("/tmp/working_dir")
+
 
 class GithubTask(Task):
     """
@@ -25,7 +27,7 @@ class GithubTask(Task):
         self,
         issue_statement: str,
         repo_url: str,
-        working_dir: Path = Path("/tmp/working_dir"),
+        working_dir: Path = _default_working_dir,
         commit: str | None = None,
     ):
         if not issue_statement or not issue_statement.strip():
@@ -109,3 +111,7 @@ class GithubTask(Task):
         parts = re.split(r"[./\\]", path)
         parts = [p for p in parts if p and p not in {"github", "com", "git", "example"}]
         return ("_".join(parts)).lower().replace("-", "_")
+
+    @classmethod
+    def get_default_working_dir(cls) -> Path:
+        return _default_working_dir

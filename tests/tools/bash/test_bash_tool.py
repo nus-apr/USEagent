@@ -325,6 +325,7 @@ async def test_bash_tool_can_cause_a_timeout_but_will_recover(tmp_path):
 
     _bash_tool_instance = bash_file._bash_tool_instance
     assert _bash_tool_instance
+    _bash_tool_instance._session._timeout = 1.0
 
     # This will Error / Timeout
     await test_bash_tool("sleep 2")
@@ -333,3 +334,34 @@ async def test_bash_tool_can_cause_a_timeout_but_will_recover(tmp_path):
     result = await test_bash_tool("echo hello")
     assert result and isinstance(result, CLIResult)
     assert not _bash_tool_instance._session._timed_out
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_bash_tool_default_directory_after_restart(tmp_path):
+    # See Issue 19 on this matter
+    # Particularly there was a follow up issue that it would set it to the projects source (i.e. /useagent in the containers), which messed up things quite badly.
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"] = True
+
+    test_bash_tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=0.1)
+    # This will just pass
+    await test_bash_tool("echo hello")
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+    _bash_tool_instance._session._timeout = 1.0
+
+    # This will Error / Timeout
+    await test_bash_tool("sleep 2")
+
+    # This should pass again, as the shell ought to be restarted
+    result = await test_bash_tool("pwd")
+    assert result and isinstance(result, CLIResult)
+    assert not _bash_tool_instance._session._timed_out
+    assert "useagent" not in result.output.lower()
