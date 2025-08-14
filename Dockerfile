@@ -10,6 +10,7 @@ RUN apt-get update && \
     curl \
     git \
     lsb-release \
+    locales \
     apt-utils \
     openssh-client && \
     rm -rf /var/lib/apt/lists/*
@@ -25,7 +26,12 @@ RUN mkdir -p /root/.ssh && \
     chmod 600 /root/.ssh/config
 RUN ssh-keyscan -p 443 ssh.github.com >> /root/.ssh/known_hosts
 
-RUN  ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime
+
+ENV TZ=Etc/UTC
+RUN ln -fs /usr/share/zoneinfo/$TZ /etc/localtime && dpkg-reconfigure -f noninteractive tzdata && \
+    locale-gen en_US.UTF-8
+ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+
 WORKDIR /useagent
 
 # Copy only dependency files first for cached install
