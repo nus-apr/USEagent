@@ -12,6 +12,7 @@ RUN apt-get update && \
     lsb-release \
     locales \
     apt-utils \
+    tree \
     openssh-client && \
     rm -rf /var/lib/apt/lists/*
 
