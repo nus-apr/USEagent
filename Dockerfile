@@ -38,3 +38,5 @@ RUN --mount=type=ssh uv sync
 RUN uv run usebench-migration /useagent/data
 
 COPY . /useagent/
+
+ENV DEBIAN_FRONTEND=noninteractive
