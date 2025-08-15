@@ -1,5 +1,5 @@
 ---
-name: Environment Info Microagent
+name: C & CPP Info Microagent
 version: 1.0.0
 agents:
   - PROBE
