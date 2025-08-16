@@ -25,7 +25,7 @@ class _BashSession:
     _process: asyncio.subprocess.Process
 
     command: str = "/bin/bash"
-    _output_delay: float = 0.2  # seconds
+    _output_delay: float = 0.1  # seconds
     # DevNote: The timeout is quite large, but we have seen commands that need so long
     # An example is `apt-get install openjdk-jdk-8` or similar large packages.
     _timeout: float = 2400.0  # seconds
@@ -34,6 +34,7 @@ class _BashSession:
     def __init__(self):
         self._started = False
         self._timed_out = False
+        self._lock = asyncio.Lock()
 
     async def start(self, init_dir: str | None = None):
         if self._started:
@@ -73,87 +74,105 @@ class _BashSession:
 
     async def run(self, command: str):
         """Execute a command in the bash shell."""
-        if not self._started:
-            return ToolErrorInfo(
-                message="Session has not started.",
-                supplied_arguments=[ArgumentEntry("command", command)],
+        async with self._lock:
+            if not self._started:
+                return ToolErrorInfo(
+                    message="Session has not started.",
+                    supplied_arguments=[ArgumentEntry("command", command)],
+                )
+            if self._process.returncode is not None:
+                return CLIResult(
+                    system="tool must be restarted",
+                    error=f"bash has exited with returncode {self._process.returncode}",
+                )
+            if self._timed_out:
+                return ToolErrorInfo(
+                    message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
+                    supplied_arguments=[ArgumentEntry("command", command)],
+                )
+
+            if (
+                guard_rail_tool_error := useagent_guard_rail(
+                    command, supplied_arguments=[ArgumentEntry("command", command)]
+                )
+            ) is not None:
+                return guard_rail_tool_error
+
+            # we know these are not None because we created the process with PIPEs
+            assert self._process.stdin
+            assert self._process.stdout
+            assert self._process.stderr
+
+            # send command to the process
+            self._process.stdin.write(
+                command.encode() + f"; echo '{self._sentinel}'\n".encode()
             )
-        if self._process.returncode is not None:
-            return CLIResult(
-                system="tool must be restarted",
-                error=f"bash has exited with returncode {self._process.returncode}",
-            )
-        if self._timed_out:
-            return ToolErrorInfo(
-                message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
-                supplied_arguments=[ArgumentEntry("command", command)],
-            )
+            await self._process.stdin.drain()
+            output_bytes = bytearray()
+            sentinel_bytes = self._sentinel.encode()
 
-        if (
-            guard_rail_tool_error := useagent_guard_rail(
-                command, supplied_arguments=[ArgumentEntry("command", command)]
-            )
-        ) is not None:
-            return guard_rail_tool_error
+            # read output from the process, until the sentinel is found
+            try:
+                async with asyncio.timeout(self._timeout):
+                    while True:
+                        # await asyncio.sleep(self._output_delay)
+                        data = await self._process.stdout.read(
+                            4096
+                        )  # Read small chunks (4KB)
+                        if not data:
+                            break
+                        output_bytes.extend(data)
+                        if sentinel_bytes in output_bytes:
+                            idx = output_bytes.find(sentinel_bytes)
+                            output_bytes = output_bytes[:idx]
+                            break
+                        if len(output_bytes) > 50_000_000:  # e.g., 50MB limit
+                            raise ValueError("Output exceeds limit; command aborted")
+                        # if we read directly from stdout/stderr, it will wait forever for
+                        # EOF. use the StreamReader buffer directly instead.
+                        # output = (
+                        #    self._process.stdout._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue]
+                        # )  # pyright: ignore[reportAttributeAccessIssue]
+                        # if self._sentinel in output:
+                        #    # strip the sentinel and break
+                        #    output = output[: output.index(self._sentinel)]
+                        #    break
+            except TimeoutError:
+                self._timed_out = True
+                logger.warning(
+                    f"[Tool] Bash timed out after {self._timeout} for command {command}"
+                )
+                return ToolErrorInfo(
+                    message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
+                    supplied_arguments=[ArgumentEntry("command", command)],
+                )
+            output = output_bytes.decode(errors="replace").rstrip(
+                "\n"
+            )  # Decode once, handle errors
 
-        # we know these are not None because we created the process with PIPEs
-        assert self._process.stdin
-        assert self._process.stdout
-        assert self._process.stderr
+            if output.endswith("\n"):
+                output = output[:-1]
 
-        # send command to the process
-        self._process.stdin.write(
-            command.encode() + f"; echo '{self._sentinel}'\n".encode()
-        )
-        await self._process.stdin.drain()
+            error = (
+                self._process.stderr._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue]
+            )  # pyright: ignore[reportAttributeAccessIssue]
+            if error.endswith("\n"):
+                error = error[:-1]
 
-        # read output from the process, until the sentinel is found
-        try:
-            async with asyncio.timeout(self._timeout):
-                while True:
-                    await asyncio.sleep(self._output_delay)
-                    # if we read directly from stdout/stderr, it will wait forever for
-                    # EOF. use the StreamReader buffer directly instead.
-                    output = (
-                        self._process.stdout._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue]
-                    )  # pyright: ignore[reportAttributeAccessIssue]
-                    if self._sentinel in output:
-                        # strip the sentinel and break
-                        output = output[: output.index(self._sentinel)]
-                        break
-        except TimeoutError:
-            self._timed_out = True
-            logger.warning(
-                f"[Tool] Bash timed out after {self._timeout} for command {command}"
-            )
-            return ToolErrorInfo(
-                message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
-                supplied_arguments=[ArgumentEntry("command", command)],
-            )
+            # clear the buffers so that the next output can be read correctly
+            self._process.stdout._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
+            self._process.stderr._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
 
-        if output.endswith("\n"):
-            output = output[:-1]
+            error = (
+                error if error else None
+            )  # Make empty output properly None for Type Checking
+            output = (
+                output if output else None
+            )  # Make empty output properly None for Type Checking
+            if not error and not output:
+                output = f"(Command {command} finished silently)"
 
-        error = (
-            self._process.stderr._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue]
-        )  # pyright: ignore[reportAttributeAccessIssue]
-        if error.endswith("\n"):
-            error = error[:-1]
-
-        # clear the buffers so that the next output can be read correctly
-        self._process.stdout._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
-        self._process.stderr._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
-
-        error = (
-            error if error else None
-        )  # Make empty output properly None for Type Checking
-        output = (
-            output if output else None
-        )  # Make empty output properly None for Type Checking
-        if not error and not output:
-            output = f"(Command {command} finished silently)"
-
-        return CLIResult(output=output, error=error)
+            return CLIResult(output=output, error=error)
 
 
 class BashTool:
@@ -402,3 +421,37 @@ def get_bash_history() -> (
     if _bash_tool_instance is None:
         return []
     return list(_bash_tool_instance._bash_history)
+
+
+async def test_lsR_slow_behavior():
+    """Test function to reproduce the long runtime with ls -R in _BashSession."""
+    # Create a temporary directory with some nested structure
+    temp_dir = "../playground"
+    try:
+        base = Path(temp_dir)
+        # Initialize Bash session
+        session = _BashSession()
+        await session.start(init_dir=str(base))
+
+        # Run ls -R
+        import time
+
+        start = time.time()
+        result = await session.run("ls -R")
+        end = time.time()
+
+        print(f"ls -R finished in {end - start:.2f}s")
+        if isinstance(result, CLIResult):
+            print("Output sample:", result.output[:200000])
+        else:
+            print("Error:", result)
+
+        session.stop()
+
+    finally:
+        pass
+
+
+# Run the test
+# if __name__ == "__main__":
+#    asyncio.run(test_lsR_slow_behavior())
