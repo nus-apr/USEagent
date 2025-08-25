@@ -172,7 +172,21 @@ class _BashSession:
             if not error and not output:
                 output = f"(Command {command} finished silently)"
 
-            return CLIResult(output=output, error=error)
+            # lastly, we need to clip the output
+            if output:
+                final_output_lines = []
+                output_lines = output.split("\n")
+                for line in output_lines:
+                    if "Downloaded from central: https" in line:
+                        continue
+                    elif "Downloading from central: https" in line:
+                        continue
+                    else:
+                        final_output_lines.append(line)
+
+                return CLIResult(output="\n".join(final_output_lines), error=error)
+            else:
+                return CLIResult(output=output, error=error)
 
 
 class BashTool:
@@ -434,17 +448,16 @@ async def test_lsR_slow_behavior():
         await session.start(init_dir=str(base))
 
         # Run ls -R
-        import time
 
-        start = time.time()
-        result = await session.run("ls -R")
-        end = time.time()
+        result = await session.run(
+            "mvn dependency:get  -DgroupId=com.google.guava  -DartifactId=guava  -Dversion=32.1.2-jre  -U --no-transfer-progress "
+        )
+        print(result)
 
-        print(f"ls -R finished in {end - start:.2f}s")
-        if isinstance(result, CLIResult):
-            print("Output sample:", result.output[:200000])
-        else:
-            print("Error:", result)
+        # if result and isinstance(result, CLIResult):
+        #    print("Output sample:", result.output[:200000])
+        ## else:
+        #    print("Error:", result)
 
         session.stop()
 
