@@ -441,7 +441,7 @@ async def test_lsR_slow_behavior():
         end = time.time()
 
         print(f"ls -R finished in {end - start:.2f}s")
-        if isinstance(result, CLIResult):
+        if isinstance(result, CLIResult) and result and result.output:
             print("Output sample:", result.output[:200000])
         else:
             print("Error:", result)
