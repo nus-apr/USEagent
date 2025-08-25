@@ -31,11 +31,14 @@ Make sure to investigate and verify the commands you introduce into `run_tests.s
 Once you have successfully created a file, report with a git diff of the change that I can use as a patch to introduce this `run_tests.sh` to a newly checked out version of the repository. 
 EOF
 
-
 docker run --rm \
   --name useagent-turbo-test \
-  -e GEMINI_API_KEY=$GEMINI_API_KEY \
+  -e GEMINI_API_KEY="$GEMINI_API_KEY" \
   -v ./tmp:/task:rw \
   -v ./useagent-turbo-tmp-out:/output:rw \
   useagent-turbo:dev \
-  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py github --model $MODEL_NAME --task-file /task/task.md --repo-url $REPO_URL  --output-dir /output"
+  useagent github \
+    --model $MODEL_NAME \
+    --output-dir /output \
+    --repo-url $REPO_URL \
+    --task-file /task/task.md

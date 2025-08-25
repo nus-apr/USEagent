@@ -35,11 +35,17 @@ git clone $REPO_URL ./useagent-turbo-tmp
 rm -rf ./useagent-turbo-tmp-out
 mkdir ./useagent-turbo-tmp-out
 
+
 docker run --rm \
   --name useagent-turbo-test \
-  -e GEMINI_API_KEY=$GEMINI_API_KEY \
+  -e GEMINI_API_KEY="$GEMINI_API_KEY" \
   -v ./tmp:/task:rw \
   -v ./useagent-turbo-tmp:/input:rw \
   -v ./useagent-turbo-tmp-out:/output:rw \
   useagent-turbo:dev \
-  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py local --model $MODEL_NAME --task-file /task/task.md  --output-dir /output --project-directory /input"
+  useagent local \
+    --model $MODEL_NAME \
+    --output-dir /output \
+    --repo-url $REPO_URL \
+    --project-directory /input \
+    --task-file /task/task.md
