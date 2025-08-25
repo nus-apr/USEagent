@@ -305,7 +305,7 @@ def init_agent(
         edit_code_agent = init_edit_code_agent()
 
         edit_result = await edit_code_agent.run(
-            instruction, deps=ctx.deps, usage_limits=UsageLimits(request_limit=75)
+            instruction, deps=ctx.deps, usage_limits=UsageLimits(request_limit=125)
         )
         diff: DiffEntry = edit_result.output
         logger.info(f"[MetaAgent] edit_code result: {diff}")

@@ -53,6 +53,9 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 ENV TZ=Etc/UTC
 
-RUN useradd -m -u 10001 app && mkdir -p /workspace && chown -R app:app /workspace /app
+RUN apt-get update && apt-get install -y --no-install-recommends sudo && rm -rf /var/lib/apt/lists/*
+RUN useradd -m -u 10001 app && adduser app sudo \
+ && echo "app ALL=(ALL) NOPASSWD: /usr/bin/apt, /usr/bin/apt-get" >/etc/sudoers.d/010-app-apt
 USER app
+
 WORKDIR /workspace
