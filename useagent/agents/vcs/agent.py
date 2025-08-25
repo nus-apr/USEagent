@@ -18,6 +18,7 @@ from useagent.tools.git import (
     find_merge_conflicts,
     view_commit_as_diff,
 )
+from useagent.tools.meta import select_diff_from_diff_store, view_task_state
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
@@ -47,6 +48,8 @@ def init_agent(
             Tool(find_merge_conflicts),
             Tool(check_for_merge_conflict_markers),
             Tool(extract_diff),
+            Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
+            Tool(view_task_state, takes_ctx=True),
         ],
     )
     return agent
