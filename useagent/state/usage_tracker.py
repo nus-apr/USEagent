@@ -2,7 +2,7 @@ from collections import defaultdict
 
 from loguru import logger
 from pydantic import validate_call
-from pydantic_ai.usage import Usage
+from pydantic_ai.usage import RunUsage
 
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 
@@ -21,12 +21,12 @@ class UsageTracker:
     # TODO: Investigate what is in the `details` for which model, and what of that we want to use for ourselves.
 
     def __init__(self) -> None:
-        self.usage: dict[NonEmptyStr, Usage] = {}
+        self.usage: dict[NonEmptyStr, RunUsage] = {}
         self.counts: defaultdict[str, int] = defaultdict(int)
         logger.debug("Initialized a new UsageTracker")
 
     @validate_call
-    def add(self, name: NonEmptyStr, usage: Usage) -> None:
+    def add(self, name: NonEmptyStr, usage: RunUsage) -> None:
         """
         Adds a given usage to the tracker.
         The given key will be 'extended' by adding a incrementing number of how often this tool was seen.
@@ -56,9 +56,8 @@ class UsageTracker:
         return {
             name: {
                 "requests": usage.requests,
-                "request_tokens": usage.request_tokens,
-                "response_tokens": usage.response_tokens,
-                "total_tokens": usage.total_tokens,
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
                 "details": usage.details,
             }
             for name, usage in self.usage.items()
@@ -75,11 +74,10 @@ class UsageTracker:
         """
         tracker = cls()
         for name, usage_data in data.items():
-            usage = Usage(
+            usage = RunUsage(
                 requests=usage_data.get("requests", 0),  # pyright: ignore
-                request_tokens=usage_data.get("request_tokens"),  # pyright: ignore
-                response_tokens=usage_data.get("response_tokens"),  # pyright: ignore
-                total_tokens=usage_data.get("total_tokens"),  # pyright: ignore
+                input_tokens=usage_data.get("input_tokens"),  # pyright: ignore
+                output_tokens=usage_data.get("output_tokens"),  # pyright: ignore
                 details=usage_data.get("details"),  # pyright: ignore
             )
             tracker.usage[name] = usage
