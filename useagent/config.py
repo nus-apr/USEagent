@@ -28,6 +28,7 @@ def _default_optimization_toggles() -> dict[str, bool]:
             "hide-hidden-folders-from-finds": True,
             "useagent-file-path-guard": True,
             "shorten-log-output": True,
+            "vcs-agent-answer-instructions": True,
         },
     )
 

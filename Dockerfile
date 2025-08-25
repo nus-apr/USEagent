@@ -1,53 +1,58 @@
 ARG BASE_IMAGE=ubuntu:24.04
-FROM ${BASE_IMAGE}
-LABEL maintainer.Yuntong="Yuntong Zhang <ang.unong@gmail.com>"
-LABEL maintainer.Leonhard="Leonhard Applis <leonhard.applis@protonmail.com>"
 
+# ---- builder ----
+FROM ${BASE_IMAGE} AS builder
+LABEL stage=builder
 
-RUN sed -i 's|http://archive.ubuntu.com/ubuntu|http://ossmirror.mycloud.services/os/linux/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources \
-   && sed -i 's|http://security.ubuntu.com/ubuntu|http://ossmirror.mycloud.services/os/linux/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources 
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ca-certificates \
-    tzdata \
-    curl \
-    git \
-    lsb-release \
-    locales \
-    apt-utils \
-    tree \
-    openssh-client && \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates tzdata curl git openssh-client python3 python3-venv lsb-release && \
     rm -rf /var/lib/apt/lists/*
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
 RUN mkdir -p /root/.ssh && \
-    echo "Host github.com\n\
-    Hostname ssh.github.com\n\
-    Port 443\n\
-    User git" > /root/.ssh/config && \
+    printf "Host github.com\nHostname ssh.github.com\nPort 443\nUser git\n" > /root/.ssh/config && \
     chmod 600 /root/.ssh/config
 RUN ssh-keyscan -p 443 ssh.github.com >> /root/.ssh/known_hosts
 
+# First: Copy in dependencies & install them, to have them cached even if project src changes
+WORKDIR /src
+COPY pyproject.toml uv.lock* README.md /src/
+RUN --mount=type=ssh uv sync --all-extras --dev --no-install-project
+# Now: Copy in Project source and build
+COPY . /src/
+RUN --mount=type=ssh uv build
 
+# venv with system Python, then install the wheel there
+RUN uv venv --python /usr/bin/python3 /opt/venv
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+RUN uv pip install /src/dist/*.whl
+
+# run usebench migration and put it in a nearby folder to copy
+RUN mkdir -p /artifact/data && /opt/venv/bin/usebench-migration /artifact/data
+
+# ---- runtime ----
+FROM ${BASE_IMAGE}
+LABEL maintainer.Yuntong="Yuntong Zhang <ang.unong@gmail.com>"
+LABEL maintainer.Leonhard="Leonhard Applis <leonhard.applis@protonmail.com>"
+
+RUN sed -i 's|http://archive.ubuntu.com/ubuntu|http://ossmirror.mycloud.services/os/linux/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources \
+   && sed -i 's|http://security.ubuntu.com/ubuntu|http://ossmirror.mycloud.services/os/linux/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources 
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates tzdata curl git openssh-client python3 python3-venv lsb-release  && \
+    rm -rf /var/lib/apt/lists/*
+
+# bring only the ready venv and migrated data
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /artifact/data /app/data
+
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
 ENV TZ=Etc/UTC
-RUN ln -fs /usr/share/zoneinfo/$TZ /etc/localtime && dpkg-reconfigure -f noninteractive tzdata && \
-    locale-gen en_US.UTF-8
-ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
-WORKDIR /useagent
-
-# Copy only dependency files first for cached install
-COPY pyproject.toml poetry.lock* uv.lock /useagent/
-
-# Install deps including private repos (requires SSH mount)
-RUN --mount=type=ssh uv sync
-
-# Run data migration from usebench
-RUN uv run usebench-migration /useagent/data
-
-COPY . /useagent/
-
-ENV DEBIAN_FRONTEND=noninteractive
+RUN useradd -m -u 10001 app && mkdir -p /workspace && chown -R app:app /workspace /app
+USER app
+WORKDIR /workspace

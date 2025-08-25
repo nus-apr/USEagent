@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "useagent-turbo-dev"
 version = "0.1.0"
@@ -5,31 +9,35 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "usebench @ git+ssh://git@github.com/nus-apr/use-bench.git@0a985ae",
-    "loguru>=0.7.3",
-    "pydantic-ai[logfire]>=0.4.9",
-    "pytest-asyncio>=1.0.0",
+  "usebench @ git+ssh://git@github.com/nus-apr/use-bench.git@0a985ae",
+  "loguru>=0.7.3",
+  "pydantic-ai[logfire]>=0.7.4",
 ]
+
+# Optional: define a CLI so you don't need python -m ...
+[project.scripts]
+useagent = "useagent.main:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "pytest-asyncio",
-    "pytest-random-order",
-    "pytest-cov",
-    "black==25.1.0",
-    "isort==6.0.1",
-    "pyupgrade==3.20.0",
-    "ruff==0.12.3",
-    "pyright==1.1.403",
-    "pre-commit==4.2.0",
+  "pytest",
+  "pytest-asyncio",
+  "pytest-random-order",
+  "pytest-cov",
+  "black==25.1.0",
+  "isort==6.0.1",
+  "pyupgrade==3.20.0",
+  "ruff==0.12.3",
+  "pyright==1.1.403",
+  "pre-commit==4.2.0",
 ]
 
 [tool.setuptools]
-packages = ["useagent"]
+include-package-data = true
 
-[tool.setuptools.package-dir]
-useagent = "useagent"
+[tool.setuptools.packages.find]
+include = ["useagent", "useagent.*", "microagents","microagents.*"]
 
-[tool.pytest.ini_options]
-addopts = "--import-mode=importlib"
+[tool.setuptools.package-data]
+useagent = ["**/*.txt", "**/*.json", "**/*.yaml", "**/*.yml", "**/*.md"]
+microagents = ["**/*.md"]

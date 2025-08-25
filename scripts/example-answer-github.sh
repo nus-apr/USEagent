@@ -13,9 +13,18 @@ if [[ "$1" == "--build" ]]; then
   DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
 fi
 
+TASK_DESC='What is the name of this software project/library?'
+REPO_URL=https://github.com/octocat/Hello-World.git
+MODEL_NAME=google-gla:gemini-2.5-flash
+
 docker run --rm \
   --name useagent-turbo-test \
   -e GEMINI_API_KEY=$GEMINI_API_KEY \
   -v ./useagent-turbo-tmp-out:/output \
   useagent-turbo:dev \
-  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py github --output-type answer --model google-gla:gemini-2.0-flash --task-description 'What is the name of this repository?' --repo-url https://github.com/octocat/Hello-World.git --output-dir /output"
+  useagent github \
+    --model $MODEL_NAME \
+    --repo-url $REPO_URL \
+    --output-dir /output \
+    --output-type answer \
+    --task-description "$TASK_DESC"

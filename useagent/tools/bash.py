@@ -454,11 +454,6 @@ async def test_lsR_slow_behavior():
         )
         print(result)
 
-        # if result and isinstance(result, CLIResult):
-        #    print("Output sample:", result.output[:200000])
-        ## else:
-        #    print("Error:", result)
-
         session.stop()
 
     finally:

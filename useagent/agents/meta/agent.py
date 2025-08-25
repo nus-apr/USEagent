@@ -124,7 +124,7 @@ def init_agent(
     @meta_agent.instructions
     def add_output_description() -> str:
         if isinstance(output_type, ProvidesOutputInstructions):
-            logger.info(
+            logger.debug(
                 f"[Setup] MetaAgent is expected to output a `{str(output_type)}`, adding output instructions."
             )
             return (
