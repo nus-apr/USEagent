@@ -13,9 +13,19 @@ if [[ "$1" == "--build" ]]; then
   DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
 fi
 
+
+TASK_DESC='Please use git to checkout the initial commit of the repository.'
+REPO_URL=https://github.com/octocat/Hello-World.git
+MODEL_NAME=google-gla:gemini-2.5-flash
+
 docker run --rm \
   --name useagent-turbo-test \
   -e GEMINI_API_KEY=$GEMINI_API_KEY \
   -v ./useagent-turbo-tmp-out:/output \
   useagent-turbo:dev \
-  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py github --output-type action --model google-gla:gemini-2.0-flash --task-description 'Please use git to checkout the commit 5 commits ago.' --repo-url https://github.com/octocat/Hello-World.git --output-dir /output"
+  useagent github \
+    --model $MODEL_NAME \
+    --repo-url $REPO_URL \
+    --output-dir /output \
+    --output-type action \
+    --task-description "$TASK_DESC"
