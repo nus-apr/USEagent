@@ -18,7 +18,7 @@ RUN ssh-keyscan -p 443 ssh.github.com >> /root/.ssh/known_hosts
 
 # First: Copy in dependencies & install them, to have them cached even if project src changes
 WORKDIR /src
-COPY pyproject.toml poetry.lock* README.md /src/
+COPY pyproject.toml uv.lock* README.md /src/
 RUN --mount=type=ssh uv sync --all-extras --dev --no-install-project
 # Now: Copy in Project source and build
 COPY . /src/

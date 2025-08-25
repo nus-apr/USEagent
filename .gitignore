@@ -21,4 +21,3 @@ tmp
 
 private-*
 .env
-uv.lock
