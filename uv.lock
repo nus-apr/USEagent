@@ -2134,14 +2134,14 @@ requires-dist = [
     { name = "pytest-random-order", marker = "extra == 'dev'" },
     { name = "pyupgrade", marker = "extra == 'dev'", specifier = "==3.20.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.12.3" },
-    { name = "usebench", git = "ssh://git@github.com/nus-apr/use-bench.git?rev=f2cf19e" },
+    { name = "usebench", git = "ssh://git@github.com/nus-apr/use-bench.git?rev=0a985ae" },
 ]
 provides-extras = ["dev"]
 
 [[package]]
 name = "usebench"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/nus-apr/use-bench.git?rev=f2cf19e#f2cf19ec9aa504c81ce01834efb6d0429dcda979" }
+source = { git = "ssh://git@github.com/nus-apr/use-bench.git?rev=0a985ae#0a985ae7d99a5a3bde0cf1b863ebf36c8d2307d6" }
 dependencies = [
     { name = "coverage" },
     { name = "datasets" },

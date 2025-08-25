@@ -315,9 +315,30 @@ async def _bash_tool(
     if result and isinstance(result, ToolErrorInfo):
         return result
 
-    logger.info(
-        f"[Tool] bash_tool result: output={result.output}, error={result.error}"
-    )
+    if (
+        result
+        and result.output
+        and ConfigSingleton.is_initialized()
+        and ConfigSingleton.config.optimization_toggles["shorten-log-output"]
+    ):
+        output_by_lines = result.output.splitlines()
+        if len(output_by_lines) > 80:
+            to_log = "\n".join(
+                output_by_lines[:40]
+                + [
+                    "[[ shortened in log for readability, presented in full for agent ]]"
+                ]
+                + output_by_lines[-40:]
+            )
+        else:
+            to_log = result.output
+        logger.info(
+            f"[Tool] bash_tool shortened result: output={to_log}, error={result.error}"
+        )
+    else:
+        logger.info(
+            f"[Tool] bash_tool result: output={result.output}, error={result.error}"
+        )
 
     return result
 

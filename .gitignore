@@ -13,6 +13,8 @@ __pycache__/
 data/
 useagent-turbo-tmp
 useagent-turbo-tmp-out
+tmp/
+.tmp/
 
 private-*
 .env

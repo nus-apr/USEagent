@@ -71,7 +71,7 @@ def conditional_microagents_triggers(microagents: list[MicroAgent]):
                 triggered = [
                     m for m in relevant if any(t.lower() in prompt for t in m.triggers)
                 ]
-                logger.debug(
+                logger.trace(
                     f"[Microagent] {agent.agent_id} triggered {len(triggered)} of its {len(relevant)} Microagents - {[p.name for p in triggered]}"
                 )
                 return (
