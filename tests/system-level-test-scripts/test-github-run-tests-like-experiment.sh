@@ -49,8 +49,13 @@ EOF
 
 docker run --rm \
   --name useagent-turbo-test \
-  -e GEMINI_API_KEY=$GEMINI_API_KEY \
-  -v ./tmp:/task:rw \
+  -e GEMINI_API_KEY="$GEMINI_API_KEY" \
+  -v ./useagent-turbo-tmp:/input:rw \
   -v ./useagent-turbo-tmp-out:/output:rw \
   useagent-turbo:dev \
-  /bin/bash -c "PYTHONPATH=. uv run python useagent/main.py github --model $MODEL_NAME --task-file /task/task.md --repo-url $REPO_URL  --output-dir /output"
+  useagent github \
+    --model $MODEL_NAME \
+    --output-dir /output \
+    --project-directory /input \
+    --task-file /task/task.md
+
