@@ -1,14 +1,14 @@
 import json
 
 import pytest
-from pydantic_ai.usage import Usage
+from pydantic_ai.usage import RunUsage
 
 from useagent.state.usage_tracker import UsageTracker
 
 
 def test_add_should_not_create_base_key_without_call_suffix() -> None:
     tracker = UsageTracker()
-    tracker.add("foo", Usage(requests=1))
+    tracker.add("foo", RunUsage(requests=1))
 
     assert "foo" not in tracker.usage
     assert "foo-call-no-1" in tracker.usage
@@ -17,8 +17,8 @@ def test_add_should_not_create_base_key_without_call_suffix() -> None:
 def test_add_should_store_usage_with_incrementing_keys() -> None:
     tracker = UsageTracker()
 
-    u1 = Usage(requests=1)
-    u2 = Usage(requests=2)
+    u1 = RunUsage(requests=1)
+    u2 = RunUsage(requests=2)
 
     tracker.add("foo", u1)
     tracker.add("foo", u2)
@@ -38,9 +38,9 @@ def test_add_should_store_usage_with_incrementing_keys() -> None:
 def test_group_should_sum_usage_per_base_name() -> None:
     tracker = UsageTracker()
 
-    tracker.add("foo", Usage(requests=1, request_tokens=5))
-    tracker.add("foo", Usage(requests=2, request_tokens=10))
-    tracker.add("bar", Usage(requests=3))
+    tracker.add("foo", RunUsage(requests=1, input_tokens=5))
+    tracker.add("foo", RunUsage(requests=2, input_tokens=10))
+    tracker.add("bar", RunUsage(requests=3))
 
     grouped = tracker.group()
 
@@ -51,13 +51,13 @@ def test_group_should_sum_usage_per_base_name() -> None:
     bar_usage = grouped.usage["bar"]
 
     assert foo_usage.requests == 3
-    assert foo_usage.request_tokens == 15
+    assert foo_usage.input_tokens == 15
     assert bar_usage.requests == 3
 
 
 def test_group_should_not_mutate_original_tracker() -> None:
     tracker = UsageTracker()
-    tracker.add("foo", Usage(requests=1))
+    tracker.add("foo", RunUsage(requests=1))
     grouped = tracker.group()
 
     assert "foo" not in tracker.usage
@@ -69,11 +69,10 @@ def test_to_json_should_serialize_usage_dict() -> None:
 
     tracker.add(
         "foo",
-        Usage(
+        RunUsage(
             requests=1,
-            request_tokens=2,
-            response_tokens=3,
-            total_tokens=5,
+            input_tokens=2,
+            output_tokens=3,
             details={"x": 9},
         ),
     )
@@ -84,16 +83,15 @@ def test_to_json_should_serialize_usage_dict() -> None:
     usage_json = result["foo-call-no-1"]
 
     assert usage_json["requests"] == 1
-    assert usage_json["request_tokens"] == 2
-    assert usage_json["response_tokens"] == 3
-    assert usage_json["total_tokens"] == 5
+    assert usage_json["input_tokens"] == 2
+    assert usage_json["output_tokens"] == 3
     assert usage_json["details"] == {"x": 9}
 
 
 @pytest.mark.parametrize("invalid_key", ["", "   ", "\n"])
 def test_add_should_reject_invalid_nonemptystr_keys(invalid_key) -> None:
     tracker = UsageTracker()
-    usage = Usage(requests=1)
+    usage = RunUsage(requests=1)
 
     with pytest.raises(ValueError):
         tracker.add(invalid_key, usage)
@@ -101,8 +99,8 @@ def test_add_should_reject_invalid_nonemptystr_keys(invalid_key) -> None:
 
 def test_to_json_and_from_json_should_roundtrip_with_two_entries(tmp_path) -> None:
     tracker = UsageTracker()
-    tracker.add("foo", Usage(requests=1, request_tokens=10))
-    tracker.add("bar", Usage(requests=2, response_tokens=20))
+    tracker.add("foo", RunUsage(requests=1, input_tokens=10))
+    tracker.add("bar", RunUsage(requests=2, output_tokens=20))
 
     path = tmp_path / "usage.json"
     with path.open("w") as f:
@@ -113,17 +111,17 @@ def test_to_json_and_from_json_should_roundtrip_with_two_entries(tmp_path) -> No
     restored = UsageTracker.from_json(loaded)
 
     assert restored.usage["foo-call-no-1"].requests == 1
-    assert restored.usage["foo-call-no-1"].request_tokens == 10
+    assert restored.usage["foo-call-no-1"].input_tokens == 10
     assert restored.usage["bar-call-no-1"].requests == 2
-    assert restored.usage["bar-call-no-1"].response_tokens == 20
+    assert restored.usage["bar-call-no-1"].output_tokens == 20
 
 
 def test_group_should_correctly_sum_interleaved_keys() -> None:
     tracker = UsageTracker()
     tracker.usage = {
-        "foo-call-no-1": Usage(requests=1),
-        "foo-call-no-9": Usage(requests=2),
-        "bar-call-no-2": Usage(requests=3),
+        "foo-call-no-1": RunUsage(requests=1),
+        "foo-call-no-9": RunUsage(requests=2),
+        "bar-call-no-2": RunUsage(requests=3),
     }
 
     grouped = tracker.group()
@@ -162,9 +160,8 @@ def test_from_json_should_work_with_partial_fields() -> None:
     data = {
         "foo-call-no-1": {
             "requests": 1,
-            "request_tokens": None,
-            "response_tokens": None,
-            "total_tokens": None,
+            "input_tokens": None,
+            "output_tokens": None,
             "details": None,
         }
     }

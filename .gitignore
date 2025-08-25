@@ -2,6 +2,10 @@
 **.DS_Store
 .env
 
+dist
+.ruff_cache
+.pytest_cache
+
 __pycache__/
 
 .venv/
@@ -13,8 +17,12 @@ __pycache__/
 data/
 useagent-turbo-tmp
 useagent-turbo-tmp-out
+<<<<<<< HEAD
 tmp/
 .tmp/
+=======
+tmp
+>>>>>>> main
 
 private-*
 .env
