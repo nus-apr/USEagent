@@ -33,9 +33,22 @@ def _default_optimization_toggles() -> dict[str, bool]:
     )
 
 
+def _default_context_window_limits() -> dict[str, int]:
+    # Int value represents max-length in 'tokens', not in string length.
+    # Return '-1' to mark unknown
+    return defaultdict(
+        lambda: -1,
+        {
+            "google-gla:gemini-2.5-flash": 1048576,  # As seen in pydantic AI 0.7.5 on 25.08.2025
+            "openai:gpt-5-mini": 272000,  # Looked up on 26.08.2025
+        },
+    )
+
+
 @dataclass
 class AppConfig:
     model: Model
+    model_descriptor: str = "UNK"
     output_dir: str | None = None
 
     optimization_toggles: dict[str, bool] = field(
@@ -44,6 +57,12 @@ class AppConfig:
 
     task_type: Literal[GithubTask, LocalTask, UseBenchTask] = (LocalTask,)
     output_type: Literal[Action, CodeChange, Answer] = CodeChange
+    context_window_limits: dict[str, int] = field(
+        default_factory=_default_context_window_limits
+    )
+
+    def lookup_model_context_window(self) -> int:
+        return self.context_window_limits[self.model_descriptor]
 
 
 class ConfigSingleton:
@@ -77,7 +96,9 @@ class ConfigSingleton:
         if cls._instance is not None:
             raise RuntimeError("Config already initialized")
 
+        model_desc = "UNK"
         if isinstance(model, str):
+            model_desc = model
             if model.startswith("ollama:"):
                 model_name = model.split(":", 1)[1]
                 if not provider_url:
@@ -96,6 +117,7 @@ class ConfigSingleton:
             output_dir=output_dir,
             task_type=task_type,
             output_type=output_type,
+            model_descriptor=model_desc,
         )
 
     @classmethod

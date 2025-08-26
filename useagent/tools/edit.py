@@ -3,6 +3,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from useagent.common.context_window import fit_message_into_context_window
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
 from useagent.tools.common import useagent_guard_rail
@@ -166,6 +167,9 @@ async def view(
             file_content = "\n".join(file_lines[init_line - 1 :])
         else:
             file_content = "\n".join(file_lines[init_line - 1 : final_line])
+
+    # Possibly: Files are large, and exceed the context window. We account for them by optionally shortening them, if configured.
+    file_content = fit_message_into_context_window(file_content)
 
     return CLIResult(output=_make_output(file_content, str(path), init_line=init_line))
 

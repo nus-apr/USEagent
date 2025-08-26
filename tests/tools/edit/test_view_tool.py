@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from useagent.config import ConfigSingleton
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.edit import init_edit_tools, view
@@ -127,3 +128,52 @@ async def test_view_directory_listing(tmp_path: Path):
     assert isinstance(result, CLIResult)
     assert "file1.txt" in result.output
     assert "file2.txt" in result.output
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_view_file_for_very_long_file_should_be_shortened(
+    tmp_path: Path, monkeypatch
+):
+    # Issue #30 - long files should be shorted
+    ConfigSingleton.reset()
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    ConfigSingleton.init("google-gla:gemini-2.5-flash")
+    ConfigSingleton.config.context_window_limits["google-gla:gemini-2.5-flash"] = 150
+    init_edit_tools(str(tmp_path))
+
+    file = tmp_path / "example.txt"
+    content = "very long text\n" * 250
+    file.write_text(content)
+
+    result = await view(str(file))
+    assert isinstance(result, CLIResult)
+
+    assert "[[ ... Cut to fit Context Window ... ]]" in result.output
+
+    ConfigSingleton.reset()
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_view_file_for_short_file_should_not_be_shortened(
+    tmp_path: Path, monkeypatch
+):
+    # Issue #30 - short files are ok
+    ConfigSingleton.reset()
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    ConfigSingleton.init("google-gla:gemini-2.5-flash")
+    ConfigSingleton.config.context_window_limits["google-gla:gemini-2.5-flash"] = 10000
+    init_edit_tools(str(tmp_path))
+
+    file = tmp_path / "example.txt"
+    content = "short text\n" * 25
+    file.write_text(content)
+
+    result = await view(str(file))
+    assert isinstance(result, CLIResult)
+    assert "[[ ... Cut to fit Context Window ... ]]" not in result.output
+
+    ConfigSingleton.reset()

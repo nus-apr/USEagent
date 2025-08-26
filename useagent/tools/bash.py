@@ -11,6 +11,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from useagent.common.context_window import fit_message_into_context_window
 from useagent.config import ConfigSingleton
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.tools.cliresult import CLIResult
@@ -172,7 +173,31 @@ class _BashSession:
             if not error and not output:
                 output = f"(Command {command} finished silently)"
 
-            return CLIResult(output=output, error=error)
+        # clear the buffers so that the next output can be read correctly
+        self._process.stdout._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
+        self._process.stderr._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
+
+        error = (
+            error if error else None
+        )  # Make empty output properly None for Type Checking
+        output = (
+            output if output else None
+        )  # Make empty output properly None for Type Checking
+        if not error and not output:
+            output = f"(Command {command} finished silently)"
+
+        # Possibly: Command outputs can be large / noisy, and exceed the context window.
+        # We account for them by optionally shortening them, if configured (See Issue #30)
+        output = (
+            fit_message_into_context_window(output)
+            if isinstance(output, str)
+            else output
+        )
+        error = (
+            fit_message_into_context_window(error) if isinstance(error, str) else error
+        )
+
+        return CLIResult(output=output, error=error)
 
 
 class BashTool:
