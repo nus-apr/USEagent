@@ -41,5 +41,5 @@ include-package-data = true
 include = ["useagent", "useagent.*", "microagents","microagents.*"]
 
 [tool.setuptools.package-data]
-useagent = ["**/*.txt", "**/*.json", "**/*.yaml", "**/*.yml", "**/*.md"]
+useagent = ["**/*.txt", "**/*.json", "**/*.yaml", "**/*.yml", "**/*.md", "**/*.model"]
 microagents = ["**/*.md"]
