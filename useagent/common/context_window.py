@@ -30,9 +30,11 @@ def fit_message_into_context_window(content: str) -> str:
 
     Does nothing if either the model is not known or the model window is not exceeded.
     """
-    if ConfigSingleton.is_initialized() and (
-        context_limit := ConfigSingleton.config.lookup_model_context_window() > 0
+    if (
+        ConfigSingleton.is_initialized()
+        and ConfigSingleton.config.lookup_model_context_window() > 0
     ):
+        context_limit = ConfigSingleton.config.lookup_model_context_window()
         model_name = ConfigSingleton.config.model_descriptor
         if "google" in model_name or "gemini" in model_name:
             return _fit_message_into_context_window(
@@ -76,9 +78,18 @@ def _fit_message_into_context_window(
             cut_ids = beginning + marker_ids + end
             return tokenizer.decode(cut_ids)  # type: ignore[attr-defined]
         case Encoding():
-            # TODO: add real support for ChatGPT
-            logger.warning("CHATGPT Context Windows are currently not Supported [TODO]")
-            return content
+            ids = tokenizer.encode(content)
+            if len(ids) <= effective_max_length:
+                return content
+
+            marker_ids = tokenizer.encode(marker)
+            keep = max_tokens - len(marker_ids)
+            half = keep // 2
+
+            beginning = ids[:half]
+            end = ids[-(keep - half) :]
+            cut_ids = beginning + marker_ids + end
+            return tokenizer.decode(cut_ids)
         case _:
             logger.warning(
                 "Tried to tokenize but received an unsupported Tokenizer - returning initial content."
@@ -100,7 +111,16 @@ def _lookup_tokenizer_for_google_models(
 def _lookup_tiktoken_encoding(model_descriptor: str) -> Encoding:
     # See Tiktokens Github Repository: https://github.com/openai/tiktoken
     # And particularly their Encoding Lookup: https://github.com/openai/tiktoken/blob/main/tiktoken/model.py
-    encoder = tiktoken.encoding_for_model(model_descriptor)
-    if encoder:
+    try:
+        # TODO: Better lookup here, our model names will likely not match
+        encoder = tiktoken.encoding_for_model(model_descriptor)
+
+    except KeyError:
+        logger.debug(
+            f"Tried to lookup encoding for {model_descriptor}, failed and default to o200k_base"
+        )
+        return tiktoken.get_encoding(
+            "o200k_base"
+        )  # GPT4 and 5 have o200k_base, it's the most common
+    else:
         return encoder
-    return tiktoken.encoding_for_model("gpt-4o")

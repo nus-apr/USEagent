@@ -1,9 +1,12 @@
 import pytest
 from sentencepiece import SentencePieceProcessor
+from tiktoken import Encoding
 
 from useagent.common.context_window import (
     _fit_message_into_context_window,
+    _lookup_tiktoken_encoding,
     _lookup_tokenizer_for_google_models,
+    fit_message_into_context_window,
 )
 from useagent.config import ConfigSingleton
 
@@ -21,6 +24,17 @@ def reset_config():
 # Helpers
 def _token_len(tokenizer: SentencePieceProcessor, text: str) -> int:
     return len(tokenizer.encode(text))
+
+
+def _count_tokens(enc: Encoding, text: str) -> int:
+    return len(enc.encode(text))
+
+
+@pytest.fixture(scope="module")
+def tk_encoding() -> Encoding:
+    enc = _lookup_tiktoken_encoding("gpt-5")
+    assert isinstance(enc, Encoding)
+    return enc
 
 
 @pytest.fixture(scope="module")
@@ -152,4 +166,146 @@ def test_max_tokens_zero_should_leave_message_unfiltered(
     res = _fit_message_into_context_window(
         msg, spm_tokenizer, max_tokens=0, safety_buffer=0.9
     )
+    assert res == msg
+
+
+def test_tk_short_message_should_be_kept(tk_encoding: Encoding):
+    msg = "Hello World"
+    res = _fit_message_into_context_window(
+        msg, tk_encoding, max_tokens=1000, safety_buffer=0.9
+    )
+    assert res == msg
+
+
+def test_tk_message_exceeding_max_tokens_should_contain_marker(tk_encoding: Encoding):
+    msg = "lorem ipsum " * 500
+    res = _fit_message_into_context_window(
+        msg, tk_encoding, max_tokens=200, safety_buffer=0.9
+    )
+    assert "[[ ... Cut to fit Context Window ... ]]" in res
+
+
+def test_tk_message_exceeding_max_tokens_should_be_shorter(tk_encoding: Encoding):
+    msg = "lorem ipsum " * 500
+    res = _fit_message_into_context_window(
+        msg, tk_encoding, max_tokens=200, safety_buffer=0.9
+    )
+    assert len(res) < len(msg)
+
+
+def test_tk_safety_buffer_should_influence_cut(tk_encoding: Encoding):
+    base = "alpha beta gamma delta " * 120
+    tokens = _count_tokens(tk_encoding, base)
+    max_tokens = tokens + 30
+    keep_relaxed = _fit_message_into_context_window(
+        base, tk_encoding, max_tokens=max_tokens, safety_buffer=0.95
+    )
+    keep_aggressive = _fit_message_into_context_window(
+        base, tk_encoding, max_tokens=max_tokens, safety_buffer=0.5
+    )
+    assert keep_relaxed == base
+    assert "[[ ... Cut to fit Context Window ... ]]" in keep_aggressive
+
+
+def test_tk_below_max_but_above_effective_should_trim(tk_encoding: Encoding):
+    msg = "zeta eta theta iota kappa " * 200
+    n = _count_tokens(tk_encoding, msg)
+    max_tokens = n + 50
+    safety_buffer = 0.8
+    res = _fit_message_into_context_window(
+        msg, tk_encoding, max_tokens=max_tokens, safety_buffer=safety_buffer
+    )
+    assert "[[ ... Cut to fit Context Window ... ]]" in res
+    assert _count_tokens(tk_encoding, res) <= max_tokens
+
+
+@pytest.mark.parametrize("text", ["", "\t", "\n", "    "])
+def test_tk_empty_strings_should_roundtrip(text: str, tk_encoding: Encoding):
+    res = _fit_message_into_context_window(
+        text, tk_encoding, max_tokens=100, safety_buffer=0.9
+    )
+    assert res == text
+
+
+def test_tk_at_limit_with_full_buffer_should_not_shorten(tk_encoding: Encoding):
+    msg = ("abcd " * 2000).strip()
+    n = _count_tokens(tk_encoding, msg)
+    res = _fit_message_into_context_window(
+        msg, tk_encoding, max_tokens=n, safety_buffer=1.0
+    )
+    assert res == msg
+
+
+def test_tk_zero_buffer_should_leave_message_unfiltered(tk_encoding: Encoding):
+    msg = "some long text " * 1000
+    res = _fit_message_into_context_window(
+        msg, tk_encoding, max_tokens=100, safety_buffer=0.0
+    )
+    assert res == msg
+
+
+def test_tk_max_tokens_minus_one_should_leave_message_unfiltered(tk_encoding: Encoding):
+    msg = "any content " * 500
+    res = _fit_message_into_context_window(
+        msg, tk_encoding, max_tokens=-1, safety_buffer=0.9
+    )
+    assert res == msg
+
+
+def test_tk_max_tokens_zero_should_leave_message_unfiltered(tk_encoding: Encoding):
+    msg = "any content " * 500
+    res = _fit_message_into_context_window(
+        msg, tk_encoding, max_tokens=0, safety_buffer=0.9
+    )
+    assert res == msg
+
+
+def test_from_config_using_gemini_should_be_shortened(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    ConfigSingleton.init("google-gla:gemini-2.5-flash")
+    msg = "some very long text " * 1500000
+
+    res = fit_message_into_context_window(msg)
+    assert "[[ ... Cut to fit Context Window ... ]]" in res
+
+
+def test_from_config_using_gpt_should_be_shortened(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "dummy")
+    ConfigSingleton.init("openai:gpt-5-mini")
+
+    msg = "some very long text " * 1500000
+
+    res = fit_message_into_context_window(msg)
+    assert "[[ ... Cut to fit Context Window ... ]]" in res
+
+
+def test_from_config_using_gpt_unconfigured_model_should_be_kept(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "dummy")
+    ConfigSingleton.init("openai:gpt-3o")
+
+    msg = "some very long text " * 1500000
+
+    res = fit_message_into_context_window(msg)
+    assert "[[ ... Cut to fit Context Window ... ]]" not in res
+    assert res == msg
+
+
+def test_from_config_using_gemini_short_message_should_be_kept(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    ConfigSingleton.init("google-gla:gemini-2.5-flash")
+    msg = "short text " * 100
+
+    res = fit_message_into_context_window(msg)
+    assert "[[ ... Cut to fit Context Window ... ]]" not in res
+    assert res == msg
+
+
+def test_from_config_using_gpt_short_message_should_be_kept(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "dummy")
+    ConfigSingleton.init("openai:gpt-5-mini")
+
+    msg = "short text " * 100
+
+    res = fit_message_into_context_window(msg)
+    assert "[[ ... Cut to fit Context Window ... ]]" not in res
     assert res == msg

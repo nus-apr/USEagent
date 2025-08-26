@@ -27,6 +27,7 @@ def _default_context_window_limits() -> dict[str, int]:
         lambda: -1,
         {
             "google-gla:gemini-2.5-flash": 1048576,  # As seen in pydantic AI 0.7.5 on 25.08.2025
+            "openai:gpt-5-mini": 272000,  # Looked up on 26.08.2025
         },
     )
 
