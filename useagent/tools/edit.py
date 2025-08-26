@@ -3,6 +3,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from useagent.common.context_window import fit_message_into_context_window
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
 from useagent.tools.common import useagent_guard_rail
@@ -166,6 +167,9 @@ async def view(
             file_content = "\n".join(file_lines[init_line - 1 :])
         else:
             file_content = "\n".join(file_lines[init_line - 1 : final_line])
+
+    # Possibly: Files are large, and exceed the context window. We account for them by optionally shortening them, if configured.
+    file_content = fit_message_into_context_window(file_content)
 
     return CLIResult(output=_make_output(file_content, str(path), init_line=init_line))
 
@@ -439,6 +443,55 @@ async def extract_diff(
             f"[Tool] edit_tool `extract_diff`: Received {stdout[:25]} ... from {project_dir}"
         )
         return CLIResult(output=f"Here's the diff of the current state:\n{stdout}")
+
+
+async def read_file_as_diff(path_to_file: Path | str) -> CLIResult | ToolErrorInfo:
+    """
+    Reports a file at a given `path_to_file` as a git diff that would create this file (if it was absent).
+    Does not take any git history of the file into account, just it's current state.
+
+
+    Args:
+        path_to_file (Path | str): The path to the file.
+
+    Returns:
+        CLIResult: The git diff that would create the file.
+    """
+
+    logger.info(
+        f"[Tool] Invoked edit_tool `read_file_as_diff`. Extracting a file as patch from {path_to_file} (type: {type(path_to_file)})"
+    )
+    supplied_arguments = [ArgumentEntry("path_to_file", str(path_to_file))]
+
+    path = (
+        _make_path_absolute(path_to_file)
+        if isinstance(path_to_file, str)
+        else path_to_file.absolute()
+    )
+
+    if not path.exists():
+        return ToolErrorInfo(
+            message=f"File at {path_to_file} does not exist.",
+            supplied_arguments=supplied_arguments,
+        )
+    if path.is_dir():
+        return ToolErrorInfo(
+            message=f"{path_to_file} points to a directory. Only (single) files are supported",
+            supplied_arguments=supplied_arguments,
+        )
+
+    command = f"git diff --binary -- /dev/null {str(path)}"
+    _, stdout, stderr = await run(command)
+
+    if stderr:
+        return ToolErrorInfo(
+            message=f"Failed to make a patch from file: {stderr}",
+            supplied_arguments=supplied_arguments,
+        )
+
+    return CLIResult(
+        output=f"This is a patch would newly create the file at {str(path)}:\n{stdout}"
+    )
 
 
 def __reset_project_dir():

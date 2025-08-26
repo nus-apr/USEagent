@@ -12,6 +12,8 @@ dependencies = [
   "usebench @ git+ssh://git@github.com/nus-apr/use-bench.git@0a985ae",
   "loguru>=0.7.3",
   "pydantic-ai[logfire]>=0.7.4",
+  "tiktoken>=0.9.0",
+  "sentencepiece>=0.2.1"
 ]
 
 # Optional: define a CLI so you don't need python -m ...
@@ -39,5 +41,5 @@ include-package-data = true
 include = ["useagent", "useagent.*", "microagents","microagents.*"]
 
 [tool.setuptools.package-data]
-useagent = ["**/*.txt", "**/*.json", "**/*.yaml", "**/*.yml", "**/*.md"]
+useagent = ["**/*.txt", "**/*.json", "**/*.yaml", "**/*.yml", "**/*.md", "**/*.model"]
 microagents = ["**/*.md"]
