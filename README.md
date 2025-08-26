@@ -169,3 +169,8 @@ Alternatively:
 uv sync --extra dev
 uv run python -m pytest tests
 ```
+
+## Licence / Terms of Agreement
+
+We provide a local copy of the `gemma-3-4b-it` model, which comes with a [terms of usage](./useagent/common/tokenizers/gemma-3-4b-it/TERMS_OF_USAGE.md). 
+Any usage or distribution must comply with them. 
