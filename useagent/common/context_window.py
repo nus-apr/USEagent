@@ -30,6 +30,9 @@ def fit_message_into_context_window(content: str) -> str:
 
     Does nothing if either the model is not known or the model window is not exceeded.
     """
+    if not content or not isinstance(content, str):
+        return content
+
     if (
         ConfigSingleton.is_initialized()
         and ConfigSingleton.config.lookup_model_context_window() > 0

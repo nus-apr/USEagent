@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from useagent.config import ConfigSingleton
@@ -55,7 +57,7 @@ async def test_run_invalid_grep_command_should_have_special_outcome_with_optimiz
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_restart_session_returns_system_message(tmp_path):
+async def test_restart_session_returns_system_message(tmp_path: Path):
     init_bash_tool(str(tmp_path))
     result = await bash_tool("echo test")
     assert isinstance(result, CLIResult)
@@ -63,7 +65,7 @@ async def test_restart_session_returns_system_message(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_pwd_returns_correct_directory(tmp_path):
+async def test_pwd_returns_correct_directory(tmp_path: Path):
     init_bash_tool(str(tmp_path))
     result = await bash_tool("pwd")
     assert isinstance(result, CLIResult)
@@ -72,7 +74,7 @@ async def test_pwd_returns_correct_directory(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_pwd_after_restart_returns_correct_directory(tmp_path):
+async def test_pwd_after_restart_returns_correct_directory(tmp_path: Path):
     init_bash_tool(str(tmp_path))
     await bash_tool("echo warmup")
     result = await bash_tool("pwd")
@@ -84,7 +86,7 @@ async def test_pwd_after_restart_returns_correct_directory(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_cd_and_pwd_reports_new_directory(tmp_path):
+async def test_cd_and_pwd_reports_new_directory(tmp_path: Path):
     subdir = tmp_path / "subdir"
     subdir.mkdir()
     init_bash_tool(str(tmp_path))
@@ -106,9 +108,52 @@ async def test_cd_and_pwd_reports_new_directory(tmp_path):
         "touch dummyfile && rm dummyfile",
     ],
 )
-async def test_commands_without_output_do_not_crash(tmp_path, command):
+async def test_commands_without_output_do_not_crash(tmp_path: Path, command):
     # DevNote: After introducing a check that each CLI must have either a output, or an error,
     # A simple `cd` did not work, because it prints nothing.
     init_bash_tool(str(tmp_path))
     result = await bash_tool(command)
     assert isinstance(result, CLIResult)
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_bash_tool_large_output_should_be_shortened(tmp_path: Path, monkeypatch):
+    # Issue #30 - long outputs should be shorted
+    ConfigSingleton.reset()
+
+    init_bash_tool(str(tmp_path))
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    ConfigSingleton.init("google-gla:gemini-2.5-flash")
+    ConfigSingleton.config.context_window_limits["google-gla:gemini-2.5-flash"] = 80
+
+    command = 'yes "This is a long line of output" | head -n 100'
+    result = await bash_tool(command)
+    assert isinstance(result, CLIResult)
+    assert "[[ ... Cut to fit Context Window ... ]]" in result.output
+
+    ConfigSingleton.reset()
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_bash_tool_short_output_should_not_be_shortened(
+    tmp_path: Path, monkeypatch
+):
+    # Issue #30 - short outputs are fine
+    ConfigSingleton.reset()
+
+    init_bash_tool(str(tmp_path))
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    ConfigSingleton.init("google-gla:gemini-2.5-flash")
+    ConfigSingleton.config.context_window_limits["google-gla:gemini-2.5-flash"] = 25000
+
+    command = 'yes "This is a long line of output" | head -n 10'
+    result = await bash_tool(command)
+    assert isinstance(result, CLIResult)
+    assert "[[ ... Cut to fit Context Window ... ]]" not in result.output
+
+    ConfigSingleton.reset()

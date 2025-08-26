@@ -309,3 +309,12 @@ def test_from_config_using_gpt_short_message_should_be_kept(monkeypatch):
     res = fit_message_into_context_window(msg)
     assert "[[ ... Cut to fit Context Window ... ]]" not in res
     assert res == msg
+
+
+def test_fit_message_for_none_message(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    ConfigSingleton.init("google-gla:gemini-2.5-flash")
+    msg = None
+
+    res = fit_message_into_context_window(msg)
+    assert res is None
