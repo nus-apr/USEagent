@@ -44,6 +44,12 @@ def test_gemini_with_key_passes(monkeypatch):
     assert ConfigSingleton.config.model
 
 
+def test_gemini_2_5__with_key_passes(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    ConfigSingleton.init("google-gla:gemini-2.5-flash")
+    assert ConfigSingleton.config.model
+
+
 def test_openai_no_key_fails(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(OpenAIError):
@@ -98,3 +104,50 @@ def test_reset_should_restore_default_flags():
     ConfigSingleton.reset()
     ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
     assert ConfigSingleton.config.optimization_toggles["temp-flag"] is False
+
+
+def test_init_should_set_model_descriptor_if_it_was_string(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    ConfigSingleton.init("google-gla:gemini-2.5-flash")
+
+    assert ConfigSingleton.config.model_descriptor
+    assert ConfigSingleton.config.model_descriptor == "google-gla:gemini-2.5-flash"
+
+
+def test_lookup_context_window_for_gemini_2_5_should_return_a_non_zero_value(
+    monkeypatch,
+):
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    ConfigSingleton.init("google-gla:gemini-2.5-flash")
+
+    config = ConfigSingleton.config
+    assert config.lookup_model_context_window()
+    assert config.lookup_model_context_window() > 0
+
+
+def test_lookup_context_window_altered_model_descriptor_should_return_default(
+    monkeypatch,
+):
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    ConfigSingleton.init("google-gla:gemini-2.5-flash")
+
+    config = ConfigSingleton.config
+    config.model_descriptor = "TESTTEST"
+    assert config.lookup_model_context_window() == -1
+
+
+def test_lookup_context_window_for_gemini_2_5_set_value_beforehand_should_return_set_value(
+    monkeypatch,
+):
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    ConfigSingleton.init("google-gla:gemini-2.5-flash")
+
+    config = ConfigSingleton.config
+    config.context_window_limits["google-gla:gemini-2.5-flash"] = 69
+    assert config.lookup_model_context_window() == 69
+
+
+def test_lookup_context_window_for_ollama_unkown_should_be_default_value():
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+
+    assert ConfigSingleton.config.lookup_model_context_window() == -1
