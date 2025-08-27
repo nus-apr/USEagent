@@ -2,7 +2,7 @@
 name: Environment Info Microagent
 version: 1.0.0
 agents:
-  - PROBE
+  - DISABLED
 triggers:
   - package-manager
   - packagemanager
