@@ -33,7 +33,7 @@ def init_agent(
         output_type=list[Location],
         tools=[
             Tool(
-                make_bash_tool_for_agent("SEARCH", bash_call_delay_in_seconds=0.3),
+                make_bash_tool_for_agent("SEARCH", bash_call_delay_in_seconds=0.35),
                 max_retries=4,
             )
         ],
