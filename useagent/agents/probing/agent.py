@@ -47,7 +47,7 @@ def init_agent(output_type, config: AppConfig | None = None, deps_type=None) -> 
         output_retries=3,
         tools=[
             Tool(
-                make_bash_tool_for_agent("PROBE", bash_call_delay_in_seconds=0.35),
+                make_bash_tool_for_agent("PROBE", bash_call_delay_in_seconds=0.4),
                 max_retries=4,
             ),
         ],

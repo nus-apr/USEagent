@@ -56,7 +56,7 @@ def _fit_message_into_context_window(
     content: str,
     tokenizer: SentencePieceProcessor | Encoding,
     max_tokens: int = -1,
-    safety_buffer: float = 0.9,
+    safety_buffer: float = 0.75,
 ) -> str:
     # separate method to allow for unit testing without ConfigSingleton and side-effect free behaviour.
     # Default Strategy: Remove content in the Middle.

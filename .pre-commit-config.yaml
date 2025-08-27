@@ -27,9 +27,11 @@ repos:
       - id: black
 
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.403
+    rev: v1.1.404
     hooks:
       - id: pyright
+        entry: uv run --frozen pyright
+        language: system
         pass_filenames: false
 
 files: '((useagent)|(tests))/.*\.py'

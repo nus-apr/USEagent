@@ -2,7 +2,7 @@
 name: C & CPP Info Microagent
 version: 1.0.0
 agents:
-  - PROBE
+  - DISABLED
 triggers:
   - cmake
   - cpp

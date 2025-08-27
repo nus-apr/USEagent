@@ -103,3 +103,36 @@ async def test_str_replace_multiple_occurrences(tmp_path: Path):
 
     assert isinstance(result, ToolErrorInfo)
     assert "multiple occurrences" in result.message.lower()
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+@pytest.mark.parametrize("file_content", ["", " ", "\n", "\t", "\t\n\t\n\n    "])
+async def test_str_replace_replacing_empty_or_whitespace_string(
+    tmp_path: Path, file_content
+):
+    # Seen in Issue #32
+    init_edit_tools(str(tmp_path))
+    file = tmp_path / "test.txt"
+
+    replacement = """
+#!/bin/bash
+set -vxE
+
+# Install dependencies
+sudo apt-get update
+sudo apt-get install -y cmake build-essential
+
+# Clean build directory, configure, build, and run tests
+rm -rf build
+mkdir build
+cd build
+cmake ..
+make
+make check
+"""
+    file.write_text(file_content)
+
+    result = await str_replace(str(file), " ", replacement)
+    assert isinstance(result, ToolErrorInfo)

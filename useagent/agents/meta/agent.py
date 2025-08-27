@@ -102,7 +102,7 @@ def init_agent(
             Tool(remove_diffs_from_diff_store, takes_ctx=True, max_retries=5),
             Tool(view_command_history, max_retries=2),
             Tool(
-                make_bash_tool_for_agent("META", bash_call_delay_in_seconds=0.25),
+                make_bash_tool_for_agent("META", bash_call_delay_in_seconds=0.30),
                 max_retries=4,
             ),
             Tool(read_file_as_diff),
@@ -178,7 +178,7 @@ def init_agent(
         git_probing_agent = init_probing_agent(output_type=GitStatus, deps_type=None)
         git_probing_agent_result = await git_probing_agent.run(
             #    deps=starting_status,
-            usage_limits=UsageLimits(request_limit=60),
+            usage_limits=UsageLimits(request_limit=90),
         )
         git_status = git_probing_agent_result.output
 
@@ -189,7 +189,7 @@ def init_agent(
         )
         command_probing_agent_result = await command_probing_agent.run(
             deps=dep_commands,
-            usage_limits=UsageLimits(request_limit=110),
+            usage_limits=UsageLimits(request_limit=115),
         )
         commands = command_probing_agent_result.output
 
@@ -199,7 +199,7 @@ def init_agent(
         )
         package_probing_agent_result = await package_probing_agent.run(
             deps=[],
-            usage_limits=UsageLimits(request_limit=65),
+            usage_limits=UsageLimits(request_limit=100),
         )
         packages = package_probing_agent_result.output
 
