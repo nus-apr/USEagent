@@ -156,16 +156,6 @@ You can also `uv build` and `uv run` this project - this is not recommended and 
 ## Tests
 
 ```shell
-uv venv
-source .venv/bin/activate  # On macOS/Linux
-# OR on Windows: .venv\Scripts\activate
-uv pip install -e ".[dev]"
-uv run pytest tests
-```
-
-Alternatively:
-
-```shell
 uv sync --extra dev
 uv run python -m pytest tests
 ```

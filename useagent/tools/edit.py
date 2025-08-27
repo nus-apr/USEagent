@@ -274,7 +274,15 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
     if isinstance(_read_file_result, ToolErrorInfo):
         return _read_file_result
     file_content = _read_file_result.expandtabs()
+    if not old_str or not old_str.strip():
+        return ToolErrorInfo(
+            message=f"You are trying to replace an empty- or whitespace-string in {file_path}. This is not expected behaviour, consider using an insert or a different action.",
+            supplied_arguments={
+                "file_path": str(file_path),
+            },
+        )
     old_str = old_str.expandtabs()
+
     new_str = new_str.expandtabs()
 
     occurrences = file_content.count(old_str)
