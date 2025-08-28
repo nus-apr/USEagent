@@ -417,3 +417,67 @@ async def test_bash_tool_short_output_should_not_be_shortened(
     assert "[[ ... Cut to fit Context Window ... ]]" not in result.output
 
     ConfigSingleton.reset()
+
+
+@pytest.mark.time_sensitive
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_bash_tool_command_with_eof_sign_should_not_timeout(
+    tmp_path: Path, monkeypatch
+):
+    # Issue #29 - We have seen some strange behaviour with nested commands that need EOF
+    init_bash_tool(str(tmp_path))
+
+    test_bash_tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=0.1)
+    # This will just pass
+    await test_bash_tool("echo hello")
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+    _bash_tool_instance._session._timeout = 1.0
+
+    command = """
+/opt/venv/bin/python - <<'PY'
+import importlib.metadata as m, json
+pkgs = ["pytest","click","httpx","httpcore","openai","uvicorn","attrs","aiohttp","python-dotenv","coverage","jinja2","werkzeug","flit_core","tox","mypy","ruff","pre_commit"]
+out={}
+for p in pkgs:
+  try:
+    out[p]=m.version(p)
+  except Exception as e:
+    out[p]=None
+print(json.dumps(out))
+PY
+    """
+    result = await test_bash_tool(command)
+    assert isinstance(result, CLIResult)
+    # DevNote: These do have a result.error, because the syntax is not handled well. But not the observed issue in the experiments
+
+
+@pytest.mark.time_sensitive
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_bash_tool_command_with_eof_sign_should_not_timeout_example_other_command_with_apt_packages(
+    tmp_path: Path, monkeypatch
+):
+    # Issue #29 - We have seen some strange behaviour with nested commands that need EOF
+    init_bash_tool(str(tmp_path))
+
+    test_bash_tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=0.1)
+    # This will just pass
+    await test_bash_tool("echo hello")
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+    _bash_tool_instance._session._timeout = 1.0
+
+    command = "set -e; echo 'Checking common tools...'; for cmd in node npm npx yarn bun php composer python3 pip3 java mvn go cargo dotnet docker podman rpm dpkg apk apk --version 2>/dev/null || true; do :; done; \n# Print versions if commands exist\nfor c in node npm npx yarn bun php composer python3 pip3 java mvn go cargo dotnet docker podman dpkg rpm apk; do\n  if command -v \"$c\" >/dev/null 2>&1; then\n    if [ \"$c\" = \"java\" ]; then\n      echo \"$c: $(java -version 2>&1 | sed -n '1p')\"\n    else\n      ver=$($c --version 2>&1 || $c -v 2>&1 || true)\n      echo \"$c: ${ver%%$'\\n'*}\"\n    fi\n  else\n    echo \"$c: not found\"\n  fi\ndone\n\n# Node global packages (if npm exists)\nif command -v npm >/dev/null 2>&1; then\n  echo '--- npm global packages (top 40 lines) ---'\n  npm ls -g --depth=0 2>/dev/null | sed -n '1,200p'\nfi\n\n# pip3 list top\nif command -v pip3 >/dev/null 2>&1; then\n  echo '--- pip3 packages (top 80 lines) ---'\n  pip3 list --format=columns 2>/dev/null | sed -n '1,200p'\nfi\n\n# composer version\nif command -v composer >/dev/null 2>&1; then\n  composer --version\nfi\n\n# Show package.json dependencies summary\necho '--- package.json dependencies summary ---'\nnode -e \"const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json')); console.log('name:'+p.name+'@'+p.version); console.log('dependencies:'+Object.keys(p.dependencies||{}).slice(0,50).join(',')); console.log('devDependencies:'+Object.keys(p.devDependencies||{}).slice(0,200).join(','));\" 2>/dev/null || true\n\n# Show composer.json name\nif [ -f composer.json ]; then\n  jq -r '.name + \"@\" + (.version // \"\")' composer.json 2>/dev/null || sed -n '1,60p' composer.json | sed -n '1,2p'\nfi\n\n# Print python version\nif command -v python3 >/dev/null 2>&1; then python3 --version; fi\n\n# end"
+    result = await test_bash_tool(command)
+    assert isinstance(result, CLIResult)
+    # DevNote: These do have a result.error, because the syntax is not handled well. But not the observed issue

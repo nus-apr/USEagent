@@ -70,7 +70,7 @@ class LocalTask(Task):
         logger.info(
             f"[Setup] Copying source files from {str(self.project_path)} to {str(self._working_dir)}"
         )
-        shutil.copytree(self.project_path, self._working_dir)
+        shutil.copytree(self.project_path, self._working_dir, dirs_exist_ok=True)
 
     @classmethod
     def get_default_working_dir(cls) -> Path:
