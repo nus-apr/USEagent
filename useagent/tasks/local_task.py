@@ -2,6 +2,8 @@ import os
 import shutil
 from pathlib import Path
 
+from loguru import logger
+
 from useagent.state.git_repo import GitRepository
 from useagent.tasks.task import Task
 
@@ -55,7 +57,19 @@ class LocalTask(Task):
 
     def copy_project_to_working_dir(self) -> None:
         if self._working_dir.exists():
-            shutil.rmtree(self._working_dir)
+            if self._working_dir.is_dir() and not any(self._working_dir.iterdir()):
+                logger.info(
+                    f"[Setup] Working dir at {str(self._working_dir)} exists but is empty - copying into it"
+                )
+            else:
+                logger.info(
+                    f"[Setup] Working dir at {str(self._working_dir)} exists and was not empty - recreating it"
+                )
+                shutil.rmtree(self._working_dir)
+
+        logger.info(
+            f"[Setup] Copying source files from {str(self.project_path)} to {str(self._working_dir)}"
+        )
         shutil.copytree(self.project_path, self._working_dir)
 
     @classmethod
