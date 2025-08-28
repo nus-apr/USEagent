@@ -40,7 +40,7 @@ LABEL maintainer.Leonhard="Leonhard Applis <leonhard.applis@protonmail.com>"
 
 # DevNote: We install make, but not build-essentials, (a) not to cheat the installs necessary and (b) projects might need a specific gcc or g++ version. 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates tzdata curl git openssh-client python3 python3-venv lsb-release make tree && \
+    ca-certificates tzdata curl git openssh-client python3 python3-venv lsb-release make tree ripgrep && \
     rm -rf /var/lib/apt/lists/*
 
 # bring only the ready venv and migrated data
