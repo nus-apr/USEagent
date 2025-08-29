@@ -347,18 +347,7 @@ def make_bash_tool_for_agent(
                 logger.warning(
                     "Current Bash Tool was in a timed-out state - restarting it"
                 )
-                _bash_tool_instance._session.stop()
-                bash_tool_init_dir: Path | None = (
-                    ConfigSingleton.config.task_type.get_default_working_dir()
-                    if ConfigSingleton.is_initialized()
-                    else None
-                )
-                await _bash_tool_instance._session.start(
-                    init_dir=str(bash_tool_init_dir)
-                )
-                logger.debug(
-                    f"Successfully restarted Bash Tool. New session starts in {str(bash_tool_init_dir) if bash_tool_init_dir else '<<UNKNOWN>>'}"
-                )
+                await _restart_bash_session_using_config_directory()
 
             result = await _bash_tool(command, bash_call_delay_in_seconds)
             _bash_tool_instance._bash_history.append((command, agent_name, result))
@@ -427,9 +416,20 @@ async def _bash_tool(
             f"[Tool] bash_tool {'shortened' if len(output_by_lines) > _PRINT_MAX_LENGTH_IN_LINES else ''} result: output={to_log}, error={result.error}"
         )
     else:
-        logger.info(
-            f"[Tool] bash_tool result: output={result.output}, error={result.error}"
-        )
+        if result.error == "bash has exited with returncode 2":
+            logger.warning(
+                f"[Tool] the provided bash command {command} resulted in a bash-internal timeout (return code 2)"
+            )
+            await _restart_bash_session_using_config_directory()
+            return ToolErrorInfo(
+                message="Your command made the bash session timeout ('bash has exited with returncode 2'), no results could be retrieved and the bash has been restarted.",
+                supplied_arguments=[ArgumentEntry("command", str(command))],
+            )
+
+        else:
+            logger.info(
+                f"[Tool] bash_tool result: output={result.output}, error={result.error}"
+            )
 
     return result
 
@@ -478,6 +478,21 @@ async def test_lsR_slow_behavior():
         pass
 
 
-# Run the test
-# if __name__ == "__main__":
-#    asyncio.run(test_lsR_slow_behavior())
+async def _restart_bash_session_using_config_directory():
+    if not _bash_tool_instance or not _bash_tool_instance._session:
+        logger.error("Tried to restart a bash session, but no bash was initialized.")
+        raise RuntimeError(
+            "Tried to restart a bash session, but no bash was initialized."
+        )
+
+    logger.debug("[Tool] Bash Session is being restarted")
+    _bash_tool_instance._session.stop()
+    bash_tool_init_dir: Path | None = (
+        ConfigSingleton.config.task_type.get_default_working_dir()
+        if ConfigSingleton.is_initialized()
+        else None
+    )
+    await _bash_tool_instance._session.start(init_dir=str(bash_tool_init_dir))
+    logger.debug(
+        f"[Tool] Successfully restarted Bash Tool. New session starts in {str(bash_tool_init_dir) if bash_tool_init_dir else '<<UNKNOWN>>'}"
+    )
