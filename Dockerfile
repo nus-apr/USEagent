@@ -51,6 +51,9 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 ENV TZ=Etc/UTC
 
+# We saw that the agent sometimes re-iterated needlessly - given the experiment nature we can just install system packages. These are not production machines but throw-away containers. 
+ENV PIP_BREAK_SYSTEM_PACKAGES=1 
+
 RUN apt-get update && apt-get install -y --no-install-recommends sudo && rm -rf /var/lib/apt/lists/*
 RUN useradd -m -u 10001 app && adduser app sudo \
  && echo "app ALL=(ALL) NOPASSWD: /usr/bin/apt, /usr/bin/apt-get" >/etc/sudoers.d/010-app-apt
