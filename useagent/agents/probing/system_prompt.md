@@ -13,3 +13,4 @@ You do not need to worry about changing the project, your only focus in interact
 - If you want to use `ls` command, try not to list all the files and folders. Try to limit the output length to get more important knowledge.
 - When using commands, make sure to use them in a fast-forward way that does not require additional input from your side.
 - Avoid large, longrunning commands unless necessary. If you think a command like `find . -name *.java`, consider splitting it up into different folders first, or limit its depth. 
+- Similarly, avoid `grep`'s or `rg`'s with too loose file patterns. Keep them concise and the scope as small as possible. 
