@@ -115,8 +115,13 @@ def _lookup_tiktoken_encoding(model_descriptor: str) -> Encoding:
     # See Tiktokens Github Repository: https://github.com/openai/tiktoken
     # And particularly their Encoding Lookup: https://github.com/openai/tiktoken/blob/main/tiktoken/model.py
     try:
+        _model_descriptor: str = (
+            model_descriptor[len("openai:") :]
+            if model_descriptor.startswith("openai:")
+            else model_descriptor
+        )
         # TODO: Better lookup here, our model names will likely not match
-        encoder = tiktoken.encoding_for_model(model_descriptor)
+        encoder = tiktoken.encoding_for_model(_model_descriptor)
 
     except KeyError:
         logger.debug(

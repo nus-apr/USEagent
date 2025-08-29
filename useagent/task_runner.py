@@ -6,7 +6,7 @@ import json
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from loguru import logger
 
@@ -67,7 +67,20 @@ def _run(
     # start main agent loop
     logger.info("Starting main agent loop")
     result, usage_tracker = agent_loop(task_state, output_type=output_type)
-    logger.info(f"Task {task} completed with result: {result}")
+    match result:
+        case Action():
+            cast_result: Action = cast(Action, result)
+            logger.info(
+                f"Task {task} completed with an {'succesful' if cast_result.success else 'unsuccesful'} Action:"
+            )
+            logger.info(f"\tEvidence: {cast_result.evidence}")
+            logger.info(
+                f"\tDoubts: {cast_result.doubts if cast_result.doubts else 'No Doubts'}"
+            )
+            if cast_result.execution_artifact:
+                logger.info(f"\tExecution Artifact: {cast_result.execution_artifact}")
+        case _:
+            logger.info(f"Task {task} completed with result: {result}")
 
     usage_info_file: Path = task_output_dir / "usage.json.log"
     logger.debug(f"Storing Usage Information to {usage_info_file}")

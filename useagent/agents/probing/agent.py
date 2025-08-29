@@ -54,7 +54,7 @@ def init_agent(output_type, config: AppConfig | None = None, deps_type=None) -> 
     )
 
     logger.debug(
-        f"[Probing Agent] Initialized basic Probing Agent for output {str(output_type)} with deps-type {str(deps_type)}"
+        f"[Probing Agent] Initialized Probing Agent for output {str(output_type)} {f'with deps-type {str(deps_type)}' if deps_type else ''}"
     )
 
     @environment_probing_agent.instructions

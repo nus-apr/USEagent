@@ -354,18 +354,7 @@ def make_bash_tool_for_agent(
                 logger.warning(
                     "Current Bash Tool was in a timed-out state - restarting it"
                 )
-                _bash_tool_instance._session.stop()
-                bash_tool_init_dir: Path | None = (
-                    ConfigSingleton.config.task_type.get_default_working_dir()
-                    if ConfigSingleton.is_initialized()
-                    else None
-                )
-                await _bash_tool_instance._session.start(
-                    init_dir=str(bash_tool_init_dir)
-                )
-                logger.debug(
-                    f"Successfully restarted Bash Tool. New session starts in {str(bash_tool_init_dir) if bash_tool_init_dir else '<<UNKNOWN>>'}"
-                )
+                await _restart_bash_session_using_config_directory()
 
             result = await _bash_tool(command, bash_call_delay_in_seconds)
             _bash_tool_instance._bash_history.append((command, agent_name, result))
@@ -391,12 +380,13 @@ async def _bash_tool(
     command: NonEmptyStr, delay_in_seconds: float = 0.0
 ) -> CLIResult | ToolErrorInfo:
     assert _bash_tool_instance, "Bash Tool Instance was not set!"
-
     # DevNote:
     # Depending on your Provider and Account, there might be a limit on how many requests you can send to the model per second / minute.
     # For most calls, this is not a big issue, because the calls will take a while etc.
     # But for some of our agents and tools, it can rapid-fire simple commands (like looking for dependencies, echoing things, etc.)
     # And we'll hit this limit. So, for some agents (Probing Agent, VCS Agent) we add a speed bumper. Also: See Issue #16
+    _PRINT_MAX_LENGTH_IN_LINES: int = 60
+
     if (
         ConfigSingleton.is_initialized()
         and ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"]
@@ -419,23 +409,34 @@ async def _bash_tool(
         and ConfigSingleton.config.optimization_toggles["shorten-log-output"]
     ):
         output_by_lines = result.output.splitlines()
-        if len(output_by_lines) > 80:
+        if len(output_by_lines) > _PRINT_MAX_LENGTH_IN_LINES:
             to_log = "\n".join(
-                output_by_lines[:40]
+                output_by_lines[: _PRINT_MAX_LENGTH_IN_LINES // 2]
                 + [
                     "[[ shortened in log for readability, presented in full for agent ]]"
                 ]
-                + output_by_lines[-40:]
+                + output_by_lines[-(_PRINT_MAX_LENGTH_IN_LINES // 2) :]
             )
         else:
             to_log = result.output
         logger.info(
-            f"[Tool] bash_tool shortened result: output={to_log}, error={result.error}"
+            f"[Tool] bash_tool {'shortened' if len(output_by_lines) > _PRINT_MAX_LENGTH_IN_LINES else ''} result: output={to_log}, error={result.error}"
         )
     else:
-        logger.info(
-            f"[Tool] bash_tool result: output={result.output}, error={result.error}"
-        )
+        if result.error == "bash has exited with returncode 2":
+            logger.warning(
+                f"[Tool] the provided bash command {command} resulted in a bash-internal timeout (return code 2)"
+            )
+            await _restart_bash_session_using_config_directory()
+            return ToolErrorInfo(
+                message="Your command made the bash session timeout ('bash has exited with returncode 2'), no results could be retrieved and the bash has been restarted.",
+                supplied_arguments=[ArgumentEntry("command", str(command))],
+            )
+
+        else:
+            logger.info(
+                f"[Tool] bash_tool result: output={result.output}, error={result.error}"
+            )
 
     return result
 
@@ -503,6 +504,26 @@ print(json.dumps(out))
     print(result)
 
     session.stop()
+
+
+async def _restart_bash_session_using_config_directory():
+    if not _bash_tool_instance or not _bash_tool_instance._session:
+        logger.error("Tried to restart a bash session, but no bash was initialized.")
+        raise RuntimeError(
+            "Tried to restart a bash session, but no bash was initialized."
+        )
+
+    logger.debug("[Tool] Bash Session is being restarted")
+    _bash_tool_instance._session.stop()
+    bash_tool_init_dir: Path | None = (
+        ConfigSingleton.config.task_type.get_default_working_dir()
+        if ConfigSingleton.is_initialized()
+        else None
+    )
+    await _bash_tool_instance._session.start(init_dir=str(bash_tool_init_dir))
+    logger.debug(
+        f"[Tool] Successfully restarted Bash Tool. New session starts in {str(bash_tool_init_dir) if bash_tool_init_dir else '<<UNKNOWN>>'}"
+    )
 
 
 async def test_deadlock():
