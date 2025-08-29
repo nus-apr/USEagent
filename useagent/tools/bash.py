@@ -75,6 +75,17 @@ class _BashSession:
 
     async def run(self, command: str):
         """Execute a command in the bash shell."""
+
+        async def read_stream(stream, buf, sentinel=None):
+            while True:
+                data = await stream.read(4096)
+                if not data:
+                    break
+                buf.extend(data)
+                if sentinel and sentinel in buf:
+                    return True
+            return False
+
         async with self._lock:
             if not self._started:
                 return ToolErrorInfo(
@@ -109,35 +120,48 @@ class _BashSession:
                 command.encode() + f"; echo '{self._sentinel}'\n".encode()
             )
             await self._process.stdin.drain()
-            output_bytes = bytearray()
+            stdout_buf, stderr_buf = bytearray(), bytearray()
             sentinel_bytes = self._sentinel.encode()
 
             # read output from the process, until the sentinel is found
             try:
                 async with asyncio.timeout(self._timeout):
-                    while True:
-                        # await asyncio.sleep(self._output_delay)
-                        data = await self._process.stdout.read(
-                            4096
-                        )  # Read small chunks (4KB)
-                        if not data:
-                            break
-                        output_bytes.extend(data)
-                        if sentinel_bytes in output_bytes:
-                            idx = output_bytes.find(sentinel_bytes)
-                            output_bytes = output_bytes[:idx]
-                            break
-                        if len(output_bytes) > 50_000_000:  # e.g., 50MB limit
-                            raise ValueError("Output exceeds limit; command aborted")
-                        # if we read directly from stdout/stderr, it will wait forever for
-                        # EOF. use the StreamReader buffer directly instead.
-                        # output = (
-                        #    self._process.stdout._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue]
-                        # )  # pyright: ignore[reportAttributeAccessIssue]
-                        # if self._sentinel in output:
-                        #    # strip the sentinel and break
-                        #    output = output[: output.index(self._sentinel)]
-                        #    break
+                    # # read stdout & stderr concurrently
+                    tasks = [
+                        asyncio.create_task(
+                            read_stream(
+                                self._process.stdout, stdout_buf, sentinel_bytes
+                            )
+                        ),
+                        asyncio.create_task(
+                            read_stream(self._process.stderr, stderr_buf)
+                        ),
+                    ]
+                    done, pending = await asyncio.wait(
+                        tasks, return_when=asyncio.FIRST_COMPLETED
+                    )
+                    # if sentinel found, cancel others
+                    for task in done:
+                        if task.result() is True:
+                            for t in pending:
+                                t.cancel()
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                    output = stdout_buf.decode(errors="replace").replace(
+                        self._sentinel, ""
+                    )
+                    stderr_content = stderr_buf.decode(errors="replace")
+
+                    if len(output) > 10000000:  # e.g., 10MB limit
+                        raise ValueError("Output exceeds limit; command aborted")
+                    # if we read directly from stdout/stderr, it will wait forever for
+                    # EOF. use the StreamReader buffer directly instead.
+                    # output = (
+                    #    self._process.stdout._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue]
+                    # )  # pyright: ignore[reportAttributeAccessIssue]
+                    # if self._sentinel in output:
+                    #    # strip the sentinel and break
+                    #    output = output[: output.index(self._sentinel)]
+                    #    break
             except TimeoutError:
                 self._timed_out = True
                 logger.warning(
@@ -147,35 +171,18 @@ class _BashSession:
                     message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
                     supplied_arguments=[ArgumentEntry("command", command)],
                 )
-            output = output_bytes.decode(errors="replace").rstrip(
-                "\n"
-            )  # Decode once, handle errors
-
             if output.endswith("\n"):
                 output = output[:-1]
-
-            error = (
-                self._process.stderr._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue]
-            )  # pyright: ignore[reportAttributeAccessIssue]
+            error = stderr_content
             if error.endswith("\n"):
                 error = error[:-1]
 
             # clear the buffers so that the next output can be read correctly
-            self._process.stdout._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
-            self._process.stderr._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
-
-            error = (
-                error if error else None
-            )  # Make empty output properly None for Type Checking
             output = (
                 output if output else None
             )  # Make empty output properly None for Type Checking
             if not error and not output:
                 output = f"(Command {command} finished silently)"
-
-        # clear the buffers so that the next output can be read correctly
-        self._process.stdout._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
-        self._process.stderr._buffer.clear()  # pyright: ignore[reportAttributeAccessIssue]
 
         error = (
             error if error else None
@@ -460,22 +467,43 @@ async def test_lsR_slow_behavior():
         await session.start(init_dir=str(base))
 
         # Run ls -R
-        import time
 
-        start = time.time()
-        result = await session.run("ls -R")
-        end = time.time()
-
-        print(f"ls -R finished in {end - start:.2f}s")
-        if isinstance(result, CLIResult) and result and result.output:
-            print("Output sample:", result.output[:200000])
-        else:
-            print("Error:", result)
+        result = await session.run(
+            "mvn dependency:get  -DgroupId=com.google.guava  -DartifactId=guava  -Dversion=32.1.2-jre  -U --no-transfer-progress "
+        )
+        print(result)
 
         session.stop()
 
     finally:
         pass
+
+
+async def test_python_code_exec():
+    cmd = """ 
+/usr/bin/python - <<'PY'
+import importlib.metadata as m, json
+pkgs = ["pytest","click","httpx","httpcore","openai","uvicorn","attrs","aiohttp","python-dotenv","coverage","jinja2","werkzeug","flit_core","tox","mypy","ruff","pre_commit"]
+out={}
+for p in pkgs:
+  try:
+    out[p]=m.version(p)
+  except Exception as e:
+    out[p]=None
+print(json.dumps(out))
+"""
+
+    temp_dir = "../playground"
+    base = Path(temp_dir)
+    session = _BashSession()
+    await session.start(init_dir=str(base))
+
+    # Run ls -R
+
+    result = await session.run(cmd)
+    print(result)
+
+    session.stop()
 
 
 async def _restart_bash_session_using_config_directory():
@@ -496,3 +524,19 @@ async def _restart_bash_session_using_config_directory():
     logger.debug(
         f"[Tool] Successfully restarted Bash Tool. New session starts in {str(bash_tool_init_dir) if bash_tool_init_dir else '<<UNKNOWN>>'}"
     )
+
+
+async def test_deadlock():
+    sess = _BashSession()
+    await sess.start()
+    # This writes a lot to stderr, enough to fill the pipe buffer.
+    cmd = (
+        "python3 -c \"import sys; [sys.stderr.write('x'*1024) for _ in range(100000)]\""
+    )
+    result = await sess.run(cmd)
+    print("Result:", result)
+
+
+# Run the test
+# if __name__ == "__main__":
+#     asyncio.run(test_deadlock())

@@ -33,7 +33,7 @@ def run(
         _run(task, task_output_dir, output_type=output_type)
     except Exception as e:
         tb = traceback.format_exc()
-        logger.error(f"Error running task {task.uid}: {e} \n{tb}", exception=e)
+        logger.error(f"Error running task {task.uid}: {e} \n{tb}")
     finally:
         bash_history_file: Path = task_output_dir / "bash_commands.jsonl.log"
         logger.debug(f"Dumping Bash History to {bash_history_file}")

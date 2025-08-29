@@ -1,4 +1,5 @@
 .DS_Store
+uv.lock
 **.DS_Store
 .env
 tmp 
@@ -19,12 +20,12 @@ __pycache__/
 data/
 useagent-turbo-tmp
 useagent-turbo-tmp-out
-<<<<<<< HEAD
 tmp/
 .tmp/
-=======
 tmp
->>>>>>> main
 
 private-*
 .env
+uv.lock
+
+
