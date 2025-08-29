@@ -125,7 +125,7 @@ def init_agent(
     @meta_agent.instructions
     def add_output_description() -> str:
         if isinstance(output_type, ProvidesOutputInstructions):
-            logger.debug(
+            logger.trace(
                 f"[Setup] MetaAgent is expected to output a `{str(output_type)}`, adding output instructions."
             )
             return (
@@ -166,7 +166,7 @@ def init_agent(
         """
         logger.info("[MetaAgent] Invoked probe_environment")
 
-        logger.info("[Probing Agent] Looking for Project root (Path)")
+        logger.trace("[Probing Agent] Looking for Project root (Path)")
         path_probing_agent = init_probing_agent(output_type=Path, deps_type=None)
         path_probing_agent_result = await path_probing_agent.run(
             deps=None,
@@ -174,7 +174,7 @@ def init_agent(
         )
         project_root = path_probing_agent_result.output
 
-        logger.debug("[Probing Agent] Looking for Git Information")
+        logger.trace("[Probing Agent] Looking for Git Information")
         git_probing_agent = init_probing_agent(output_type=GitStatus, deps_type=None)
         git_probing_agent_result = await git_probing_agent.run(
             #    deps=starting_status,
@@ -182,7 +182,7 @@ def init_agent(
         )
         git_status = git_probing_agent_result.output
 
-        logger.debug("[Probing Agent] Looking for Important Commands")
+        logger.trace("[Probing Agent] Looking for Important Commands")
         dep_commands = Commands(build_command='echo "TODO: Identify" && :')
         command_probing_agent = init_probing_agent(
             output_type=Commands, deps_type=Commands
@@ -193,7 +193,7 @@ def init_agent(
         )
         commands = command_probing_agent_result.output
 
-        logger.debug("[Probing Agent] Looking for Packages")
+        logger.trace("[Probing Agent] Looking for Packages")
         package_probing_agent = init_probing_agent(
             output_type=list[Package], deps_type=list[Package]
         )
@@ -212,8 +212,7 @@ def init_agent(
 
         next_id: int = len(ctx.deps.known_environments.keys())
 
-        logger.info(f"[ProbingAgent] identified {env}")
-        logger.debug(
+        logger.info(
             f"[MetaAgent] Probing finished for {env.project_root} @ {env.git_status.active_git_commit} (Stored as {'env_'+str(next_id)})"
         )
         ctx.deps.active_environment = env
