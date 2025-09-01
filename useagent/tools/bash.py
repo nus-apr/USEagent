@@ -121,10 +121,13 @@ class _BashSession:
             assert self._process.stdout
             assert self._process.stderr
 
-            # send command to the process
-            self._process.stdin.write(
-                command.encode() + f"; echo '{self._sentinel}'\n".encode()
+            # Build the command by encoding the intial command and add our 'finish' sentinel after.
+            effective_command = (
+                command.encode("UTF-8") + f"; echo '{self._sentinel}'\n".encode()
             )
+            # DevNote: Below is where the actual command is passed in
+            self._process.stdin.write(effective_command)
+
             await self._process.stdin.drain()
             stdout_buf, stderr_buf = bytearray(), bytearray()
             sentinel_bytes = self._sentinel.encode()

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from pathlib import Path
@@ -462,7 +463,7 @@ PY
 @pytest.mark.regression
 @pytest.mark.tool
 @pytest.mark.asyncio
-async def test_bash_tool_command_with_eof_sign_should_not_timeout_example_other_command_with_apt_packages(
+async def test_issue_29_bash_tool_command_with_eof_sign_should_not_timeout_example_other_command_with_apt_packages(
     tmp_path: Path, monkeypatch
 ):
     # Issue #29 - We have seen some strange behaviour with nested commands that need EOF
@@ -514,15 +515,14 @@ async def test_restart_bash_session_using_config_directory_should_start_in_confi
     assert result.output.strip() == str(tmp_path)
 
 
-@pytest.mark.skip
 @pytest.mark.asyncio
 @pytest.mark.regression
 @pytest.mark.tool
 @pytest.mark.time_sensitive
-async def test_python_here_doc_should_execute_without_timeout(
+async def test_issue_29_python_here_doc_with_a_raw_string_markershould_execute_without_timeout(
     tmp_path: Path, monkeypatch
 ):
-    # TODO: This does timeout, but should not, I am not sure why. This needs to be revisited.
+    # See Issue 29, the raw string r'\n' becomes '\\n' after encoding, which then fails the EOF marker.
     init_bash_tool(str(tmp_path))
     tool = make_bash_tool_for_agent("AGENT-REG")
 
@@ -540,11 +540,67 @@ print(json.dumps(out))
 PY
 """.strip()
 
-    result = await tool(cmd)
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(tool(cmd), timeout=5)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_issue_29_python_here_doc_with_manual_specified_linebreak_should_execute_without_timeout(
+    tmp_path: Path, monkeypatch
+):
+    #  Issue 29
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-REG")
+
+    cmd = """
+/usr/bin/env python3 - <<'PY'
+import importlib.metadata as m, json
+pkgs = ["pytest","click","httpx","httpcore","openai","uvicorn","attrs","aiohttp","python-dotenv","coverage","jinja2","werkzeug","flit_core","tox","mypy","ruff","pre_commit"]
+out={}
+for p in pkgs:
+  try:
+    out[p]=m.version(p)
+  except Exception:
+    out[p]=None
+print(json.dumps(out))
+PY\n
+"""
+    result = await asyncio.wait_for(tool(cmd), timeout=15)
     assert isinstance(result, CLIResult)
 
     parsed: dict[str, str | None] = json.loads(result.output.strip().splitlines()[-1])
     assert "pytest" in parsed
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_issue_29_python_here_doc_with_manual_specified_linebreak_with_raw_string_should_timeout_due_to_encoding(
+    tmp_path: Path, monkeypatch
+):
+    #  Issue 29, the raw string r'PY\n' turns through decode into 'PY\\n' breaking the EOF marker and logic.
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-REG")
+
+    cmd = r"""
+/usr/bin/env python3 - <<'PY'
+import importlib.metadata as m, json
+pkgs = ["pytest","click","httpx","httpcore","openai","uvicorn","attrs","aiohttp","python-dotenv","coverage","jinja2","werkzeug","flit_core","tox","mypy","ruff","pre_commit"]
+out={}
+for p in pkgs:
+  try:
+    out[p]=m.version(p)
+  except Exception:
+    out[p]=None
+print(json.dumps(out))
+PY\n
+"""
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(tool(cmd), timeout=5)
 
 
 @pytest.mark.asyncio
