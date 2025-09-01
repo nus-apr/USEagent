@@ -136,3 +136,73 @@ make check
 
     result = await str_replace(str(file), " ", replacement)
     assert isinstance(result, ToolErrorInfo)
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_str_replace_string_should_not_raise_valueerror(tmp_path: Path):
+    # See Issue #32
+    init_edit_tools(str(tmp_path))
+    file = tmp_path / "run_test.sh"
+    file.write_text("#!/bin/bash\necho hi\n")
+
+    replacement = """#!/bin/bash
+set -vxE
+
+# Install dependencies
+sudo apt-get update
+sudo apt-get install -y cmake build-essential
+
+# Clean build directory, configure, build, and run tests
+rm -rf build
+mkdir build
+cd build
+cmake ..
+make
+make check
+"""
+
+    result = await str_replace(str(file), "echo hi", replacement)
+    assert result
+    assert isinstance(result, CLIResult)
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_str_replace_should_reject_nbsp_like_whitespace(tmp_path: Path):
+    # See Issue #32
+    init_edit_tools(str(tmp_path))
+    f = tmp_path / "nbsp.txt"
+    f.write_text("pre\u00a0post")  # NBSP between words
+    res = await str_replace(
+        str(f), "\u00a0", " "
+    )  # treat as whitespace-only “separator”
+    assert isinstance(res, ToolErrorInfo)
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+@pytest.mark.parametrize("needle", ["\u00a0", "\u2007", "\u202f", "\u1680"])
+async def test_str_replace_should_reject_unicode_whitespace_only(
+    tmp_path: Path, needle: str
+):
+    # See Issue #32
+    init_edit_tools(str(tmp_path))
+    f = tmp_path / "uni.txt"
+    f.write_text(f"pre{needle}post")
+    res = await str_replace(str(f), needle, " ")
+    assert isinstance(res, ToolErrorInfo)
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_str_replace_crlf_file_single_occurrence(tmp_path: Path):
+    # See Issue #32
+    init_edit_tools(str(tmp_path))
+    f = tmp_path / "win.txt"
+    f.write_text("a\r\nb\r\nc")
+    res = await str_replace(str(f), "b", "B")
+    assert isinstance(res, CLIResult)
