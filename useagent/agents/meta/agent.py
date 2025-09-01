@@ -385,6 +385,33 @@ def agent_loop(
         prompt, deps=task_state, usage_limits=UsageLimits(request_limit=100)
     )
 
+    if (
+        ConfigSingleton.is_initialized()
+        and ConfigSingleton.config.optimization_toggles["reiterate-on-doubts"]
+    ):
+        if result.output and result.output.doubts:
+            try:
+                # TODO: store the result? To have something in case of timeout?
+                # TODO: Add checking of usage // storing temporary usage.
+                logger.info(
+                    f"Initial attempt at repairing the task resulting in a result with doubts: {result.doubts}. Attempting to resolve doubts with changes"
+                )
+                logger.debug(f"Doubtful result was: {result}")
+                new_instruction: str = (
+                    f"While addressing the task, you produced a result that had the following doubts: {result.doubts}. Try to address your own doubts making changes to your result, or by identifying more information, with the tools at your disposal."
+                )
+                result = meta_agent.run_sync(
+                    new_instruction,
+                    deps=task_state,
+                    usage_limits=UsageLimits(request_limit=75),
+                )
+            except Exception as exc:
+                logger.error(
+                    f"Error while re-iterating the result after doubts. Re-using previous, initial result (with doubts). Exception was: {exc}"
+                )
+        else:
+            logger.debug("Task was finished without any doubts.")
+
     if output_type is CodeChange:
         diff_id = result.output.diff_id
         logger.info(f"Resolving {diff_id} in DiffStore:")

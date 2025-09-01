@@ -29,6 +29,7 @@ def _default_optimization_toggles() -> dict[str, bool]:
             "useagent-file-path-guard": True,
             "shorten-log-output": True,
             "vcs-agent-answer-instructions": True,
+            "reiterate-on-doubts": True,
         },
     )
 
