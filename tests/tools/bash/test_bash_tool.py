@@ -562,3 +562,23 @@ async def test_stderr_flood_should_not_deadlock(tmp_path: Path):
     result = await tool(cmd)
     assert isinstance(result, CLIResult)
     assert result.error and isinstance(result.error, str)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.slow
+async def test_output_flood_should_abort_quickly_on_large_stdout(tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-OVERFLOW-PORTABLE")
+
+    # Warmup to ensure session is up
+    await tool("echo warmup")
+
+    # Produce ~32 MiB quickly on macOS; BSD head supports -c
+    # This is large enough to trip typical caps but still quick.
+    cmd = r"head -c 33554432 /dev/zero | tr '\0' x"
+
+    result = await tool(cmd)
+
+    assert isinstance(result, ToolErrorInfo)

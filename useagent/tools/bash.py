@@ -158,7 +158,14 @@ class _BashSession:
                     stderr_content = stderr_buf.decode(errors="replace")
 
                     if len(output) > 10000000:  # e.g., 10MB limit
-                        raise ValueError("Output exceeds limit; command aborted")
+                        # DevNote: See Issue #31, we move this from a ValueError to a ToolOutPutError
+                        logger.warning(
+                            f"[Tool] Bash Tool tried to execute a command with large output (Command was {command})"
+                        )
+                        return ToolErrorInfo(
+                            message="command exceeded a healthy output window (10MB)",
+                            supplied_arguments=[ArgumentEntry("command", command)],
+                        )
                     # if we read directly from stdout/stderr, it will wait forever for
                     # EOF. use the StreamReader buffer directly instead.
                     # output = (

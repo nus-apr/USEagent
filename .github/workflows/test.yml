@@ -46,4 +46,4 @@ jobs:
       - name: Run tests with coverage
         run: |
           source .venv/bin/activate
-          uv run pytest --cov=useagent --cov-report=term --cov-report=xml tests
+          uv run pytest --cov=useagent --cov-report=term --cov-report=xml -o addopts="--strict-markers -ra --maxfail=5 --random-order" tests 
