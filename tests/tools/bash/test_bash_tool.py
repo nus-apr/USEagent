@@ -519,7 +519,36 @@ async def test_restart_bash_session_using_config_directory_should_start_in_confi
 @pytest.mark.regression
 @pytest.mark.tool
 @pytest.mark.time_sensitive
-async def test_issue_29_python_here_doc_with_a_raw_string_markershould_execute_without_timeout(
+async def test_issue_29_python_here_doc_with_a_raw_string_markershould_execute_with_timeout(
+    tmp_path: Path, monkeypatch
+):
+    # See Issue 29, the raw string r'\n' becomes '\\n' after encoding, which then fails the EOF marker.
+    # THis one is extra strange, the .strip() makes it timeout ...
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-REG")
+
+    cmd = r"""
+/usr/bin/env python3 - <<'PY'
+import importlib.metadata as m, json
+pkgs = ["pytest","click","httpx","httpcore","openai","uvicorn","attrs","aiohttp","python-dotenv","coverage","jinja2","werkzeug","flit_core","tox","mypy","ruff","pre_commit"]
+out={}
+for p in pkgs:
+  try:
+    out[p]=m.version(p)
+  except Exception:
+    out[p]=None
+print(json.dumps(out))
+PY
+""".strip()
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(tool(cmd), timeout=5)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_issue_29_python_here_doc_with_a_raw_string_markershould_execute_and_give_a_CLIResult(
     tmp_path: Path, monkeypatch
 ):
     # See Issue 29, the raw string r'\n' becomes '\\n' after encoding, which then fails the EOF marker.
@@ -538,10 +567,9 @@ for p in pkgs:
     out[p]=None
 print(json.dumps(out))
 PY
-""".strip()
-
-    with pytest.raises(TimeoutError):
-        await asyncio.wait_for(tool(cmd), timeout=5)
+"""
+    result = await asyncio.wait_for(tool(cmd), timeout=5)
+    assert result and isinstance(result, CLIResult)
 
 
 @pytest.mark.asyncio
@@ -579,7 +607,7 @@ PY\n
 @pytest.mark.regression
 @pytest.mark.tool
 @pytest.mark.time_sensitive
-async def test_issue_29_python_here_doc_with_manual_specified_linebreak_with_raw_string_should_timeout_due_to_encoding(
+async def test_issue_29_python_here_doc_with_manual_specified_linebreak_with_raw_string_should_give_tool_error_due_to_encoding(
     tmp_path: Path, monkeypatch
 ):
     #  Issue 29, the raw string r'PY\n' turns through decode into 'PY\\n' breaking the EOF marker and logic.
@@ -599,8 +627,10 @@ for p in pkgs:
 print(json.dumps(out))
 PY\n
 """
-    with pytest.raises(TimeoutError):
-        await asyncio.wait_for(tool(cmd), timeout=5)
+    result = await asyncio.wait_for(tool(cmd), timeout=5)
+
+    assert isinstance(result, ToolErrorInfo)
+    assert "heredoc" in result.message.lower()
 
 
 @pytest.mark.asyncio

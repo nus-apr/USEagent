@@ -11,6 +11,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from useagent.common.command_utility import has_heredoc, validate_heredoc
 from useagent.common.context_window import fit_message_into_context_window
 from useagent.config import ConfigSingleton
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
@@ -121,11 +122,18 @@ class _BashSession:
             assert self._process.stdout
             assert self._process.stderr
 
+            if has_heredoc(command) and not validate_heredoc(command):
+                # DevNote: See Issue 29 and the related test-suite.
+                return ToolErrorInfo(
+                    message="You tried to provide a command including a heredoc / EOF marker. Either due to your mistake, or a backend processing, the provided command does not result in a valid encoding and will not be executed. Consider if there are other strategies to achieve your goal (e.g. writing a file first). If you need to perform the command you want to execute in exactly this matter, revisit its encoding with the background that it needs to be encoded to utf-8.",
+                    supplied_arguments=[ArgumentEntry("command", command)],
+                )
+
             # Build the command by encoding the intial command and add our 'finish' sentinel after.
             effective_command = (
-                command.encode("UTF-8") + f"; echo '{self._sentinel}'\n".encode()
+                command.encode("UTF-8", "") + f"; echo '{self._sentinel}'\n".encode()
             )
-            # DevNote: Below is where the actual command is passed in
+            # DevNote: Below is where the actual command is passed in, this is our `run(effective_command)`
             self._process.stdin.write(effective_command)
 
             await self._process.stdin.drain()
