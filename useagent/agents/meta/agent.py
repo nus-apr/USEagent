@@ -394,11 +394,11 @@ def agent_loop(
                 # TODO: store the result? To have something in case of timeout?
                 # TODO: Add checking of usage // storing temporary usage.
                 logger.info(
-                    f"Initial attempt at repairing the task resulting in a result with doubts: {result.doubts}. Attempting to resolve doubts with changes"
+                    f"Initial attempt at repairing the task resulting in a result with doubts: {result.output.doubts}. Attempting to resolve doubts with changes"
                 )
-                logger.debug(f"Doubtful result was: {result}")
+                logger.debug(f"Doubtful result was: {result.output}")
                 new_instruction: str = (
-                    f"While addressing the task, you produced a result that had the following doubts: {result.doubts}. Try to address your own doubts making changes to your result, or by identifying more information, with the tools at your disposal."
+                    f"While addressing the task, you produced a result that had the following doubts: {result.output.doubts}. Try to address your own doubts making changes to your result, or by identifying more information, with the tools at your disposal."
                 )
                 result = meta_agent.run_sync(
                     new_instruction,
