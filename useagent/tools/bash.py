@@ -447,71 +447,6 @@ async def _bash_tool(
     return result
 
 
-def get_bash_history() -> (
-    list[tuple[NonEmptyStr, NonEmptyStr, CLIResult | ToolErrorInfo | Exception]]
-):
-    """
-    Retrieve information of the BashTool, gathered accross agents.
-
-    Returns:
-        List[Tuple[str,str,CLIResult | ToolErrorInfo | Exception]]: The last 50 recorded commands, the agent that executed it and their results, errors or exceptions.
-
-    """
-    if _bash_tool_instance is None:
-        return []
-    return list(_bash_tool_instance._bash_history)
-
-
-async def test_lsR_slow_behavior():
-    """Test function to reproduce the long runtime with ls -R in _BashSession."""
-    # Create a temporary directory with some nested structure
-    temp_dir = "../playground"
-    try:
-        base = Path(temp_dir)
-        # Initialize Bash session
-        session = _BashSession()
-        await session.start(init_dir=str(base))
-
-        # Run ls -R
-
-        result = await session.run(
-            "mvn dependency:get  -DgroupId=com.google.guava  -DartifactId=guava  -Dversion=32.1.2-jre  -U --no-transfer-progress "
-        )
-        print(result)
-
-        session.stop()
-
-    finally:
-        pass
-
-
-async def test_python_code_exec():
-    cmd = """ 
-/usr/bin/python - <<'PY'
-import importlib.metadata as m, json
-pkgs = ["pytest","click","httpx","httpcore","openai","uvicorn","attrs","aiohttp","python-dotenv","coverage","jinja2","werkzeug","flit_core","tox","mypy","ruff","pre_commit"]
-out={}
-for p in pkgs:
-  try:
-    out[p]=m.version(p)
-  except Exception as e:
-    out[p]=None
-print(json.dumps(out))
-"""
-
-    temp_dir = "../playground"
-    base = Path(temp_dir)
-    session = _BashSession()
-    await session.start(init_dir=str(base))
-
-    # Run ls -R
-
-    result = await session.run(cmd)
-    print(result)
-
-    session.stop()
-
-
 async def _restart_bash_session_using_config_directory():
     if not _bash_tool_instance or not _bash_tool_instance._session:
         logger.error("Tried to restart a bash session, but no bash was initialized.")
@@ -532,17 +467,16 @@ async def _restart_bash_session_using_config_directory():
     )
 
 
-async def test_deadlock():
-    sess = _BashSession()
-    await sess.start()
-    # This writes a lot to stderr, enough to fill the pipe buffer.
-    cmd = (
-        "python3 -c \"import sys; [sys.stderr.write('x'*1024) for _ in range(100000)]\""
-    )
-    result = await sess.run(cmd)
-    print("Result:", result)
+def get_bash_history() -> (
+    list[tuple[NonEmptyStr, NonEmptyStr, CLIResult | ToolErrorInfo | Exception]]
+):
+    """
+    Retrieve information of the BashTool, gathered accross agents.
 
+    Returns:
+        List[Tuple[str,str,CLIResult | ToolErrorInfo | Exception]]: The last 50 recorded commands, the agent that executed it and their results, errors or exceptions.
 
-# Run the test
-# if __name__ == "__main__":
-#     asyncio.run(test_deadlock())
+    """
+    if _bash_tool_instance is None:
+        return []
+    return list(_bash_tool_instance._bash_history)

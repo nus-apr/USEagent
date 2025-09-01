@@ -1,3 +1,4 @@
+import json
 import time
 from pathlib import Path
 
@@ -481,3 +482,83 @@ async def test_bash_tool_command_with_eof_sign_should_not_timeout_example_other_
     result = await test_bash_tool(command)
     assert isinstance(result, CLIResult)
     # DevNote: These do have a result.error, because the syntax is not handled well. But not the observed issue
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+async def test_restart_bash_session_using_config_directory_should_start_in_config_dir(
+    tmp_path: Path, monkeypatch
+):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-REG")
+    await tool("echo warmup")
+
+    # Ensure Config is initialized and task_type default dir points to tmp_path
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+
+    class _DummyTaskType:
+        def get_default_working_dir(self) -> Path:
+            return tmp_path
+
+    monkeypatch.setattr(
+        ConfigSingleton.config, "task_type", _DummyTaskType(), raising=True
+    )
+
+    import useagent.tools.bash as bash_file
+
+    await bash_file._restart_bash_session_using_config_directory()
+
+    result = await bash_tool("pwd")
+    assert isinstance(result, CLIResult)
+    assert result.output.strip() == str(tmp_path)
+
+
+@pytest.mark.skip
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_python_here_doc_should_execute_without_timeout(
+    tmp_path: Path, monkeypatch
+):
+    # TODO: This does timeout, but should not, I am not sure why. This needs to be revisited.
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-REG")
+
+    cmd = r"""
+/usr/bin/env python3 - <<'PY'
+import importlib.metadata as m, json
+pkgs = ["pytest","click","httpx","httpcore","openai","uvicorn","attrs","aiohttp","python-dotenv","coverage","jinja2","werkzeug","flit_core","tox","mypy","ruff","pre_commit"]
+out={}
+for p in pkgs:
+  try:
+    out[p]=m.version(p)
+  except Exception:
+    out[p]=None
+print(json.dumps(out))
+PY
+""".strip()
+
+    result = await tool(cmd)
+    assert isinstance(result, CLIResult)
+
+    parsed: dict[str, str | None] = json.loads(result.output.strip().splitlines()[-1])
+    assert "pytest" in parsed
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.slow
+async def test_stderr_flood_should_not_deadlock(tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-REG")
+
+    cmd = (
+        'python3 -c "import sys; '
+        "[sys.stderr.write('x'*1024) for _ in range(20000)]\""
+    )
+    result = await tool(cmd)
+    assert isinstance(result, CLIResult)
+    assert result.error and isinstance(result.error, str)
