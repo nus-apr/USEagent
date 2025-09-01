@@ -47,6 +47,12 @@ class _BashSession:
         ):
             return guard_rail_tool_error
 
+        # This was observed in tests - usually there should always be an existing directory coming from the Task Type. In tests this was not necessarily the case.
+        if init_dir:
+            init_dir_path = Path(init_dir)
+            if not init_dir_path.exists() or not init_dir_path.is_dir():
+                init_dir_path.mkdir(parents=True, exist_ok=True)
+
         self._process: asyncio.subprocess.Process = (
             await asyncio.create_subprocess_shell(
                 self.command,
