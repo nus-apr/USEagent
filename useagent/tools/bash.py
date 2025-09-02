@@ -30,7 +30,9 @@ class _BashSession:
     _output_delay: float = 0.1  # seconds
     # DevNote: The timeout is quite large, but we have seen commands that need so long
     # An example is `apt-get install openjdk-jdk-8` or similar large packages.
-    _timeout: float = 2400.0  # seconds
+
+    __DEFAULT_TIMEOUT: float = 1800  # seconds
+    _timeout: float = __DEFAULT_TIMEOUT
     _sentinel: str = "<<exit>>"
 
     def __init__(self):
@@ -134,12 +136,17 @@ class _BashSession:
                         supplied_arguments=[ArgumentEntry("command", command)],
                     )
 
-            if has_heredoc(command) and not validate_heredoc(command):
-                # DevNote: See Issue 29 and the related test-suite.
-                return ToolErrorInfo(
-                    message="You tried to provide a command including a heredoc / EOF marker. Either due to your mistake, or a backend processing, the provided command does not result in a valid encoding and will not be executed. Consider if there are other strategies to achieve your goal (e.g. writing a file first). If you need to perform the command you want to execute in exactly this matter, revisit its encoding with the background that it needs to be encoded to utf-8.",
-                    supplied_arguments=[ArgumentEntry("command", command)],
+            if has_heredoc(command):
+                if not validate_heredoc(command):
+                    # DevNote: See Issue 29 and the related test-suite.
+                    return ToolErrorInfo(
+                        message="You tried to provide a command including a heredoc / EOF marker. Either due to your mistake, or a backend processing, the provided command does not result in a valid encoding and will not be executed. Consider if there are other strategies to achieve your goal (e.g. writing a file first). If you need to perform the command you want to execute in exactly this matter, revisit its encoding with the background that it needs to be encoded to utf-8.",
+                        supplied_arguments=[ArgumentEntry("command", command)],
+                    )
+                logger.debug(
+                    "Received a command with an EOF marker - reducing timeout to only allow short commands"
                 )
+                self._timeout = 8
 
             # Build the command by encoding the intial command and add our 'finish' sentinel after.
             effective_command = (
@@ -207,6 +214,10 @@ class _BashSession:
                     message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
                     supplied_arguments=[ArgumentEntry("command", command)],
                 )
+            finally:
+                self._timeout = (
+                    self.__DEFAULT_TIMEOUT
+                )  # TimeOuts might have changed for EOF
             if output.endswith("\n"):
                 output = output[:-1]
             error = stderr_content

@@ -919,3 +919,76 @@ SCRIPT
 """
     result = await asyncio.wait_for(tool(cmd), timeout=15)
     assert result and isinstance(result, ToolErrorInfo)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_eof_sleep_command_should_timeout(tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"] = True
+
+    tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=0.1)
+    await tool("echo warmup")
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+
+    _bash_tool_instance._session._timeout = 2  # shorter than the sleep below
+
+    cmd = """
+/bin/bash - <<'SH'
+set -e
+sleep 10
+echo done
+SH
+"""
+    result = await tool(cmd)
+
+    assert isinstance(result, ToolErrorInfo)
+    assert "time" in result.message.lower()
+    assert _bash_tool_instance._session._timed_out
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_eof_sleep_timeout_should_recover_and_reset_session(tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"] = True
+
+    tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=0.1)
+    await tool("echo warmup")
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+
+    # force short timeout to trigger
+    _bash_tool_instance._session._timeout = 2
+    cmd = """
+/bin/bash - <<'SH'
+set -e
+sleep 10
+echo done
+SH
+"""
+    result = await tool(cmd)
+    assert isinstance(result, ToolErrorInfo)
+    assert _bash_tool_instance._session._timed_out
+
+    # now run a simple hello command, expecting recovery
+    result2 = await tool("echo hello")
+    assert isinstance(result2, CLIResult)
+    assert "hello" in result2.output
+
+    # after restart, timeout should be reset to a sane default (e.g. >100s)
+    assert _bash_tool_instance._session._timeout > 100
+    assert not _bash_tool_instance._session._timed_out
