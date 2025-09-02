@@ -386,6 +386,7 @@ def agent_loop(
         prompt, deps=task_state, usage_limits=UsageLimits(request_limit=100)
     )
     USAGE_TRACKER.add(meta_agent.name, result.usage())
+    first_iteration_messages = result.new_messages()
 
     if (
         ConfigSingleton.is_initialized()
@@ -405,6 +406,7 @@ def agent_loop(
                     new_instruction,
                     deps=task_state,
                     usage_limits=UsageLimits(request_limit=75),
+                    message_history=first_iteration_messages,
                 )
                 # TODO: Do we want to earmark this as 'META-reiteration'? At the moment it will just be 2nd Meta Agent Cost
                 USAGE_TRACKER.add(meta_agent.name, result.usage())
