@@ -116,21 +116,21 @@ class DiffStore:
     # as a pydantic_dataclass the model might initiate (simple) DiffStores from somewhere else.
     # These can be good but should still follow the same standards, so we also have model validators.
     @model_validator(mode="after")  # pyright: ignore[reportArgumentType]
-    def check_no_duplicate_content(cls, values: "DiffStore") -> "DiffStore":
+    def check_no_duplicate_content(self) -> "DiffStore":
         seen = set()
-        for e in values.id_to_diff.values():
+        for e in self.id_to_diff.values():
             norm = e.diff_content.strip()
             if norm in seen:
                 raise ValueError("Duplicate diff contents detected in initialization")
             seen.add(norm)
-        return values
+        return self
 
     @model_validator(mode="after")  # pyright: ignore[reportArgumentType]
-    def check_key_format(cls, values: "DiffStore") -> "DiffStore":
-        for k in values.id_to_diff:
+    def check_key_format(self) -> "DiffStore":
+        for k in self.id_to_diff:
             if not k.startswith("diff_"):
                 raise ValueError(f"Invalid key in DiffStore: {k}")
-        return values
+        return self
 
     @computed_field(return_type=dict[DiffEntry, NonEmptyStr])
     def diff_to_id(self) -> dict[str, str]:
