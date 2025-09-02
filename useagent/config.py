@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from pydantic_ai.models import Model, infer_model
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from useagent.pydantic_models.output.action import Action
@@ -104,7 +104,7 @@ class ConfigSingleton:
                 model_name = model.split(":", 1)[1]
                 if not provider_url:
                     raise ValueError("provider_url required for ollama models")
-                model = OpenAIModel(
+                model = OpenAIResponsesModel(
                     model_name=model_name,
                     provider=OpenAIProvider(
                         base_url=provider_url, api_key="ollama-dummy"

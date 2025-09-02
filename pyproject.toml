@@ -11,7 +11,7 @@ requires-python = ">=3.12"
 dependencies = [
   "usebench @ git+ssh://git@github.com/nus-apr/use-bench.git@0a985ae",
   "loguru>=0.7.3",
-  "pydantic-ai[logfire]>=0.7.4",
+  "pydantic-ai>=1.0.0b1",
   "tiktoken>=0.9.0",
   "sentencepiece>=0.2.1"
 ]
@@ -43,3 +43,7 @@ include = ["useagent", "useagent.*", "microagents","microagents.*"]
 [tool.setuptools.package-data]
 useagent = ["**/*.txt", "**/*.json", "**/*.yaml", "**/*.yml", "**/*.md", "**/*.model"]
 microagents = ["**/*.md"]
+
+[tool.uv]
+# We want to test out 1.0.0 for pydantic_ai so we see the 'final' API
+prerelease = 'allow'

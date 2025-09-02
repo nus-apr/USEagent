@@ -1,6 +1,6 @@
 import pytest
 from pydantic_ai.agent import Agent
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from useagent.agents.edit_code.agent import init_agent as init_edit_agent
@@ -12,7 +12,7 @@ from useagent.microagents.decorators import alias_for_microagents
 
 @pytest.fixture
 def dummy_config() -> AppConfig:
-    model = OpenAIModel(
+    model = OpenAIResponsesModel(
         model_name="llama3.2",
         provider=OpenAIProvider(
             base_url="http://localhost:11434", api_key="ollama-dummy"
