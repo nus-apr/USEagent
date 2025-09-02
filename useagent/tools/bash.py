@@ -122,6 +122,18 @@ class _BashSession:
             assert self._process.stdout
             assert self._process.stderr
 
+            if (
+                ConfigSingleton.is_initialized()
+                and ConfigSingleton.config.optimization_toggles[
+                    "block-long-multiline-commands"
+                ]
+            ):
+                if command.count("\n") > 15 or len(command.splitlines()) > 15:
+                    return ToolErrorInfo(
+                        message="You provided a large multi-line command. Such commands are currently intentionally de-actived, please refer from using them and prefer a sequence of short, simple commands. The command was not executed.",
+                        supplied_arguments=[ArgumentEntry("command", command)],
+                    )
+
             if has_heredoc(command) and not validate_heredoc(command):
                 # DevNote: See Issue 29 and the related test-suite.
                 return ToolErrorInfo(

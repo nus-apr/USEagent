@@ -30,6 +30,7 @@ def _default_optimization_toggles() -> dict[str, bool]:
             "shorten-log-output": True,
             "vcs-agent-answer-instructions": True,
             "reiterate-on-doubts": True,
+            "block-long-multiline-commands": True,
         },
     )
 

@@ -682,6 +682,10 @@ async def test_issue_29_python_here_doc_with_long_command_and_give_a_CLIResult(
     init_bash_tool(str(tmp_path))
     tool = make_bash_tool_for_agent("AGENT-REG")
 
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["block-long-multiline-commands"] = False
+
     cmd: str = """
 cat > run_test.sh <<'SCRIPT'
 #!/usr/bin/env bash
@@ -791,3 +795,127 @@ SCRIPT
 """
     result = await asyncio.wait_for(tool(cmd), timeout=15)
     assert result and isinstance(result, CLIResult)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_block_long_commands_for_the_eof_files(tmp_path: Path, monkeypatch):
+    # Variation: We introduced a flag to filter any long command, this one should be cought by it.
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-REG")
+
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["block-long-multiline-commands"] = True
+
+    cmd: str = """
+cat > run_test.sh <<'SCRIPT'
+#!/usr/bin/env bash
+set -vxE
+
+# Non-interactive
+export DEBIAN_FRONTEND=noninteractive
+
+# Update and install common build/test dependencies
+apt-get update -y
+apt-get install -y --no-install-recommends \
+  build-essential git curl wget ca-certificates \
+  python3 python3-venv python3-pip \
+  nodejs npm \
+  default-jdk maven gradle \
+  golang-go cmake cargo pkg-config libssl-dev || true
+
+# Ensure pip tools
+python3 -m pip install --upgrade pip setuptools wheel pytest tox || true
+
+ROOT_DIR="$(pwd)"
+echo "Project root: ${ROOT_DIR}"
+
+# Track overall status
+STATUS=0
+
+# Python: look for indicators and run tests
+if [ -f "requirements.txt" ] || [ -f "pyproject.toml" ] || ls *.py >/dev/null 2>&1; then
+  echo "Detected potential Python project"
+  python3 -m venv .venv || true
+  . .venv/bin/activate || true
+  if [ -f "requirements.txt" ]; then
+    pip install -r requirements.txt || STATUS=1
+  fi
+  # install test tools if pytest present
+  pip install pytest || true
+  # Run pytest if tests directory or files exist
+  if [ -d "tests" ] || ls test_*.py >/dev/null 2>&1 || ls *_test.py >/dev/null 2>&1; then
+    pytest -q || STATUS=1
+  else
+    echo "No pytest tests detected"
+  fi
+  deactivate || true
+fi
+
+# Node.js: package.json -> npm test
+if [ -f "package.json" ]; then
+  echo "Detected Node.js project"
+  npm ci --no-audit --no-fund || STATUS=1
+  if npm test --silent; then
+    echo "npm tests completed"
+  else
+    echo "npm tests failed or not defined"
+    STATUS=1
+  fi
+fi
+
+# Maven: pom.xml
+if [ -f "pom.xml" ]; then
+  echo "Detected Maven project"
+  mvn -B test || STATUS=1
+fi
+
+# Gradle: build.gradle or settings.gradle
+if ls build.gradle* settings.gradle* >/dev/null 2>&1; then
+  echo "Detected Gradle project"
+  # Use Gradle wrapper if present
+  if [ -x ./gradlew ]; then
+    ./gradlew test || STATUS=1
+  else
+    gradle test || STATUS=1
+  fi
+fi
+
+# Go
+if [ -f "go.mod" ] || ls *.go >/dev/null 2>&1; then
+  echo "Detected Go project"
+  go test ./... || STATUS=1
+fi
+
+# Rust
+if [ -f "Cargo.toml" ]; then
+  echo "Detected Rust project"
+  cargo test || STATUS=1
+fi
+
+# C/C++ CMake
+if [ -f "CMakeLists.txt" ]; then
+  echo "Detected CMake project"
+  mkdir -p build && cd build
+  cmake .. || STATUS=1
+  make -j"$(nproc)" || STATUS=1
+  if command -v ctest >/dev/null 2>&1; then
+    ctest --output-on-failure || STATUS=1
+  fi
+  cd "${ROOT_DIR}"
+fi
+
+# If no known project files found, print helpful info
+if ! ( [ -f "requirements.txt" ] || [ -f "pyproject.toml" ] || [ -f "package.json" ] || [ -f "pom.xml" ] || ls build.gradle* settings.gradle* >/dev/null 2>&1 || [ -f "go.mod" ] || [ -f "Cargo.toml" ] || [ -f "CMakeLists.txt" ] ); then
+  echo "No recognized project type files found. Listing top-level files:"
+  ls -la
+fi
+
+exit ${STATUS}
+SCRIPT
+"""
+    result = await asyncio.wait_for(tool(cmd), timeout=15)
+    assert result and isinstance(result, ToolErrorInfo)
