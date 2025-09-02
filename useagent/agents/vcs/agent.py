@@ -4,6 +4,7 @@ from typing import Union
 from pydantic_ai import Agent
 from pydantic_ai.tools import Tool
 
+from useagent.common.context_window import fit_messages_into_context_window
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
@@ -54,6 +55,7 @@ def init_agent(
             Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
             Tool(view_task_state, takes_ctx=True),
         ],
+        history_processors=[fit_messages_into_context_window],
     )
 
     @agent.instructions

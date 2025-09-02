@@ -4,6 +4,7 @@ from loguru import logger
 from pydantic_ai import Agent
 from pydantic_ai.tools import Tool
 
+from useagent.common.context_window import fit_messages_into_context_window
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
@@ -51,6 +52,7 @@ def init_agent(output_type, config: AppConfig | None = None, deps_type=None) -> 
                 max_retries=4,
             ),
         ],
+        history_processors=[fit_messages_into_context_window],
     )
 
     logger.debug(

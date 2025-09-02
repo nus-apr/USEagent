@@ -14,6 +14,8 @@ from pathlib import Path
 import sentencepiece as spm
 import tiktoken
 from loguru import logger
+from pydantic_ai.messages import ModelMessage
+from pydantic_ai.models import ModelRequestParameters
 from sentencepiece import SentencePieceProcessor
 from tiktoken import Encoding
 
@@ -24,6 +26,58 @@ GEMMA_3_TOKENIZER_PATH = (
 ).absolute()
 
 
+async def fit_messages_into_context_window(
+    messages: list[ModelMessage], safety_buffer: float = 0.85
+) -> list[ModelMessage]:
+    """
+    Tries to reduce messages into the context window, using the model and the context window provided in the ConfigSingleton.
+    This needs a internet connection, as well as a valid token to work, as it actually calls the API.
+    """
+    # DevNote: I am not super duper happy about this, but at least we are 100% its the same behaviour as if we use the API in our runs.
+    if not ConfigSingleton.is_initialized() or not ConfigSingleton.config.model:
+        logger.warning(
+            "[Support] Tried to shrink a list of {len(messages)} messages into context window, but ConfigSingleton was not initialzied or model not available"
+        )
+        return messages
+    context_limit: int = ConfigSingleton.config.lookup_model_context_window()
+    running_messages: list[ModelMessage] = messages
+    running_context_tokens: int = await count_tokens(running_messages)
+    while running_context_tokens > 0 and running_context_tokens >= (
+        context_limit * safety_buffer
+    ):
+        # We need / should always remove two, to remove pairs of request / answer and not have dangling things.
+        running_messages = running_messages[2:]
+        running_context_tokens = await count_tokens(running_messages)
+    if len(messages) != len(running_messages):
+        logger.debug(
+            f"[Support] Shrank a list of {len(messages)} messages to a list of {len(running_messages)} to fit into a context window of {context_limit}"
+        )
+    return running_messages
+
+
+async def count_tokens(
+    messages: list[ModelMessage],
+) -> int:
+    """
+    Counts the tokens of a given list, using the Pydantic and Model API.
+    This means this function only works online !
+
+    It will also incurr costs, but not too much compared to normal inference.
+
+    Returns the token count, or -1 on miss-initialization.
+    """
+    if not ConfigSingleton.is_initialized() or not ConfigSingleton.config.model:
+        return -1
+    model = ConfigSingleton.config.model
+    usage = await model.count_tokens(
+        messages=messages,
+        model_settings=None,
+        model_request_parameters=ModelRequestParameters(),
+    )
+    return usage.total_tokens
+
+
+# TODO: Deprecate this properly in favour of using the API
 def fit_message_into_context_window(content: str) -> str:
     """
     Looks up the models context window, and if applicable load the right encoding to shorten the content within the content window.

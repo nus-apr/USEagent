@@ -3,6 +3,7 @@ from pathlib import Path
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.tools import Tool
 
+from useagent.common.context_window import fit_messages_into_context_window
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
@@ -37,6 +38,7 @@ def init_agent(
                 max_retries=4,
             )
         ],
+        history_processors=[fit_messages_into_context_window],
     )
 
     @search_code_agent.instructions

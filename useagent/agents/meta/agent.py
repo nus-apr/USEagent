@@ -13,6 +13,7 @@ from useagent.agents.probing.agent import init_agent as init_probing_agent
 from useagent.agents.search_code.agent import init_agent as init_search_code_agent
 from useagent.agents.test_execution.agent import init_agent as init_test_execution_agent
 from useagent.agents.vcs.agent import init_agent as init_vcs_agent
+from useagent.common.context_window import fit_messages_into_context_window
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
@@ -108,7 +109,7 @@ def init_agent(
             Tool(read_file_as_diff),
         ],
         output_type=output_type,
-        history_processors=[summarize_old_messages],
+        history_processors=[fit_messages_into_context_window, summarize_old_messages],
     )
 
     ## This adds the task description to instructions (SYSTEM prompt).
