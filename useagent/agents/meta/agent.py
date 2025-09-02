@@ -384,6 +384,7 @@ def agent_loop(
     result = meta_agent.run_sync(
         prompt, deps=task_state, usage_limits=UsageLimits(request_limit=100)
     )
+    USAGE_TRACKER.add(meta_agent.name, result.usage())
 
     if (
         ConfigSingleton.is_initialized()
@@ -392,7 +393,6 @@ def agent_loop(
         if result.output and result.output.doubts:
             try:
                 # TODO: store the result? To have something in case of timeout?
-                # TODO: Add checking of usage // storing temporary usage.
                 logger.info(
                     f"Initial attempt at repairing the task resulting in a result with doubts: {result.output.doubts}. Attempting to resolve doubts with changes"
                 )
@@ -405,6 +405,8 @@ def agent_loop(
                     deps=task_state,
                     usage_limits=UsageLimits(request_limit=75),
                 )
+                # TODO: Do we want to earmark this as 'META-reiteration'? At the moment it will just be 2nd Meta Agent Cost
+                USAGE_TRACKER.add(meta_agent.name, result.usage())
             except Exception as exc:
                 logger.error(
                     f"Error while re-iterating the result after doubts. Re-using previous, initial result (with doubts). Exception was: {exc}"
@@ -422,5 +424,4 @@ def agent_loop(
             logger.error(f"Issue finding {diff_id} in DiffStore")
             logger.error(e)
 
-    USAGE_TRACKER.add(meta_agent.name, result.usage())
     return result.output, USAGE_TRACKER
