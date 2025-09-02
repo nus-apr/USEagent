@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from loguru import logger
+from pydantic_core import to_jsonable_python
 
 from useagent.agents.meta.agent import agent_loop
 from useagent.pydantic_models.output.action import Action
@@ -66,7 +67,7 @@ def _run(
 
     # start main agent loop
     logger.info("Starting main agent loop")
-    result, usage_tracker = agent_loop(task_state, output_type=output_type)
+    result, usage_tracker, messages = agent_loop(task_state, output_type=output_type)
     match result:
         case Action():
             cast_result: Action = cast(Action, result)
@@ -86,3 +87,10 @@ def _run(
     logger.debug(f"Storing Usage Information to {usage_info_file}")
     with open(usage_info_file, "w") as f:
         json.dump(usage_tracker.to_json(), f)
+
+    if messages:
+        message_file: Path = task_output_dir / "messages.json.log"
+        logger.debug(f"Storing {len(messages)} ModelMessages into {message_file}")
+        as_python_objects = to_jsonable_python(messages)
+        with open(message_file, "w") as f:
+            json.dump(as_python_objects, f)

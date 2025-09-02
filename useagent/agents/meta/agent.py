@@ -427,4 +427,4 @@ def agent_loop(
             logger.error(f"Issue finding {diff_id} in DiffStore")
             logger.error(e)
 
-    return result.output, USAGE_TRACKER
+    return result.output, USAGE_TRACKER, result.all_messages()
