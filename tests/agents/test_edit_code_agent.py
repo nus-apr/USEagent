@@ -22,6 +22,7 @@ index 0000000..e69de29
 """
 
 
+@pytest.mark.agent
 def test_edit_agent_has_instructions_prompts():
     test_model = TestModel(
         call_tools=["view"],
@@ -39,6 +40,7 @@ def test_edit_agent_has_instructions_prompts():
     assert len(agent._instructions) >= 1
 
 
+@pytest.mark.agent
 @pytest.mark.asyncio
 async def test_edit_agent_direct_output_no_tool_calls__example_scaffold_test(tmp_path):
     """
@@ -64,6 +66,7 @@ async def test_edit_agent_direct_output_no_tool_calls__example_scaffold_test(tmp
         result = await agent.run("fix the bug", deps=state)
 
     for message in history:
+        # DevNote: Kept here to show how to access it in a test.
         print("History:", message)
 
     assert result
