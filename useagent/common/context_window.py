@@ -9,6 +9,7 @@ Different models need different tokenizers, but for now we have two larger tribe
 We have seen issues for some bash output, see Issue #30
 """
 
+import time
 from pathlib import Path
 
 import sentencepiece as spm
@@ -27,7 +28,9 @@ GEMMA_3_TOKENIZER_PATH = (
 
 
 async def fit_messages_into_context_window(
-    messages: list[ModelMessage], safety_buffer: float = 0.85
+    messages: list[ModelMessage],
+    safety_buffer: float = 0.85,
+    delay_between_model_calls_in_seconds: float = 0.25,
 ) -> list[ModelMessage]:
     """
     Tries to reduce messages into the context window, using the model and the context window provided in the ConfigSingleton.
@@ -48,6 +51,12 @@ async def fit_messages_into_context_window(
         # We need / should always remove two, to remove pairs of request / answer and not have dangling things.
         running_messages = running_messages[2:]
         running_context_tokens = await count_tokens(running_messages)
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"]
+        ):
+            time.sleep(delay_between_model_calls_in_seconds)
+
     if len(messages) != len(running_messages):
         logger.debug(
             f"[Support] Shrank a list of {len(messages)} messages to a list of {len(running_messages)} to fit into a context window of {context_limit}"
