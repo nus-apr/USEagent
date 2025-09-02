@@ -1,6 +1,6 @@
 ## NOTE: implment MetaAgent with agent delegation
 from pathlib import Path
-from typing import Literal
+from typing import AnyStr, Literal
 
 from loguru import logger
 from pydantic_ai import Agent, RunContext
@@ -8,6 +8,7 @@ from pydantic_ai.messages import ModelMessage
 from pydantic_ai.tools import Tool
 from pydantic_ai.usage import Usage, UsageLimits
 
+from useagent.agents.advisor.agent import init_agent as init_advisor_agent
 from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
 from useagent.agents.probing.agent import init_agent as init_probing_agent
 from useagent.agents.search_code.agent import init_agent as init_search_code_agent
@@ -23,6 +24,7 @@ from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.artifacts.code import Location
 from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.artifacts.test_result import TestResult
+from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.info.environment import (
     Commands,
     Environment,
@@ -36,8 +38,14 @@ from useagent.pydantic_models.provides_output_instructions import (
     ProvidesOutputInstructions,
 )
 from useagent.pydantic_models.task_state import TaskState
+from useagent.pydantic_models.tools.cliresult import CLIResult
+from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.state.usage_tracker import UsageTracker
-from useagent.tools.bash import init_bash_tool, make_bash_tool_for_agent
+from useagent.tools.bash import (
+    get_bash_history,
+    init_bash_tool,
+    make_bash_tool_for_agent,
+)
 from useagent.tools.edit import init_edit_tools, read_file_as_diff
 from useagent.tools.meta import (
     remove_diffs_from_diff_store,
@@ -399,8 +407,21 @@ def agent_loop(
                     f"Initial attempt at repairing the task resulting in a result with doubts: {result.output.doubts}. Attempting to resolve doubts with changes"
                 )
                 logger.debug(f"Doubtful result was: {result.output}")
-                new_instruction: str = (
-                    f"While addressing the task, you produced a result that had the following doubts: {result.output.doubts}. Try to address your own doubts making changes to your result, or by identifying more information, with the tools at your disposal."
+                current_bash_hist: list[
+                    tuple[
+                        NonEmptyStr, NonEmptyStr, CLIResult | ToolErrorInfo | Exception
+                    ]
+                ] = get_bash_history()[:10]
+                bash_infos = [
+                    "command\t" + t[0] + "outcome:\t" + str(t[2])
+                    for t in current_bash_hist
+                ]
+
+                # TODO: Find right attributes
+                new_instruction: str = advising_on_doubts(
+                    doubts=result.output.doubts,
+                    task_desc=task_state._task.get_issue_statement(),
+                    cmd_history=bash_infos,
                 )
                 result = meta_agent.run_sync(
                     new_instruction,
@@ -428,3 +449,17 @@ def agent_loop(
             logger.error(e)
 
     return result.output, USAGE_TRACKER, result.all_messages()
+
+
+def advising_on_doubts(doubts: str, task_desc: str, cmd_history: list[str]) -> AnyStr:
+    instructions = (
+        f"The user was given this task:\n{task_desc}\nHere are the doubts:\n{doubts}\n"
+        f"These were the last executed commands and their results:"
+        "\n".join(cmd_history)
+    )
+
+    advisor_agent = init_advisor_agent()
+    advise_result = advisor_agent.run_sync(instructions)
+    logger.debug(f"Doubtful result was: {advise_result.output}")
+    USAGE_TRACKER.add(advisor_agent.name, advise_result.usage())
+    return advise_result.output
