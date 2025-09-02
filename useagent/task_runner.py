@@ -89,8 +89,9 @@ def _run(
         json.dump(usage_tracker.to_json(), f)
 
     if messages:
-        message_file: Path = task_output_dir / "messages.json.log"
+        message_file: Path = task_output_dir / "messages.jsonl.log"
         logger.debug(f"Storing {len(messages)} ModelMessages into {message_file}")
-        as_python_objects = to_jsonable_python(messages)
-        with open(message_file, "w") as f:
-            json.dump(as_python_objects, f)
+        with open(message_file, "w", encoding="utf-8") as f:
+            for msg in messages:
+                obj = to_jsonable_python(msg)
+                f.write(json.dumps(obj) + "\n")
