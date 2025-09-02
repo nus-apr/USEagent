@@ -9,14 +9,32 @@ Different models need different tokenizers, but for now we have two larger tribe
 We have seen issues for some bash output, see Issue #30
 """
 
+import json
 import time
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 import sentencepiece as spm
 import tiktoken
 from loguru import logger
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai.messages import (
+    BaseToolCallPart,
+    BaseToolReturnPart,
+    BinaryContent,
+    FileUrl,
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    RetryPromptPart,
+    SystemPromptPart,
+    TextPart,
+    ThinkingPart,
+    ToolReturnPart,
+    UserContent,
+    UserPromptPart,
+)
 from pydantic_ai.models import ModelRequestParameters
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
 from sentencepiece import SentencePieceProcessor
 from tiktoken import Encoding
 
@@ -78,12 +96,88 @@ async def count_tokens(
     if not ConfigSingleton.is_initialized() or not ConfigSingleton.config.model:
         return -1
     model = ConfigSingleton.config.model
-    usage = await model.count_tokens(
-        messages=messages,
-        model_settings=None,
-        model_request_parameters=ModelRequestParameters(),
-    )
-    return usage.total_tokens
+    if isinstance(model, OpenAIResponsesModel) or isinstance(model, OpenAIChatModel):
+        return _count_openai_tokens(messages=messages)
+    else:
+        usage = await model.count_tokens(
+            messages=messages,
+            model_settings=None,
+            model_request_parameters=ModelRequestParameters(),
+        )
+        return usage.total_tokens
+
+
+def _flatten_user_content(content: str | Sequence[UserContent]) -> str:
+    if isinstance(content, str):
+        return content
+    out: list[str] = []
+    for c in content:
+        if isinstance(c, str):
+            out.append(c)
+        elif isinstance(c, FileUrl):
+            out.append(c.url)
+        elif isinstance(c, BinaryContent):
+            out.append(c.identifier or "<binary>")
+        else:
+            out.append(str(c))
+    return "\n".join(out)
+
+
+def _part_to_text(part: object) -> str:
+    if isinstance(part, SystemPromptPart):
+        return part.content
+    if isinstance(part, UserPromptPart):
+        return _flatten_user_content(part.content)
+    if isinstance(part, RetryPromptPart):
+        return str(part.content)
+    if isinstance(part, ToolReturnPart):
+        return part.model_response_str()
+    if isinstance(part, BaseToolReturnPart):
+        return str(part.content)
+    if isinstance(part, TextPart):
+        return part.content
+    if isinstance(part, ThinkingPart):
+        return part.content or ""
+    if isinstance(part, BaseToolCallPart):
+        # include tool name + args text for a conservative estimate
+        try:
+            return f"{part.tool_name}({json.dumps(part.args)})"
+        except Exception:
+            return f"{part.tool_name}"
+    # Unknown part type: best-effort string
+    return getattr(part, "content", "") if hasattr(part, "content") else str(part)
+
+
+def _iter_parts(messages: Iterable[ModelMessage]) -> Iterable[str]:
+    for m in messages:
+        if isinstance(m, (ModelRequest, ModelResponse)):
+            for p in m.parts:
+                yield _part_to_text(p)
+        else:
+            # Defensive: try generic access
+            for p in getattr(m, "parts", []) or []:
+                yield _part_to_text(p)
+
+
+def _encoding_for(model_name: str) -> tiktoken.Encoding:
+    try:
+        return tiktoken.encoding_for_model(model_name)
+    except KeyError:
+        return tiktoken.get_encoding("o200k_base")
+
+
+def _count_openai_tokens(
+    messages: list[ModelMessage], model_name: str = "gpt-4o"
+) -> int:
+    enc = _encoding_for(model_name)
+    total: int = 0
+    # Join parts with separators to approximate message/part boundaries
+    for text in _iter_parts(messages):
+        if not text:
+            continue
+        total += len(enc.encode(text))
+        total += 3  # small delimiter fudge per part
+    return total
 
 
 # TODO: Deprecate this properly in favour of using the API
