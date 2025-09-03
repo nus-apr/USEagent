@@ -394,17 +394,22 @@ def agent_loop(
         prompt, deps=task_state, usage_limits=UsageLimits(request_limit=100)
     )
     USAGE_TRACKER.add(meta_agent.name, result.usage())
-    first_iteration_messages = result.new_messages()
+    last_iteration_messages = result.all_messages()
 
     if (
         ConfigSingleton.is_initialized()
         and ConfigSingleton.config.optimization_toggles["reiterate-on-doubts"]
     ):
-        if result.output and result.output.doubts:
+        MAX_DOUBT_REITERATIONS, DOUBT_REITERATION = 2, 0
+        while (
+            DOUBT_REITERATION < MAX_DOUBT_REITERATIONS
+            and result.output
+            and result.output.doubts
+        ):
             try:
                 # TODO: store the result? To have something in case of timeout?
                 logger.info(
-                    f"Initial attempt at repairing the task resulting in a result with doubts: {result.output.doubts}. Attempting to resolve doubts with changes"
+                    f"Attempt at solving the task produced a result with doubts: {result.output.doubts}. Attempting to resolve doubts with changes (RE-ITERATION {DOUBT_REITERATION})"
                 )
                 logger.debug(f"Doubtful result was: {result.output}")
                 current_bash_hist: list[
@@ -417,8 +422,26 @@ def agent_loop(
                     for t in current_bash_hist
                 ]
 
-                # TODO: Find right attributes
+                artifact = "UNK"
+                match result.output:
+                    case Action():
+                        artifact = (
+                            "SUCCESSFUL"
+                            if result.output.success
+                            else "UNSUCCESSFUL" + "---" + result.output.evidence
+                        )
+                    case Answer():
+                        artifact = result.output.answer
+                    case CodeChange():
+                        artifact = (
+                            str(task_state.diff_store.id_to_diff[result.output.diff_id])
+                            + "\nExplanation:"
+                            + result.output.explanation
+                        )
+                    case _:
+                        artifact = str(result.output)
                 new_instruction: str = advising_on_doubts(
+                    artifact=artifact,
                     doubts=result.output.doubts,
                     task_desc=task_state._task.get_issue_statement(),
                     cmd_history=bash_infos,
@@ -427,18 +450,21 @@ def agent_loop(
                     new_instruction,
                     deps=task_state,
                     usage_limits=UsageLimits(request_limit=75),
-                    message_history=first_iteration_messages,
+                    message_history=last_iteration_messages,
                 )
                 # TODO: Do we want to earmark this as 'META-reiteration'? At the moment it will just be 2nd Meta Agent Cost
                 USAGE_TRACKER.add(meta_agent.name, result.usage())
+                last_iteration_messages = result.all_messages()
             except Exception as exc:
                 logger.error(
                     f"Error while re-iterating the result after doubts. Re-using previous, initial result (with doubts). Exception was: {exc}"
                 )
+            finally:
+                DOUBT_REITERATION += 1
         else:
             logger.debug("Task was finished without any doubts.")
 
-    if output_type is CodeChange:
+    if output_type is CodeChange and isinstance(result.output, CodeChange):
         diff_id = result.output.diff_id
         logger.info(f"Resolving {diff_id} in DiffStore:")
         try:
@@ -451,15 +477,24 @@ def agent_loop(
     return result.output, USAGE_TRACKER, result.all_messages()
 
 
-def advising_on_doubts(doubts: str, task_desc: str, cmd_history: list[str]) -> AnyStr:
+def advising_on_doubts(
+    artifact: str,
+    doubts: str,
+    task_desc: str,
+    cmd_history: list[str],
+    message_history: list[ModelMessage] | None = None,
+) -> AnyStr:
     instructions = (
-        f"The user was given this task:\n{task_desc}\nHere are the doubts:\n{doubts}\n"
+        f"The user was given this task:\n{task_desc}\n For which you created {artifact} \nThere are doubts remaining about this:\n{doubts}\n"
+        f"For your judgement, also consider the existing message history. The provided message history might have been shortened to only the newest messages."
         f"These were the last executed commands and their results:"
         "\n".join(cmd_history)
     )
 
     advisor_agent = init_advisor_agent()
-    advise_result = advisor_agent.run_sync(instructions)
-    logger.debug(f"Doubtful result was: {advise_result.output}")
+    advise_result = advisor_agent.run_sync(
+        instructions, message_history=message_history
+    )
+    logger.debug(f"[Meta] Advice received from Advisor Agent: {advise_result.output}")
     USAGE_TRACKER.add(advisor_agent.name, advise_result.usage())
     return advise_result.output
