@@ -31,7 +31,7 @@ class _BashSession:
     # DevNote: The timeout is quite large, but we have seen commands that need so long
     # An example is `apt-get install openjdk-jdk-8` or similar large packages.
 
-    __DEFAULT_TIMEOUT: float = 1800  # seconds
+    __DEFAULT_TIMEOUT: float = 2400  # seconds
     _timeout: float = __DEFAULT_TIMEOUT
     _sentinel: str = "<<exit>>"
 
