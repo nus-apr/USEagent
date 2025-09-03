@@ -16,6 +16,7 @@ If you see errors related to missing dependencies, environment variables etc. af
 
 If a command fails due to a timeout, you should retry by splitting it up (for installs or build commands,etc.) or by reducing its scope (for searches, etc.). 
 You can assume that file- or download speeds will not change, so retrying a command without changes will also time-out. 
+Just because you see a timeout, this is not a reason to abandon the command or approach all together, and never refrain from action because you think it would be too slow.
 
 **Hints**
 
