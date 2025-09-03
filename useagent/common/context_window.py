@@ -5,6 +5,7 @@ Different models need different tokenizers, but for now we have two larger tribe
 
 - TikToken, for OpenAI Models
 - Sentenpiece (through Huggingface Transformers) for Google Models (gemini + gemma)
+- Model-API (all-but OpenAI)
 
 We have seen issues for some bash output, see Issue #30
 """
@@ -50,36 +51,42 @@ async def fit_messages_into_context_window(
     safety_buffer: float = 0.85,
     delay_between_model_calls_in_seconds: float = 0.25,
 ) -> list[ModelMessage]:
-    """
-    Tries to reduce messages into the context window, using the model and the context window provided in the ConfigSingleton.
-    This needs a internet connection, as well as a valid token to work, as it actually calls the API.
-    """
-    # DevNote: I am not super duper happy about this, but at least we are 100% its the same behaviour as if we use the API in our runs.
+    # DevNote - Current Logic:
+    # We cut the first message to be at most 60% of our Budget
+    # Second message can be at most 30% of our budget
+    # If these cuts do not yield to a fitting context window, we discard the oldest messages until the result fits.
     if not ConfigSingleton.is_initialized() or not ConfigSingleton.config.model:
         logger.warning(
-            "[Support] Tried to shrink a list of {len(messages)} messages into context window, but ConfigSingleton was not initialzied or model not available"
+            f"[Support] Tried to shrink a list of {len(messages)} messages into context window, but ConfigSingleton was not initialzied or model not available"
         )
         return messages
-    context_limit: int = ConfigSingleton.config.lookup_model_context_window()
-    running_messages: list[ModelMessage] = messages
-    running_context_tokens: int = await count_tokens(running_messages)
-    while running_context_tokens > 0 and running_context_tokens >= (
-        context_limit * safety_buffer
-    ):
-        # We need / should always remove two, to remove pairs of request / answer and not have dangling things.
-        running_messages = running_messages[2:]
-        running_context_tokens = await count_tokens(running_messages)
-        if (
-            ConfigSingleton.is_initialized()
-            and ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"]
-        ):
-            time.sleep(delay_between_model_calls_in_seconds)
 
-    if len(messages) != len(running_messages):
+    context_limit: int = ConfigSingleton.config.lookup_model_context_window()
+    budget: int = int(context_limit * safety_buffer)
+
+    newest_cap: int = int(budget * 0.60)
+    second_cap: int = int(budget * 0.30)
+
+    capped = await _apply_per_turn_caps(messages, newest_cap, second_cap)
+
+    total_after_caps = await count_tokens(capped)
+    if total_after_caps <= budget:
+        out = capped
+    else:
+        shrunk = await _shrink_from_oldest_to_budget(capped, budget)
+        if await count_tokens(shrunk) <= budget:
+            out = shrunk
+        else:
+            # fallback: drop oldest pairs
+            out = await _trim_oldest_pairs_to_budget(
+                shrunk, budget, delay_between_model_calls_in_seconds
+            )
+
+    if len(messages) != len(out):
         logger.debug(
-            f"[Support] Shrank a list of {len(messages)} messages to a list of {len(running_messages)} to fit into a context window of {context_limit}"
+            f"[Support] Shrank a list of {len(messages)} messages to a list of {len(out)} to fit into a context window of {context_limit}"
         )
-    return running_messages
+    return out
 
 
 async def count_tokens(
@@ -105,6 +112,90 @@ async def count_tokens(
             model_request_parameters=ModelRequestParameters(),
         )
         return usage.total_tokens
+
+
+# --- helpers ---
+MARKER_TEXT = "[[ cut for context size ]]"
+
+
+def _make_same_kind_text_message_like(orig: ModelMessage, text: str) -> ModelMessage:
+    if isinstance(orig, ModelRequest):
+        return ModelRequest(parts=[UserPromptPart(content=text)])
+    return ModelResponse(parts=[TextPart(content=text)])
+
+
+def _msg_set_text(m: ModelMessage, text: str) -> ModelMessage:
+    return _make_same_kind_text_message_like(m, text)
+
+
+def _msg_get_text(m: ModelMessage) -> str:
+    parts = list(_iter_parts([m]))
+    return "\n".join(p for p in parts if p)
+
+
+async def _truncate_message_to_cap(m: ModelMessage, token_cap: int) -> ModelMessage:
+    if token_cap <= 0:
+        return _msg_set_text(m, "")
+    if await count_tokens([m]) <= token_cap:
+        return m
+
+    marker_msg = _make_same_kind_text_message_like(m, MARKER_TEXT)
+    if await count_tokens([marker_msg]) > token_cap:
+        return _msg_set_text(m, "")
+
+    txt = _msg_get_text(m)
+    lo, hi = 0, len(txt) // 2
+    best_text = MARKER_TEXT  # always at least the marker
+
+    while lo <= hi:
+        k = (lo + hi) // 2
+        cand_text = f"{txt[:k]}{MARKER_TEXT}{txt[-k:]}" if k > 0 else MARKER_TEXT
+        cand_msg = _make_same_kind_text_message_like(m, cand_text)
+        t = await count_tokens([cand_msg])
+        if t <= token_cap:
+            best_text = cand_text
+            lo = k + 1
+        else:
+            hi = k - 1
+
+    return _msg_set_text(m, best_text)
+
+
+async def _apply_per_turn_caps(
+    messages: list[ModelMessage],
+    newest_cap: int,
+    second_newest_cap: int,
+) -> list[ModelMessage]:
+    if not messages:
+        return messages
+    out = list(messages)
+    out[-1] = await _truncate_message_to_cap(out[-1], newest_cap)
+    if len(out) >= 2:
+        out[-2] = await _truncate_message_to_cap(out[-2], second_newest_cap)
+    return out
+
+
+async def _trim_oldest_pairs_to_budget(
+    messages: list[ModelMessage],
+    budget_tokens: int,
+    delay_between_model_calls_in_seconds: float,
+) -> list[ModelMessage]:
+    running = list(messages)
+    tokens = await count_tokens(running)
+    while tokens > budget_tokens and running:
+        if len(running) >= 2:
+            running = running[2:]
+        else:
+            running = []
+        tokens = await count_tokens(running)
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles.get(
+                "bash-tool-speed-bumper", False
+            )
+        ):
+            time.sleep(delay_between_model_calls_in_seconds)
+    return running
 
 
 def _flatten_user_content(content: str | Sequence[UserContent]) -> str:
@@ -178,6 +269,30 @@ def _count_openai_tokens(
         total += len(enc.encode(text))
         total += 3  # small delimiter fudge per part
     return total
+
+
+async def _shrink_from_oldest_to_budget(
+    messages: list[ModelMessage],
+    budget_tokens: int,
+) -> list[ModelMessage]:
+    if not messages:
+        return messages
+    out = list(messages)
+    total = await count_tokens(out)
+    if total <= budget_tokens:
+        return out
+
+    # Greedily truncate from oldest toward newest (excluding the two newest caps already applied)
+    for i in range(len(out)):
+        total = await count_tokens(out)
+        if total <= budget_tokens:
+            break
+        # Compute max allowed for this message given others fixed
+        others = out[:i] + out[i + 1 :]
+        other_tokens = await count_tokens(others)
+        cap_for_this = max(0, budget_tokens - other_tokens)
+        out[i] = await _truncate_message_to_cap(out[i], cap_for_this)
+    return out
 
 
 # TODO: Deprecate this properly in favour of using the API
