@@ -41,6 +41,7 @@ from useagent.pydantic_models.task_state import TaskState
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.state.usage_tracker import UsageTracker
+from useagent.tasks.swebench_task import SWEbenchTask
 from useagent.tools.bash import (
     get_bash_history,
     init_bash_tool,
@@ -376,7 +377,9 @@ def init_agent(
 
 
 def agent_loop(
-    task_state: TaskState, output_type: Literal[CodeChange, Answer, Action] = CodeChange
+    task_state: TaskState,
+    output_type: Literal[CodeChange, Answer, Action] = CodeChange,
+    output_dir: Path | None = None,
 ):
     """
     Main agent loop.
@@ -468,8 +471,18 @@ def agent_loop(
         diff_id = result.output.diff_id
         logger.info(f"Resolving {diff_id} in DiffStore:")
         try:
-            diff_content = task_state.diff_store.id_to_diff[diff_id]
-            logger.info(f"{diff_content}")
+            diff_entry: DiffEntry | None = task_state.diff_store.id_to_diff[diff_id]
+            diff_content: str = (
+                diff_entry.diff_content
+                if diff_entry
+                else f"FAILED to retrieve diff_content for diff_id {diff_id}"
+            )
+            if diff_content and output_dir:
+                patch_file = output_dir / "patch.diff"
+                patch_file.parent.mkdir(parents=True, exist_ok=True)
+                patch_file.write_text(diff_content)
+            if output_dir and isinstance(task_state._task, SWEbenchTask):
+                task_state._task.postprocess_swebench_task(diff_content, output_dir)
         except Exception as e:
             logger.error(f"Issue finding {diff_id} in DiffStore")
             logger.error(e)
