@@ -83,6 +83,7 @@ async def fit_messages_into_context_window(
             out = shrunk
         else:
             # fallback: drop oldest pairs
+            # Updated: now drops single oldest messages (not pairs) until within budget, then force-fits last.
             out = await _trim_oldest_pairs_to_budget(
                 shrunk, budget, delay_between_model_calls_in_seconds
             )
@@ -247,6 +248,15 @@ async def _truncate_message_to_cap(m: ModelMessage, token_cap: int) -> ModelMess
     return _msg_set_text(m, best_text)
 
 
+async def _cap_message(msg: ModelMessage, token_cap: int) -> ModelMessage:
+    """Cap a single message to token_cap, preserving tool return structure when present."""
+    if isinstance(msg, ModelRequest) and any(
+        isinstance(p, ToolReturnPart) for p in getattr(msg, "parts", []) or []
+    ):
+        return await _truncate_tool_return_message(msg, token_cap)
+    return await _truncate_message_to_cap(msg, token_cap)
+
+
 async def _apply_per_turn_caps(
     messages: list[ModelMessage],
     newest_cap: int,
@@ -254,18 +264,10 @@ async def _apply_per_turn_caps(
 ) -> list[ModelMessage]:
     if not messages:
         return messages
-
-    async def _cap_one(msg: ModelMessage, cap: int) -> ModelMessage:
-        if isinstance(msg, ModelRequest) and any(
-            isinstance(p, ToolReturnPart) for p in getattr(msg, "parts", []) or []
-        ):
-            return await _truncate_tool_return_message(msg, cap)
-        return await _truncate_message_to_cap(msg, cap)
-
     out = list(messages)
-    out[-1] = await _cap_one(out[-1], newest_cap)
+    out[-1] = await _cap_message(out[-1], newest_cap)
     if len(out) >= 2:
-        out[-2] = await _cap_one(out[-2], second_newest_cap)
+        out[-2] = await _cap_message(out[-2], second_newest_cap)
     return out
 
 
@@ -274,39 +276,23 @@ async def _trim_oldest_pairs_to_budget(
     budget_tokens: int,
     delay_between_model_calls_in_seconds: float,
 ) -> list[ModelMessage]:
+    """
+    NOTE: Despite the legacy name, this now drops the OLDEST SINGLE message at a time
+    until within budget, and force-fits the last survivor if needed.
+    """
     running = list(messages)
     tokens = await count_tokens(running)
 
     while tokens > budget_tokens and running:
-        if len(running) > 2:
-            # drop an oldest "pair"
-            running = running[2:]
-        elif len(running) == 2:
-            # keep the NEWEST; force-fit it to the remaining budget
-            newest = running[-1]
-            cap = max(0, budget_tokens)
-            if isinstance(newest, ModelRequest) and any(
-                isinstance(p, ToolReturnPart)
-                for p in getattr(newest, "parts", []) or []
-            ):
-                newest = await _truncate_tool_return_message(newest, cap)
-            else:
-                newest = await _truncate_message_to_cap(newest, cap)
-            running = [newest]
-            break
-        else:  # len == 1
-            only = running[0]
-            cap = max(0, budget_tokens)
-            if isinstance(only, ModelRequest) and any(
-                isinstance(p, ToolReturnPart) for p in getattr(only, "parts", []) or []
-            ):
-                only = await _truncate_tool_return_message(only, cap)
-            else:
-                only = await _truncate_message_to_cap(only, cap)
-            running = [only]
+        if len(running) == 1:
+            # Single survivor – force-fit instead of dropping to []
+            fitted = await _force_fit_single(running[0], budget_tokens)
+            running = fitted if fitted else []
             break
 
-        tokens = await count_tokens(running)
+        # Drop the OLDEST single message (index 0)
+        running = running[1:]
+
         if (
             ConfigSingleton.is_initialized()
             and ConfigSingleton.config.optimization_toggles.get(
@@ -314,6 +300,8 @@ async def _trim_oldest_pairs_to_budget(
             )
         ):
             time.sleep(delay_between_model_calls_in_seconds)
+
+        tokens = await count_tokens(running)
 
     return running
 
