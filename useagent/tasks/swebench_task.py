@@ -1,3 +1,4 @@
+import json
 import re
 import shutil
 import subprocess
@@ -242,3 +243,33 @@ class SWEbenchTask(Task):
             ", ".join(seen),
         )
         raise ValueError(f"Instance {instance_id} not found in {dataset}")
+
+    def postprocess_swebench_task(self, result: str | None, output_dir: Path) -> None:
+        """
+        Writes the given task to a nearby file, matching the swe-bench format.
+        The result is meant to be a diff, the resolved diff_entry.diff_id, without any encoding applied yet.
+        """
+        instance_id: str = self.instance_id
+        model_patch: str = result if result is not None else ""
+
+        if model_patch and model_patch.strip():
+            logger.info(
+                f"[Task] Postprocessing SWEbench Task {instance_id}, storing a Patch with {len(model_patch)} LoC to {output_dir}/{instance_id}.json"
+            )
+        else:
+            logger.warning(
+                f"[Task] Proprocessing SWEBench Task {instance_id} received an empty result - storing a empty result to {output_dir}/{instance_id}.json"
+            )
+
+        entry: dict[str, Any] = {"model_patch": model_patch}
+        entry["model_name_or_path"] = "useagent-turbo-dev"
+
+        predictions: dict[str, Any] = {instance_id: entry}
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        out_path: Path = output_dir / f"{instance_id}.json"
+
+        # UTF-8, no BOM; normalize to '\n' to avoid platform-dependent newlines in the JSON file.
+        with out_path.open("w", encoding="utf-8", newline="\n") as f:
+            json.dump(predictions, f, ensure_ascii=False)
+        logger.debug(f"[Task] finished writing SWEbench-Task {instance_id}")

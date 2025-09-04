@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -314,3 +315,73 @@ def test_short_commit_prefix_should_resolve_to_head(tmp_path: Path, iid: str) ->
     resolved = _git(dest, "rev-parse", "--verify", short).stdout.decode().strip()
     head = _git(dest, "rev-parse", "HEAD").stdout.decode().strip()
     assert resolved == head
+
+
+@pytest.mark.online
+@pytest.mark.slow
+def test_postprocess_should_write_file_with_patch(tmp_path: Path) -> None:
+    task = SWEbenchTask(
+        instance_id="sphinx-doc__sphinx-8265",
+        working_dir=tmp_path / "wd",
+        dataset=DATASET,
+    )
+    outdir = tmp_path / "preds"
+    diff = "--- a/file.py\n+++ b/file.py\n+print('hello')\n"
+
+    task.postprocess_swebench_task(result=diff, output_dir=outdir)
+
+    out_path = outdir / f"{task.instance_id}.json"
+    assert out_path.exists()
+    data = json.loads(out_path.read_text(encoding="utf-8"))
+    assert data[task.instance_id]["model_patch"] == diff
+
+
+@pytest.mark.online
+@pytest.mark.slow
+def test_postprocess_none_should_write_empty_patch(tmp_path: Path) -> None:
+    task = SWEbenchTask(
+        instance_id="sphinx-doc__sphinx-8265",
+        working_dir=tmp_path / "wd2",
+        dataset=DATASET,
+    )
+    outdir = tmp_path / "preds2"
+
+    task.postprocess_swebench_task(result=None, output_dir=outdir)
+
+    data = json.loads((outdir / f"{task.instance_id}.json").read_text(encoding="utf-8"))
+    assert data[task.instance_id]["model_patch"] == ""
+
+
+@pytest.mark.online
+@pytest.mark.slow
+def test_postprocess_should_preserve_unicode_and_newlines(tmp_path: Path) -> None:
+    task = SWEbenchTask(
+        instance_id="sphinx-doc__sphinx-8265",
+        working_dir=tmp_path / "wd3",
+        dataset=DATASET,
+    )
+    diff = "diff --git a/ä.py b/漢.py\r\n+print('mañana')\n"
+
+    task.postprocess_swebench_task(result=diff, output_dir=tmp_path)
+
+    data = json.loads(
+        (tmp_path / f"{task.instance_id}.json").read_text(encoding="utf-8")
+    )
+    assert data[task.instance_id]["model_patch"] == diff
+
+
+@pytest.mark.online
+@pytest.mark.slow
+def test_postprocess_output_file_should_be_utf8(tmp_path: Path) -> None:
+    task = SWEbenchTask(
+        instance_id="sphinx-doc__sphinx-8265",
+        working_dir=tmp_path / "wd4",
+        dataset=DATASET,
+    )
+    diff = "á\nβ\n漢\n"
+
+    task.postprocess_swebench_task(result=diff, output_dir=tmp_path)
+
+    txt = (tmp_path / f"{task.instance_id}.json").read_text(encoding="utf-8")
+    data = json.loads(txt)
+    assert data[task.instance_id]["model_patch"] == diff
