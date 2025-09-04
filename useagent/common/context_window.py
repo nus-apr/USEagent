@@ -62,7 +62,7 @@ async def fit_messages_into_context_window(
         return messages
 
     # Remove orphans up-front so they don't distort budgeting.
-    messages = remove_orphaned_tool_responses(messages)
+    non_orphan_messages = remove_orphaned_tool_responses(messages)
 
     context_limit: int = ConfigSingleton.config.lookup_model_context_window()
     budget: int = int(context_limit * safety_buffer)
@@ -70,9 +70,7 @@ async def fit_messages_into_context_window(
     newest_cap: int = int(budget * 0.60)
     second_cap: int = int(budget * 0.30)
 
-    capped = await _apply_per_turn_caps(messages, newest_cap, second_cap)
-    # Cheap safety again after capping.
-    capped = remove_orphaned_tool_responses(capped)
+    capped = await _apply_per_turn_caps(non_orphan_messages, newest_cap, second_cap)
 
     total_after_caps = await count_tokens(capped)
     if total_after_caps <= budget:
@@ -82,9 +80,7 @@ async def fit_messages_into_context_window(
         if await count_tokens(shrunk) <= budget:
             out = shrunk
         else:
-            # fallback: drop oldest pairs
-            # Updated: now drops single oldest messages (not pairs) until within budget, then force-fits last.
-            out = await _trim_oldest_pairs_to_budget(
+            out = await _trim_oldest_until_in_budget(
                 shrunk, budget, delay_between_model_calls_in_seconds
             )
 
@@ -107,6 +103,20 @@ async def fit_messages_into_context_window(
             if capped:
                 newest = capped[-1]
                 out = await _force_fit_single(newest, budget)
+
+    if messages and not out:
+        try:
+            logger.warning(
+                "[Support] Shrinking tools remained impossible after removing orphans - trying to salvage the newest three messages into context window."
+            )
+            out = await _salvage_most_recent_triplet(
+                original_messages=messages, safety_buffer=safety_buffer
+            )
+        except Exception:
+            logger.error(
+                "[Support] It was impossible to salvage the last three messages, replacing message history with a dummy."
+            )
+            out = [_make_context_pruned_notice()]
 
     return out
 
@@ -163,17 +173,18 @@ def _is_tool_return_message(m: ModelMessage) -> bool:
     return has_return
 
 
-# --- Final budget enforcement: ensure <= budget without returning [] ---
 async def _force_fit_single(msg: ModelMessage, cap: int) -> list[ModelMessage]:
-    if isinstance(msg, ModelRequest) and any(
-        isinstance(p, ToolReturnPart) for p in getattr(msg, "parts", []) or []
-    ):
-        fitted = await _truncate_tool_return_message(msg, cap)
-    else:
-        fitted = await _truncate_message_to_cap(msg, cap)
-    # Ensure not reintroducing orphans
-    fitted_list = remove_orphaned_tool_responses([fitted])
-    return fitted_list
+    if isinstance(msg, ModelRequest):
+        parts = getattr(msg, "parts", []) or []
+        if any(isinstance(p, ToolReturnPart) for p in parts):
+            kept = [p for p in parts if not isinstance(p, ToolReturnPart)]
+            if kept:
+                msg = ModelRequest(parts=kept)
+            else:
+                # lone orphan: keep a placeholder request so we don't re-orphan and drop it
+                return [ModelRequest(parts=[])]
+    fitted = await _truncate_message_to_cap(msg, cap)
+    return [fitted]
 
 
 async def count_tokens(
@@ -271,14 +282,13 @@ async def _apply_per_turn_caps(
     return out
 
 
-async def _trim_oldest_pairs_to_budget(
+async def _trim_oldest_until_in_budget(
     messages: list[ModelMessage],
     budget_tokens: int,
     delay_between_model_calls_in_seconds: float,
 ) -> list[ModelMessage]:
     """
-    NOTE: Despite the legacy name, this now drops the OLDEST SINGLE message at a time
-    until within budget, and force-fits the last survivor if needed.
+    Drops the OLDEST SINGLE message at a time until within budget, and force-fits the last survivor if needed.
     """
     running = list(messages)
     tokens = await count_tokens(running)
@@ -456,6 +466,54 @@ def _count_openai_tokens(
     return total
 
 
+async def _salvage_most_recent_triplet(
+    original_messages: list[ModelMessage],
+    safety_buffer: float,
+) -> list[ModelMessage]:
+    if not ConfigSingleton.is_initialized() or not ConfigSingleton.config.model:
+        raise ValueError("Config/model not initialized")
+    context_limit: int = ConfigSingleton.config.lookup_model_context_window()
+    budget: int = int(context_limit * safety_buffer)
+
+    # newest 3, preserving order
+    triplet: list[ModelMessage] = original_messages[-3:]
+    triplet = remove_orphaned_tool_responses(triplet)
+
+    if not triplet:
+        raise ValueError("Context salvage failed: 0 messages after orphan removal")
+
+    # caps: third-newest=10%, second-newest=25%, newest=50%
+    third_cap: int = int(budget * 0.10)
+    second_cap: int = int(budget * 0.25)
+    newest_cap: int = int(budget * 0.50)
+
+    capped: list[ModelMessage] = []
+    n = len(triplet)
+    for idx, m in enumerate(triplet):
+        # map positions to caps
+        if n == 1:
+            cap = newest_cap
+        elif n == 2:
+            cap = second_cap if idx == 0 else newest_cap
+        else:
+            cap = third_cap if idx == 0 else (second_cap if idx == 1 else newest_cap)
+
+        if isinstance(m, ModelRequest) and any(
+            isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or []
+        ):
+            capped_msg = await _truncate_tool_return_message(m, cap)
+        else:
+            capped_msg = await _truncate_message_to_cap(m, cap)
+        capped.append(capped_msg)
+
+    capped = remove_orphaned_tool_responses(capped)
+
+    if not capped:
+        raise ValueError("Context salvage failed: 0 messages after truncation")
+
+    return capped
+
+
 async def _shrink_from_oldest_to_budget(
     messages: list[ModelMessage],
     budget_tokens: int,
@@ -498,6 +556,17 @@ async def _shrink_from_oldest_to_budget(
             out[0] = await _truncate_message_to_cap(only, cap)
 
     return out
+
+
+_FALLBACK_NOTICE: str = (
+    "Conversation history was pruned because it exceeded the model's context window. "
+    "Only this notice is kept so the chat can continue."
+)
+
+
+def _make_context_pruned_notice() -> ModelMessage:
+    """Create a single assistant message explaining that history was dropped."""
+    return ModelResponse(parts=[TextPart(content=_FALLBACK_NOTICE)])
 
 
 # TODO: Deprecate this properly in favour of using the API

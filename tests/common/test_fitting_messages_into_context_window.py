@@ -772,3 +772,160 @@ async def test_no_orphans_anywhere_in_output_requires_integrity_guard(
         not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
         for m in out
     )
+
+
+@pytest.mark.asyncio
+async def test_newest_orphan_trim_should_not_result_empty_list(
+    patch_count_tokens,
+) -> None:
+    # Budget small enough that the older text is dropped, leaving only the orphan at the end.
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 80
+
+    older_big = make_text_resp("x" * 200)  # trimmed away by budget
+    mid = make_text_resp("y" * 60)  # likely dropped
+    newest_orphan = make_tool_return("call_1", "z" * 40)  # orphan, last item
+
+    messages = [older_big, mid, newest_orphan]
+    out = await fit_messages_into_context_window(
+        messages, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+
+    # Regression target: we should not end up with [] even though the newest was an orphan.
+    assert out
+    # And we must not keep any ToolReturnPart in the final output.
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in out
+    )
+
+
+@pytest.mark.asyncio
+async def test_newest_orphan_only_survivor_idempotent_and_nonempty(
+    patch_count_tokens,
+) -> None:
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 70
+
+    older = make_text_resp("a" * 100)  # dropped
+    newest_orphan = make_tool_return("call_last", "b" * 60)
+
+    first = await fit_messages_into_context_window(
+        [older, newest_orphan],
+        safety_buffer=1.0,
+        delay_between_model_calls_in_seconds=0.0,
+    )
+    second = await fit_messages_into_context_window(
+        first, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+
+    assert first
+    assert second == first
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in first
+    )
+
+
+@pytest.mark.asyncio
+async def test_force_fit_single_on_only_orphan_should_not_be_empty(
+    patch_count_tokens,
+) -> None:
+    # Make the only remaining message a too-large orphan so final guard runs _force_fit_single
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 50
+
+    orphan_huge = make_tool_return("call_big", "z" * 200)
+    messages = [orphan_huge]
+
+    out = await fit_messages_into_context_window(
+        messages, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+
+    # Regression target: even when force-fitting an orphan, do not return [].
+    assert out
+    # Orphan parts must not survive in isolation.
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in out
+    )
+
+
+@pytest.mark.asyncio
+async def test_force_fit_single_on_orphan_after_trimming_pipeline_should_not_be_empty(
+    patch_count_tokens,
+) -> None:
+    # Pipeline: many messages collapse to the last (orphan), then force-fit applies.
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 60
+
+    m1 = make_text_resp("u" * 100)  # dropped
+    m2 = make_text_resp("v" * 100)  # dropped
+    orphan_last = make_tool_return("call_tail", "w" * 120)
+
+    out = await fit_messages_into_context_window(
+        [m1, m2, orphan_last],
+        safety_buffer=1.0,
+        delay_between_model_calls_in_seconds=0.0,
+    )
+
+    assert out
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in out
+    )
+
+
+@pytest.mark.asyncio
+async def test_salvage_fallback_should_emit_notice_when_history_pruned(
+    patch_count_tokens,
+) -> None:
+    # Tight budget; input is a single orphan tool-return -> orphan cleanup => []
+    # Salvage on newest-3 also empties -> final fallback notice must be emitted.
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 50
+
+    orphan_only = make_tool_return("call_lone", "x" * 200)
+    out = await fit_messages_into_context_window(
+        [orphan_only], safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+
+    assert len(out) == 1
+    assert isinstance(out[0], ModelResponse)
+
+    # No tool-return parts should survive
+    assert not any(
+        isinstance(p, ToolReturnPart) for p in getattr(out[0], "parts", []) or []
+    )
+
+    # The notice should be descriptive; check for the key phrase
+    content = getattr(out[0].parts[0], "content", "")
+    assert isinstance(content, str) and content
+    assert "context window" in content.lower()
+    assert "pruned" in content.lower() or "removed" in content.lower()
+
+
+@pytest.mark.asyncio
+async def test_many_shorts_plus_one_huge_assistant_should_keep_many_and_mark_longest(
+    patch_count_tokens,
+) -> None:
+    """
+    Fallback version: if we can't build a paired tool call, still test the behavior with a long assistant message.
+    Expect: >1 message remains; longest message has the marker.
+    """
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 600
+
+    huge_assistant = ModelResponse(parts=[TextPart(content="z" * 2000)])
+
+    def _many_shorts(n: int) -> list[ModelResponse]:
+        return [ModelResponse(parts=[TextPart(content="ok")]) for _ in range(n)]
+
+    msgs = _many_shorts(100) + [huge_assistant]
+
+    out = await fit_messages_into_context_window(
+        msgs, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+
+    assert len(out) > 1
+    assert not any(
+        "context window" in (getattr(p, "content", "") or "").lower()
+        for m in out
+        for p in getattr(m, "parts", []) or []
+    )
+    # The newest (longest) assistant should be present and shortened
+    assert _has_marker(out[-1])
