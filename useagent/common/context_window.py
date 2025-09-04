@@ -570,7 +570,7 @@ def _make_context_pruned_notice() -> ModelMessage:
 
 
 # TODO: Deprecate this properly in favour of using the API
-def fit_message_into_context_window(content: str) -> str:
+def fit_message_into_context_window(content: str, safety_buffer: float = 0.75) -> str:
     """
     Looks up the models context window, and if applicable load the right encoding to shorten the content within the content window.
 
@@ -587,11 +587,17 @@ def fit_message_into_context_window(content: str) -> str:
         model_name = ConfigSingleton.config.model_descriptor
         if "google" in model_name or "gemini" in model_name:
             return _fit_message_into_context_window(
-                content, _lookup_tokenizer_for_google_models(model_name), context_limit
+                content,
+                _lookup_tokenizer_for_google_models(model_name),
+                context_limit,
+                safety_buffer=safety_buffer,
             )
         else:
             return _fit_message_into_context_window(
-                content, _lookup_tiktoken_encoding(model_name), context_limit
+                content,
+                _lookup_tiktoken_encoding(model_name),
+                context_limit,
+                safety_buffer=safety_buffer,
             )
     else:
         # Model unknown / unsupported, just do nothing.

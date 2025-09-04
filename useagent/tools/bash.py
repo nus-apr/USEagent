@@ -243,12 +243,14 @@ class _BashSession:
         # Possibly: Command outputs can be large / noisy, and exceed the context window.
         # We account for them by optionally shortening them, if configured (See Issue #30)
         output = (
-            fit_message_into_context_window(output)
+            fit_message_into_context_window(output, safety_buffer=0.40)
             if isinstance(output, str)
             else output
         )
         error = (
-            fit_message_into_context_window(error) if isinstance(error, str) else error
+            fit_message_into_context_window(error, safety_buffer=0.40)
+            if isinstance(error, str)
+            else error
         )
 
         return CLIResult(output=output, error=error)
