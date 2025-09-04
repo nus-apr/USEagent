@@ -481,7 +481,14 @@ async def _bash_tool(
                 message="Your command made the bash session timeout ('bash has exited with returncode 2'), no results could be retrieved and the bash has been restarted.",
                 supplied_arguments=[ArgumentEntry("command", str(command))],
             )
-
+        elif result.error == "bash has exited with returncode 127":
+            # DevNote: Sometimes the BashTool can reach an un-restorable case after poor commands (merging total commands in stdin). This will be seen by this error code.
+            # See Issue #36 on this. The source is currently unknown, but restarting the bash cannot harm on a normal unknown command.
+            # TODO: if we see this a lot, we can do a check of the bash-history.
+            logger.warning(
+                "[Tool] Bashtool has tried to execute an unkown command - restarting it to avoid getting stuck in unknown commands"
+            )
+            await _restart_bash_session_using_config_directory()
         else:
             logger.info(
                 f"[Tool] bash_tool result: output={result.output}, error={result.error}"
