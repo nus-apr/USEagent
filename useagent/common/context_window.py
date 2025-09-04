@@ -61,16 +61,16 @@ async def fit_messages_into_context_window(
         )
         return messages
 
-    # Remove orphans up-front so they don't distort budgeting.
-    non_orphan_messages = remove_orphaned_tool_responses(messages)
-
     context_limit: int = ConfigSingleton.config.lookup_model_context_window()
     budget: int = int(context_limit * safety_buffer)
+    if await count_tokens(messages) <= budget:
+        # Messages are short, do nothing
+        return messages
 
     newest_cap: int = int(budget * 0.60)
     second_cap: int = int(budget * 0.30)
 
-    capped = await _apply_per_turn_caps(non_orphan_messages, newest_cap, second_cap)
+    capped = await _apply_per_turn_caps(messages, newest_cap, second_cap)
 
     total_after_caps = await count_tokens(capped)
     if total_after_caps <= budget:
