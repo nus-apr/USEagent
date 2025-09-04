@@ -61,6 +61,9 @@ async def fit_messages_into_context_window(
         )
         return messages
 
+    # Remove orphans up-front so they don't distort budgeting.
+    messages = remove_orphaned_tool_responses(messages)
+
     context_limit: int = ConfigSingleton.config.lookup_model_context_window()
     budget: int = int(context_limit * safety_buffer)
 
@@ -68,6 +71,8 @@ async def fit_messages_into_context_window(
     second_cap: int = int(budget * 0.30)
 
     capped = await _apply_per_turn_caps(messages, newest_cap, second_cap)
+    # Cheap safety again after capping.
+    capped = remove_orphaned_tool_responses(capped)
 
     total_after_caps = await count_tokens(capped)
     if total_after_caps <= budget:
@@ -86,7 +91,88 @@ async def fit_messages_into_context_window(
         logger.debug(
             f"[Support] Shrank a list of {len(messages)} messages to a list of {len(out)} to fit into a context window of {context_limit}"
         )
+
+    # DevNote: See Issue 30 - Tools must be in pairs of call-->response, and our cutting can leave orphaned responses. We just kick out orphans too, to have a simple solution.
+    out = remove_orphaned_tool_responses(out)
+
+    current = await count_tokens(out)
+    if current > budget:
+        if out:
+            # Keep only the newest message and force-fit it.
+            newest = out[-1]
+            out = await _force_fit_single(newest, budget)
+        else:
+            # If we somehow ended empty, try force-fitting the newest from capped.
+            if capped:
+                newest = capped[-1]
+                out = await _force_fit_single(newest, budget)
+
     return out
+
+
+def remove_orphaned_tool_responses(messages: list[ModelMessage]) -> list[ModelMessage]:
+    seen_calls: set[str] = set()
+    out: list[ModelMessage] = []
+
+    for m in messages:
+        if isinstance(m, ModelResponse):
+            for p in getattr(m, "parts", []) or []:
+                if isinstance(p, BaseToolCallPart):
+                    seen_calls.add(p.tool_call_id)
+            out.append(m)
+            continue
+
+        if isinstance(m, ModelRequest):
+            parts = []
+            has_tool_return = False
+            kept_any_tool_return = False
+            for p in getattr(m, "parts", []) or []:
+                if isinstance(p, ToolReturnPart):
+                    has_tool_return = True
+                    if p.tool_call_id in seen_calls:
+                        parts.append(p)
+                        kept_any_tool_return = True
+                    # else: drop orphaned return
+                else:
+                    parts.append(p)
+
+            if has_tool_return and not kept_any_tool_return:
+                # message was only orphaned tool returns -> drop entire message
+                if parts:
+                    # if non-tool-return parts remain, keep them
+                    out.append(ModelRequest(parts=parts))
+                continue
+
+            out.append(ModelRequest(parts=parts))
+            continue
+
+        out.append(m)
+    return out
+
+
+def _is_tool_return_message(m: ModelMessage) -> bool:
+    """True if the message contains ToolReturnPart(s) and no assistant tool-call parts.
+    Used to avoid selecting a lone tool-return as the only survivor."""
+    if not isinstance(m, ModelRequest):
+        return False
+    parts = getattr(m, "parts", []) or []
+    has_return = any(isinstance(p, ToolReturnPart) for p in parts)
+    # Treat as "tool-return message" if it has returns (regardless of other user parts),
+    # since keeping it alone would re-orphan those returns.
+    return has_return
+
+
+# --- Final budget enforcement: ensure <= budget without returning [] ---
+async def _force_fit_single(msg: ModelMessage, cap: int) -> list[ModelMessage]:
+    if isinstance(msg, ModelRequest) and any(
+        isinstance(p, ToolReturnPart) for p in getattr(msg, "parts", []) or []
+    ):
+        fitted = await _truncate_tool_return_message(msg, cap)
+    else:
+        fitted = await _truncate_message_to_cap(msg, cap)
+    # Ensure not reintroducing orphans
+    fitted_list = remove_orphaned_tool_responses([fitted])
+    return fitted_list
 
 
 async def count_tokens(
@@ -168,10 +254,18 @@ async def _apply_per_turn_caps(
 ) -> list[ModelMessage]:
     if not messages:
         return messages
+
+    async def _cap_one(msg: ModelMessage, cap: int) -> ModelMessage:
+        if isinstance(msg, ModelRequest) and any(
+            isinstance(p, ToolReturnPart) for p in getattr(msg, "parts", []) or []
+        ):
+            return await _truncate_tool_return_message(msg, cap)
+        return await _truncate_message_to_cap(msg, cap)
+
     out = list(messages)
-    out[-1] = await _truncate_message_to_cap(out[-1], newest_cap)
+    out[-1] = await _cap_one(out[-1], newest_cap)
     if len(out) >= 2:
-        out[-2] = await _truncate_message_to_cap(out[-2], second_newest_cap)
+        out[-2] = await _cap_one(out[-2], second_newest_cap)
     return out
 
 
@@ -182,11 +276,36 @@ async def _trim_oldest_pairs_to_budget(
 ) -> list[ModelMessage]:
     running = list(messages)
     tokens = await count_tokens(running)
+
     while tokens > budget_tokens and running:
-        if len(running) >= 2:
+        if len(running) > 2:
+            # drop an oldest "pair"
             running = running[2:]
-        else:
-            running = []
+        elif len(running) == 2:
+            # keep the NEWEST; force-fit it to the remaining budget
+            newest = running[-1]
+            cap = max(0, budget_tokens)
+            if isinstance(newest, ModelRequest) and any(
+                isinstance(p, ToolReturnPart)
+                for p in getattr(newest, "parts", []) or []
+            ):
+                newest = await _truncate_tool_return_message(newest, cap)
+            else:
+                newest = await _truncate_message_to_cap(newest, cap)
+            running = [newest]
+            break
+        else:  # len == 1
+            only = running[0]
+            cap = max(0, budget_tokens)
+            if isinstance(only, ModelRequest) and any(
+                isinstance(p, ToolReturnPart) for p in getattr(only, "parts", []) or []
+            ):
+                only = await _truncate_tool_return_message(only, cap)
+            else:
+                only = await _truncate_message_to_cap(only, cap)
+            running = [only]
+            break
+
         tokens = await count_tokens(running)
         if (
             ConfigSingleton.is_initialized()
@@ -195,6 +314,7 @@ async def _trim_oldest_pairs_to_budget(
             )
         ):
             time.sleep(delay_between_model_calls_in_seconds)
+
     return running
 
 
@@ -257,6 +377,83 @@ def _encoding_for(model_name: str) -> tiktoken.Encoding:
         return tiktoken.get_encoding("o200k_base")
 
 
+def _with_tool_return_text(p: ToolReturnPart, text: str) -> ToolReturnPart:
+    # Rebuild the part with the same identity, new content
+    return ToolReturnPart(
+        tool_name=p.tool_name, tool_call_id=p.tool_call_id, content=text
+    )
+
+
+def _tool_return_text(p: ToolReturnPart) -> str:
+    try:
+        return p.model_response_str()
+    except Exception:
+        return getattr(p, "content", "") or ""
+
+
+async def _truncate_tool_return_message(
+    m: ModelMessage, token_cap: int
+) -> ModelMessage:
+    """
+    Shrink *only* ToolReturnPart contents inside a ModelRequest ('tool' message),
+    keeping role and tool_call_id intact.
+    """
+    if not isinstance(m, ModelRequest):
+        return m
+
+    # Collect tool-return parts
+    parts = list(getattr(m, "parts", []) or [])
+    ret_idx: list[int] = []
+    ret_texts: list[str] = []
+    for i, p in enumerate(parts):
+        if isinstance(p, ToolReturnPart):
+            ret_idx.append(i)
+            ret_texts.append(_tool_return_text(p))
+
+    if not ret_idx:
+        # Nothing tool-return-like to shrink
+        return m
+
+    if token_cap <= 0:
+        # Keep structure, empty the return contents
+        new_parts = parts[:]
+        for pos in ret_idx:
+            new_parts[pos] = _with_tool_return_text(new_parts[pos], "")
+        return ModelRequest(parts=new_parts)
+
+    # Fast path: already within cap
+    if await count_tokens([m]) <= token_cap:
+        return m
+
+    # Try with markers using a shared head/tail crop across all return parts
+    lo, hi = 0, max((len(t) for t in ret_texts), default=0) // 2
+    best_parts: list | None = None
+
+    def crop(s: str, k: int) -> str:
+        return f"{s[:k]}{MARKER_TEXT}{s[-k:]}" if k > 0 else MARKER_TEXT
+
+    while lo <= hi:
+        k = (lo + hi) // 2
+        trial = parts[:]
+        for pos, txt in zip(ret_idx, ret_texts):
+            trial[pos] = _with_tool_return_text(trial[pos], crop(txt, k))
+        trial_msg = ModelRequest(parts=trial)
+        t = await count_tokens([trial_msg])
+        if t <= token_cap:
+            best_parts = trial
+            lo = k + 1
+        else:
+            hi = k - 1
+
+    if best_parts is None:
+        # If even pure markers don't fit, empty contents
+        best_parts = parts[:]
+        for pos in ret_idx:
+            best_parts[pos] = _with_tool_return_text(best_parts[pos], "")
+
+    return ModelRequest(parts=best_parts)
+
+
 def _count_openai_tokens(
     messages: list[ModelMessage], model_name: str = "gpt-4o"
 ) -> int:
@@ -277,21 +474,41 @@ async def _shrink_from_oldest_to_budget(
 ) -> list[ModelMessage]:
     if not messages:
         return messages
+
     out = list(messages)
     total = await count_tokens(out)
     if total <= budget_tokens:
         return out
 
-    # Greedily truncate from oldest toward newest (excluding the two newest caps already applied)
+    # Greedily truncate from oldest toward newest
     for i in range(len(out)):
         total = await count_tokens(out)
         if total <= budget_tokens:
             break
-        # Compute max allowed for this message given others fixed
+        # compute cap for this message given others fixed
         others = out[:i] + out[i + 1 :]
         other_tokens = await count_tokens(others)
         cap_for_this = max(0, budget_tokens - other_tokens)
-        out[i] = await _truncate_message_to_cap(out[i], cap_for_this)
+
+        m = out[i]
+        if isinstance(m, ModelRequest) and any(
+            isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or []
+        ):
+            out[i] = await _truncate_tool_return_message(m, cap_for_this)
+        else:
+            out[i] = await _truncate_message_to_cap(m, cap_for_this)
+
+    # If still over budget and only one message remains, force-fit that one
+    if out and (await count_tokens(out)) > budget_tokens and len(out) == 1:
+        only = out[0]
+        cap = max(0, budget_tokens)
+        if isinstance(only, ModelRequest) and any(
+            isinstance(p, ToolReturnPart) for p in getattr(only, "parts", []) or []
+        ):
+            out[0] = await _truncate_tool_return_message(only, cap)
+        else:
+            out[0] = await _truncate_message_to_cap(only, cap)
+
     return out
 
 

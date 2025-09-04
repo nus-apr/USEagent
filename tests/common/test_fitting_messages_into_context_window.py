@@ -2,7 +2,13 @@
 from typing import Any
 
 import pytest
-from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 
 from useagent.common.context_window import MARKER_TEXT
 from useagent.common.context_window import count_tokens as real_count_tokens
@@ -22,7 +28,12 @@ def _reset_and_init_config(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def patch_count_tokens(monkeypatch: pytest.MonkeyPatch):
     async def _fake_count_tokens(messages: list[object]) -> int:
-        return sum(len(str(m)) for m in messages)
+        # count only textual content of parts
+        total = 0
+        for m in messages:
+            for p in getattr(m, "parts", []) or []:
+                total += len(getattr(p, "content", "") or "")
+        return total
 
     monkeypatch.setattr(
         "useagent.common.context_window.count_tokens", _fake_count_tokens
@@ -34,8 +45,23 @@ def make_model_repsonse_message(txt: str) -> ModelResponse:
     return ModelResponse(parts=[TextPart(content=txt)])
 
 
+def make_text_resp(txt: str) -> ModelResponse:
+    return ModelResponse(parts=[TextPart(content=txt)])
+
+
+def make_user(txt: str) -> ModelRequest:
+    return ModelRequest(parts=[UserPromptPart(content=txt)])
+
+
 def make_user_message(txt: str) -> ModelRequest:
     return ModelRequest(parts=[UserPromptPart(content=txt)])
+
+
+def make_tool_return(call_id: str, content: str) -> ModelRequest:
+    # Leading "tool" message with a return (orphan unless preceded by assistant tool_calls)
+    return ModelRequest(
+        parts=[ToolReturnPart(tool_call_id=call_id, tool_name="dummy", content=content)]
+    )
 
 
 async def _text_with_min_tokens(min_tokens: int, seed: str = "tok") -> str:
@@ -119,18 +145,35 @@ async def test_short_messages_should_not_be_cut(patch_count_tokens) -> None:
 
 
 @pytest.mark.asyncio
-async def test_long_messages_should_be_reduced(patch_count_tokens) -> None:
+async def test_many_long_messages_should_reduce_by_drop_or_truncation(
+    patch_count_tokens,
+) -> None:
     ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 1000
-    msg: str = "x" * 200
-    messages: list[str] = [msg for _ in range(10)]
+
+    unit = "x" * 200
+    messages = [ModelResponse(parts=[TextPart(content=unit)]) for _ in range(10)]
+
     out = await fit_messages_into_context_window(
         messages,
         safety_buffer=1.0,
         delay_between_model_calls_in_seconds=0.0,
     )
+
     total = await patch_count_tokens(out)
     assert total <= ConfigSingleton.config.lookup_model_context_window()
-    assert len(out) < len(messages)
+
+    # Either fewer messages, or at least one message was truncated.
+    length_reduced = len(out) < len(messages)
+    truncated_present = any(
+        any(
+            isinstance(p, TextPart)
+            and isinstance(p.content, str)
+            and (MARKER_TEXT in p.content or len(p.content) < len(unit))
+            for p in getattr(m, "parts", []) or []
+        )
+        for m in out
+    )
+    assert length_reduced or truncated_present
 
 
 @pytest.mark.asyncio
@@ -527,8 +570,6 @@ async def test_mixed_roles_both_marked_and_types_preserved() -> None:
     )
 
     assert len(out) == 3
-    # types preserved
-    from pydantic_ai.messages import ModelRequest, ModelResponse
 
     assert isinstance(out[-2], ModelRequest)
     assert isinstance(out[-1], ModelResponse)
@@ -537,9 +578,6 @@ async def test_mixed_roles_both_marked_and_types_preserved() -> None:
     assert _has_marker(out[-1])
     total = await real_count_tokens(out)
     assert total <= ConfigSingleton.config.lookup_model_context_window()
-
-
-# --- Marker is inserted in the middle (prefix and suffix non-empty) ---
 
 
 @pytest.mark.integration
@@ -556,9 +594,6 @@ async def test_marker_inserts_in_middle_with_prefix_and_suffix() -> None:
     prefix, _, suffix = content.partition(MARKER_TEXT)
     assert prefix != ""
     assert suffix != ""
-
-
-# --- Shrink older before dropping: after capping newest two, older message is truncated (list length unchanged) ---
 
 
 @pytest.mark.integration
@@ -586,9 +621,6 @@ async def test_shrink_older_before_drop_prefers_truncation_over_removal() -> Non
     assert total <= ConfigSingleton.config.lookup_model_context_window()
 
 
-# --- Safety buffer < 1 reduces budget; caps follow the reduced budget ---
-
-
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_safety_buffer_affects_caps_and_budget() -> None:
@@ -614,4 +646,129 @@ async def test_safety_buffer_affects_caps_and_budget() -> None:
     total = await real_count_tokens(out)
     assert total <= int(
         ConfigSingleton.config.lookup_model_context_window() * safety_buffer
+    )
+
+
+# 1) If the oldest message is an orphaned tool return, it is dropped.
+@pytest.mark.asyncio
+async def test_orphan_oldest_should_be_dropped(patch_count_tokens) -> None:
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 1000
+
+    orphan = make_tool_return("call_x", "result A")
+    keep1 = make_text_resp("hello")
+    keep2 = make_text_resp("world")
+
+    messages = [orphan, keep1, keep2]
+    out = await fit_messages_into_context_window(
+        messages, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+
+    # Orphan at head removed; remainder preserved
+    assert len(out) == 2
+    assert isinstance(out[0], type(keep1))
+    assert isinstance(out[1], type(keep2))
+    assert str(out[0]) == str(keep1)
+    assert str(out[1]) == str(keep2)
+
+
+@pytest.mark.asyncio
+async def test_trimming_that_creates_orphan_should_drop_and_fit(
+    patch_count_tokens,
+) -> None:
+    # Tight window to force truncation/trim logic to run
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 120
+
+    # Make an orphan "tool" message large enough that naive keep would overflow,
+    # followed by sizable messages so trimming happens.
+    orphan = make_tool_return("call_big", "x" * 80)
+    m1 = make_text_resp("y" * 60)
+    m2 = make_text_resp("z" * 60)
+
+    messages = [orphan, m1, m2]
+    out = await fit_messages_into_context_window(
+        messages, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+
+    # The orphan at head must be removed even after trimming logic runs.
+    assert out  # still have something left
+    # Head is no longer a tool return
+    head = out[0]
+    # Tool returns are ModelRequest with ToolReturnPart; ensure we didn't keep one at head
+    assert not (
+        isinstance(head, ModelRequest)
+        and any(isinstance(p, ToolReturnPart) for p in getattr(head, "parts", []) or [])
+    )
+
+    # And the final result must fit within the configured limit
+    total = await patch_count_tokens(out)
+    assert total <= ConfigSingleton.config.lookup_model_context_window()
+
+
+@pytest.mark.asyncio
+async def test_multiple_leading_orphans_all_dropped(patch_count_tokens) -> None:
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 1000
+
+    orphan1 = make_tool_return("call_a", "result A")
+    orphan2 = make_tool_return("call_b", "result B")
+    survivor = make_user("user says hi")
+
+    messages = [orphan1, orphan2, survivor]
+    out = await fit_messages_into_context_window(
+        messages, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+
+    assert len(out) == 1
+    assert isinstance(out[0], type(survivor))
+    assert str(out[0]) == str(survivor)
+
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in out
+    )
+
+
+@pytest.mark.asyncio
+async def test_leading_orphans_dropped_even_when_budget_tight(
+    patch_count_tokens,
+) -> None:
+    # Tight window so trimming definitely occurs
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 90
+
+    orphan_big = make_tool_return("call_big", "x" * 90)
+    orphan_small = make_tool_return("call_small", "y" * 10)
+    survivor = make_text_resp("z" * 60)
+
+    messages = [orphan_big, orphan_small, survivor]
+    out = await fit_messages_into_context_window(
+        messages, safety_buffer=0.8, delay_between_model_calls_in_seconds=0.0
+    )
+
+    # Both orphans gone; only survivor remains (possibly truncated)
+    assert len(out) == 1
+    assert isinstance(out[0], type(survivor))
+
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in out
+    )
+
+
+@pytest.mark.asyncio
+async def test_no_orphans_anywhere_in_output_requires_integrity_guard(
+    patch_count_tokens,
+) -> None:
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 200
+
+    # An orphan not at head (no prior assistant tool_calls in this list)
+    leading_ok = make_text_resp("ok")
+    orphan_mid = make_tool_return("call_mid", "tool payload")
+
+    messages = [leading_ok, orphan_mid]
+    out = await fit_messages_into_context_window(
+        messages, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in out
     )
