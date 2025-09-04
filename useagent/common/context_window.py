@@ -122,43 +122,58 @@ async def fit_messages_into_context_window(
 
 
 def remove_orphaned_tool_responses(messages: list[ModelMessage]) -> list[ModelMessage]:
-    seen_calls: set[str] = set()
-    out: list[ModelMessage] = []
+    # First pass: collect all tool call IDs present in any ModelResponse
+    call_ids: set[str] = set()
+    for msg in messages:
+        if isinstance(msg, ModelResponse):
+            for part in getattr(msg, "parts", []) or []:
+                if isinstance(part, BaseToolCallPart):
+                    call_ids.add(part.tool_call_id)
 
-    for m in messages:
-        if isinstance(m, ModelResponse):
-            for p in getattr(m, "parts", []) or []:
-                if isinstance(p, BaseToolCallPart):
-                    seen_calls.add(p.tool_call_id)
-            out.append(m)
+    # Second pass: remove orphaned tool returns and handle placeholders
+    filtered_messages: list[ModelMessage] = []
+    for msg in messages:
+        if isinstance(msg, ModelResponse):
+            # Assistant messages (ModelResponse) are kept as-is (we don't remove tool calls)
+            filtered_messages.append(msg)
             continue
 
-        if isinstance(m, ModelRequest):
-            parts = []
+        if isinstance(msg, ModelRequest):
+            new_parts = []
             has_tool_return = False
-            kept_any_tool_return = False
-            for p in getattr(m, "parts", []) or []:
-                if isinstance(p, ToolReturnPart):
+            kept_any_return = False
+
+            for part in getattr(msg, "parts", []) or []:
+                if isinstance(part, ToolReturnPart):
                     has_tool_return = True
-                    if p.tool_call_id in seen_calls:
-                        parts.append(p)
-                        kept_any_tool_return = True
-                    # else: drop orphaned return
+                    if part.tool_call_id in call_ids:
+                        # Matched return, keep it
+                        new_parts.append(part)
+                        kept_any_return = True
+                    # Else: unmatched return is dropped (orphan)
                 else:
-                    parts.append(p)
+                    # Keep all non-tool-return parts (user or system content)
+                    new_parts.append(part)
 
-            if has_tool_return and not kept_any_tool_return:
-                # message was only orphaned tool returns -> drop entire message
-                if parts:
-                    # if non-tool-return parts remain, keep them
-                    out.append(ModelRequest(parts=parts))
-                continue
+            if has_tool_return and not kept_any_return:
+                # Message had only tool returns and all were orphaned (dropped)
+                if new_parts:
+                    # If some non-return parts remain (edge case), keep the message with them
+                    filtered_messages.append(ModelRequest(parts=new_parts))
+                else:
+                    # Entire message would be empty – replace with a placeholder user message
+                    placeholder = UserPromptPart(content="Tool output removed.")
+                    filtered_messages.append(ModelRequest(parts=[placeholder]))
+                continue  # skip default append
 
-            out.append(ModelRequest(parts=parts))
+            # Otherwise, keep the message (with any orphan returns removed)
+            filtered_messages.append(ModelRequest(parts=new_parts))
             continue
 
-        out.append(m)
-    return out
+        # For any other message types (SystemPromptPart, UserPromptPart messages), keep unchanged
+        filtered_messages.append(msg)
+
+    return filtered_messages
 
 
 def _is_tool_return_message(m: ModelMessage) -> bool:
