@@ -14,6 +14,7 @@ from useagent.pydantic_models.output.answer import Answer
 from useagent.pydantic_models.output.code_change import CodeChange
 from useagent.tasks.github_task import GithubTask
 from useagent.tasks.local_task import LocalTask
+from useagent.tasks.swebench_task import SWEbenchTask
 from useagent.tasks.usebench_task import UseBenchTask
 
 
@@ -130,10 +131,39 @@ def set_github_parser_args(parser: ArgumentParser) -> None:
     )
 
 
+def set_swebench_parser_args(parser: ArgumentParser) -> None:
+    add_common_args(parser)
+    parser.add_argument(
+        "--instance-id",
+        type=str,
+        required=True,
+        help="SWE-bench instance_id to materialize.",
+    )
+    parser.add_argument(
+        "--working-dir",
+        type=Path,
+        default=SWEbenchTask.get_default_working_dir(),
+        help="Target directory to clone into and work on (within Docker Container).",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="princeton-nlp/SWE-bench_Verified",
+        help="HF dataset name containing the instance.",
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        default="test",
+        choices=["train", "validation", "test"],
+        help="Dataset split to search for the instance.",
+    )
+
+
 def _get_task_description(args: Namespace) -> str:
-    if args.task_description:
+    if getattr(args, "task_description", None):
         return args.task_description
-    if args.task_file and args.task_file.is_file():
+    if getattr(args, "task_file", None) and args.task_file.is_file():
         return args.task_file.read_text()
     raise ValueError("Invalid task file")
 
@@ -160,6 +190,11 @@ def parse_args():
         "github", help="Run a task on a GitHub repository, from a provided URL."
     )
     set_github_parser_args(github_parser)
+
+    swebench_parser = subparsers.add_parser(
+        "swebench", help="Materialize and run a SWE-bench (verified) instance by id."
+    )
+    set_swebench_parser_args(swebench_parser)
 
     return parser.parse_args(), subparser_dest_attr_name
 
@@ -191,6 +226,16 @@ def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
         )
         task_runner.run(task, args.output_dir, output_type=args.output_type)
 
+    elif subcommand == "swebench":
+        task = SWEbenchTask(
+            instance_id=args.instance_id,
+            working_dir=args.working_dir,
+            dataset=args.dataset,
+            split=args.split,
+        )
+        # issue_statement is derived from the dataset; task.uid is instance_id
+        task_runner.run(task, args.output_dir, output_type=args.output_type)
+
     else:
         raise ValueError(f"Unknown command: {subcommand}")
 
@@ -214,7 +259,7 @@ def build_and_register_config(args: Namespace) -> AppConfig:
 
 def _subcommand_to_task_type(
     subcommand: str,
-) -> Literal[GithubTask, LocalTask, UseBenchTask]:
+) -> Literal[GithubTask, LocalTask, UseBenchTask, SWEbenchTask]:
     match subcommand.strip().lower():
         case "github":
             return GithubTask
@@ -222,9 +267,11 @@ def _subcommand_to_task_type(
             return LocalTask
         case "usebench":
             return UseBenchTask
+        case "swebench":
+            return SWEbenchTask
         case _:
             raise ArgumentTypeError(
-                f"Received unsuppert subcommand {subcommand} - cannot parse to supported Task Types"
+                f"Received unsupported subcommand {subcommand} - cannot parse to supported Task Types"
             )
 
 

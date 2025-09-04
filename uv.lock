@@ -2394,6 +2394,7 @@ name = "useagent-turbo-dev"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "datasets" },
     { name = "loguru" },
     { name = "pydantic-ai" },
     { name = "sentencepiece" },
@@ -2418,6 +2419,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = "==25.1.0" },
+    { name = "datasets", specifier = ">=3.1.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = "==6.0.1" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = "==4.2.0" },
