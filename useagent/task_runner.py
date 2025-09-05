@@ -67,7 +67,9 @@ def _run(
 
     # start main agent loop
     logger.info("Starting main agent loop")
-    result, usage_tracker, messages = agent_loop(task_state, output_type=output_type)
+    result, usage_tracker, messages = agent_loop(
+        task_state, output_type=output_type, output_dir=task_output_dir
+    )
     match result:
         case Action():
             cast_result: Action = cast(Action, result)

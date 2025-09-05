@@ -8,7 +8,8 @@ source .env
 set +a
 
 TASK_ID=sphinx-doc__sphinx-8265
-MODEL_NAME=google-gla:gemini-2.5-flash
+#MODEL_NAME=google-gla:gemini-2.5-flash
+MODEL_NAME=openai:gpt-5-mini
 
 if [[ "$1" == "--build" ]]; then
   docker rm -f useagent-turbo-test 2>/dev/null
@@ -22,5 +23,7 @@ fi
 docker run --rm \
   --name useagent-turbo-test \
   -e GEMINI_API_KEY=$GEMINI_API_KEY \
+  -e OPENAI_API_KEY="$OPENAI_API_KEY" \
+  -v ./useagent-turbo-tmp-out:/output \
   useagent-turbo:dev \
   useagent swebench --model $MODEL_NAME --instance-id $TASK_ID --output-dir /output

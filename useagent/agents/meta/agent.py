@@ -473,9 +473,9 @@ def agent_loop(
         else:
             logger.debug("Task was finished without any doubts.")
 
-    if output_type is CodeChange and isinstance(result.output, CodeChange):
+    if isinstance(result.output, CodeChange):
         diff_id = result.output.diff_id
-        logger.info(f"Resolving {diff_id} in DiffStore:")
+        logger.info(f"[Post-Processing] Resolving {diff_id} in DiffStore:")
         try:
             diff_entry: DiffEntry | None = task_state.diff_store.id_to_diff[diff_id]
             diff_content: str = (
@@ -487,10 +487,11 @@ def agent_loop(
                 patch_file = output_dir / "patch.diff"
                 patch_file.parent.mkdir(parents=True, exist_ok=True)
                 patch_file.write_text(diff_content)
+                logger.debug(f"[Post-Processing] Wrote chosen patch to {patch_file}")
             if output_dir and isinstance(task_state._task, SWEbenchTask):
                 task_state._task.postprocess_swebench_task(diff_content, output_dir)
         except Exception as e:
-            logger.error(f"Issue finding {diff_id} in DiffStore")
+            logger.error(f"[Post-Processing] Issue finding {diff_id} in DiffStore")
             logger.error(e)
 
     return result.output, USAGE_TRACKER, result.all_messages()
