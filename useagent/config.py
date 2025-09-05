@@ -2,6 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Literal
 
+from loguru import logger
 from pydantic_ai.models import Model, infer_model
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -112,9 +113,16 @@ class ConfigSingleton:
                         base_url=provider_url, api_key="ollama-dummy"
                     ),
                 )
+                logger.info(
+                    f"[Setup] Initialized an Ollama Model (Self-Hosted) from {model_desc}"
+                )
             else:
                 model = infer_model(model)
-
+                logger.info(f"[Setup] Initialized a {type(model)} from {model_desc}")
+        elif isinstance(model, Model):
+            logger.info(
+                f"[Setup] AppConfig will be buid with a fully supplied model ({type(model)})"
+            )
         cls._instance = AppConfig(
             model=model,
             output_dir=output_dir,
