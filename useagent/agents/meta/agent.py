@@ -305,6 +305,12 @@ def init_agent(
     ) -> DiffEntry | None:
         """Edit the codebase based on the provided instruction.
 
+        To invoke the EditCode tool, think step by step:
+            1. What kind of new edit is needed?
+            2. Are you going to make new edit to fix previous wrong/incomplete edits? If yes, you should supply the diff_id of these previous edits in the `pre_patches` argument.
+            Note that you should include a diff_id even if it contains error, because it can be useful to use it as a reference.
+            3. After deciding on what should be supplied as `pre_patches`, think about what kind of changes should be made on top of them and describe that in the `instructions` argument.
+
         Args:
             instruction (str): Instruction for the code edit. The instrution should be very specific, typically should include where in the codebase to edit (files, lines, etc.), what to change, and how to change it.
 

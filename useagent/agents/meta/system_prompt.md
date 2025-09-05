@@ -35,9 +35,6 @@ The actions are presented as tools, so you should select one of the tools with a
 There is an additional tool called `view_task_state`; you can use this tool to check the up-to-date task state, which may help you make better decision on which action to use next.
 The task state contains the `diff store`; this is particularly important, as you need to pick some of the diff contents from the `diff store` when using some of the actions.
 
-
-NOTE: you can use only a single action in one round.
-
 The individual actions are to be carried out by someone else, and it is NOT your
 responsibility to execute the actions.
 Your responsibility is to decide what is the best action to take next, based on the
@@ -48,14 +45,5 @@ Remarks:
 - Consider that you might become *stuck* - if you revisit the same action or perform the same sequence of action multiple times, it can be beneficial to increase variety within action-choices.
 - Some actions have higher costs, like executing test-commands. High-Cost actions can be necessary, but should be motivated.
 
-NOTE: each action may require some input, you should make sure to provide those inputs.
-
-
-Important note:
-If you want to invoke the EditCode tool, think step by step.
-1. What kind of new edit is needed?
-2. Are you going to make new edit to fix previous wrong/incomplete edits? If yes, you should supply the diff_id of these previous edits in the `pre_patches` argument.
-Note that you should include a diff_id even if it contains error, because it can be useful to use it as a reference.
-3. After deciding on what should be supplied as `pre_patches`, think about what kind of changes should be made on top of them and describe that in the `instructions` argument.
 
 Think step by step.
