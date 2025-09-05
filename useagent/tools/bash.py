@@ -132,7 +132,7 @@ class _BashSession:
             ):
                 if command.count("\n") > 15 or len(command.splitlines()) > 15:
                     return ToolErrorInfo(
-                        message="You provided a large multi-line command. Such commands are currently intentionally de-actived, please refer from using them and prefer a sequence of short, simple commands. The command was not executed.",
+                        message="You provided a large multi-line command. Such commands are currently intentionally de-actived, please refer from using them and prefer a sequence of short, simple commands, or consider different tools to write file-content. The command was not executed.",
                         supplied_arguments=[ArgumentEntry("command", command)],
                     )
 
@@ -140,7 +140,7 @@ class _BashSession:
                 if not validate_heredoc(command):
                     # DevNote: See Issue 29 and the related test-suite.
                     return ToolErrorInfo(
-                        message="You tried to provide a command including a heredoc / EOF marker. Either due to your mistake, or a backend processing, the provided command does not result in a valid encoding and will not be executed. Consider if there are other strategies to achieve your goal (e.g. writing a file first). If you need to perform the command you want to execute in exactly this matter, revisit its encoding with the background that it needs to be encoded to utf-8.",
+                        message="You tried to provide a command including a heredoc / EOF marker. Either due to your mistake, or a backend processing, the provided command does not result in a valid encoding and will not be executed. Consider if there are other strategies to achieve your goal (e.g. writing a file first with a different tool). If you need to perform the command you want to execute in exactly this matter, revisit its encoding with the background that it needs to be encoded to utf-8.",
                         supplied_arguments=[ArgumentEntry("command", command)],
                     )
                 logger.debug(
