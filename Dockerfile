@@ -1,4 +1,5 @@
 ARG BASE_IMAGE=ubuntu:24.04
+ARG COMMIT_SHA=""
 
 # ---- builder ----
 FROM ${BASE_IMAGE} AS builder
@@ -37,6 +38,7 @@ RUN mkdir -p /artifact/data && /opt/venv/bin/usebench-migration /artifact/data
 
 # ---- runtime ----
 FROM ${BASE_IMAGE}
+ARG COMMIT_SHA
 LABEL maintainer.Yuntong="Yuntong Zhang <ang.unong@gmail.com>"
 LABEL maintainer.Leonhard="Leonhard Applis <leonhard.applis@protonmail.com>"
 
@@ -54,6 +56,7 @@ ENV TZ=Asia/Singapore
 
 # We saw that the agent sometimes re-iterated needlessly - given the experiment nature we can just install system packages. These are not production machines but throw-away containers. 
 ENV PIP_BREAK_SYSTEM_PACKAGES=1 
+RUN [ -n "$COMMIT_SHA" ] && mkdir -p /output && printf "%s\n" "$COMMIT_SHA" > /commit.sha || true
 
 RUN apt-get update && apt-get install -y --no-install-recommends sudo && rm -rf /var/lib/apt/lists/*
 RUN useradd -m -u 0 -o -g 0 app

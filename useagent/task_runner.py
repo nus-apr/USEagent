@@ -18,6 +18,7 @@ from useagent.pydantic_models.output.code_change import CodeChange
 from useagent.pydantic_models.task_state import TaskState
 from useagent.tasks.task import Task
 from useagent.tools.meta import get_bash_history
+from useagent.utils import log_commit_sha
 
 
 def run(
@@ -67,6 +68,7 @@ def _run(
 
     # start main agent loop
     logger.info("Starting main agent loop")
+    log_commit_sha()
     result, usage_tracker, messages = agent_loop(
         task_state, output_type=output_type, output_dir=task_output_dir
     )
