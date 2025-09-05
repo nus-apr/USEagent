@@ -75,9 +75,9 @@ class _BashSession:
         """Terminate the bash shell."""
         if not self._started:
             return ToolErrorInfo(message="Session has not started.")
-        if self._process.returncode is not None:
-            return
-        self._process.terminate()
+        # terminate only if still running
+        if self._process.returncode is None:
+            self._process.terminate()
         self._started = False
         if self._timed_out:
             self._timed_out = False
@@ -196,15 +196,6 @@ class _BashSession:
                             message="command exceeded a healthy output window (10MB)",
                             supplied_arguments=[ArgumentEntry("command", command)],
                         )
-                    # if we read directly from stdout/stderr, it will wait forever for
-                    # EOF. use the StreamReader buffer directly instead.
-                    # output = (
-                    #    self._process.stdout._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue]
-                    # )  # pyright: ignore[reportAttributeAccessIssue]
-                    # if self._sentinel in output:
-                    #    # strip the sentinel and break
-                    #    output = output[: output.index(self._sentinel)]
-                    #    break
             except TimeoutError:
                 self._timed_out = True
                 logger.warning(
@@ -484,11 +475,14 @@ async def _bash_tool(
         elif result.error == "bash has exited with returncode 127":
             # DevNote: Sometimes the BashTool can reach an un-restorable case after poor commands (merging total commands in stdin). This will be seen by this error code.
             # See Issue #36 on this. The source is currently unknown, but restarting the bash cannot harm on a normal unknown command.
-            # TODO: if we see this a lot, we can do a check of the bash-history.
             logger.warning(
                 "[Tool] Bashtool has tried to execute an unkown command - restarting it to avoid getting stuck in unknown commands"
             )
             await _restart_bash_session_using_config_directory()
+            return ToolErrorInfo(
+                message="Your commands (possibly previous comands) lead to a faulty state in the bash tool. The BashTool has now been restarted. Please revisit your commands, and avoid commands with offset output.",
+                supplied_arguments=[ArgumentEntry("command", command)],
+            )
         else:
             logger.info(
                 f"[Tool] bash_tool result: output={result.output}, error={result.error}"
@@ -505,15 +499,20 @@ async def _restart_bash_session_using_config_directory():
         )
 
     logger.debug("[Tool] Bash Session is being restarted")
+    # discard old session entirely
     _bash_tool_instance._session.stop()
+    _bash_tool_instance._session = _BashSession()
     bash_tool_init_dir: Path | None = (
         ConfigSingleton.config.task_type.get_default_working_dir()
         if ConfigSingleton.is_initialized()
         else None
     )
-    await _bash_tool_instance._session.start(init_dir=str(bash_tool_init_dir))
+    await _bash_tool_instance._session.start(
+        init_dir=str(bash_tool_init_dir) if bash_tool_init_dir else None
+    )
     logger.debug(
-        f"[Tool] Successfully restarted Bash Tool. New session starts in {str(bash_tool_init_dir) if bash_tool_init_dir else '<<UNKNOWN>>'}"
+        f"[Tool] Successfully restarted Bash Tool. New session starts in "
+        f"{str(bash_tool_init_dir) if bash_tool_init_dir else '<<UNKNOWN>>'}"
     )
 
 

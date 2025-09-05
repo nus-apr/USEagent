@@ -1,5 +1,6 @@
 import asyncio
 import json
+import subprocess
 import time
 from pathlib import Path
 
@@ -992,3 +993,166 @@ SH
     # after restart, timeout should be reset to a sane default (e.g. >100s)
     assert _bash_tool_instance._session._timeout > 100
     assert not _bash_tool_instance._session._timed_out
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.regression
+async def test_meson_command_should_fail_with_exit_127_without_timeout(tmp_path: Path):
+    # See Issue 36 - BashTool can bring itself in a continious 127 state
+    # But this seems to be related to async behaviour, as below test shows.
+
+    host_check = subprocess.run(
+        ["bash", "-lc", "meson --version"],
+        capture_output=True,
+        text=True,
+    )
+    if host_check.returncode == 0:
+        pytest.skip("meson is available on the host; skipping test")
+
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-MESON")
+
+    result = await tool("meson --version")
+    result = await tool("meson --version")
+    assert isinstance(result, CLIResult)
+    assert not result.output or result.output.strip() == ""
+    assert isinstance(result.error, str) and "command not found" in result.error
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+    assert not _bash_tool_instance._session._timed_out
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.regression
+async def test_meson_command_should_error_command_not_found_without_timeout(
+    tmp_path: Path,
+):
+    # See Issue 36 - BashTool can bring itself in a continious 127 state
+    import shutil
+    import subprocess
+
+    if (
+        shutil.which("meson")
+        or subprocess.run(
+            ["bash", "-lc", "command -v meson >/dev/null 2>&1"]
+        ).returncode
+        == 0
+    ):
+        pytest.skip("meson is available on the host; skipping")
+
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-MESON")
+
+    result = await tool("meson --version")
+    assert isinstance(result, CLIResult)
+    assert (result.output is None) or (result.output.strip() == "")
+    assert isinstance(result.error, str) and "command not found" in result.error
+
+    import useagent.tools.bash as bash_file
+
+    assert bash_file._bash_tool_instance
+    assert not bash_file._bash_tool_instance._session._timed_out
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.regression
+async def test_meson_command_suppressed_stderr_should_finish_silently(tmp_path: Path):
+    # See Issue 36 - BashTool can bring itself in a continious 127 state
+    import shutil
+    import subprocess
+
+    if (
+        shutil.which("meson")
+        or subprocess.run(
+            ["bash", "-lc", "command -v meson >/dev/null 2>&1"]
+        ).returncode
+        == 0
+    ):
+        pytest.skip("meson is available on the host; skipping")
+
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-MESON")
+
+    result = await tool("meson --version 2>/dev/null")
+    assert isinstance(result, CLIResult)
+    assert result.error is None
+    assert isinstance(result.output, str) and "finished silently" in result.output
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.regression
+async def test_exit_127_should_restart_into_config_dir(tmp_path: Path, monkeypatch):
+    init_bash_tool(str(tmp_path))
+
+    # Ensure Config is initialized so restart uses task_type.get_default_working_dir()
+    from useagent.config import ConfigSingleton
+
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+
+    class _DummyTaskType:
+        def get_default_working_dir(self) -> Path:
+            return tmp_path
+
+    monkeypatch.setattr(
+        ConfigSingleton.config, "task_type", _DummyTaskType(), raising=True
+    )
+
+    tool = make_bash_tool_for_agent("AGENT-EXIT127")
+
+    warmup = await tool("echo warmup")
+    assert isinstance(warmup, CLIResult)
+
+    # Kill the shell with 127
+    _ = await tool("exit 127")
+
+    # First call after exit: wrapper surfaces returncode 127 and restarts
+    first_after = await tool("pwd")
+    assert isinstance(first_after, ToolErrorInfo)
+
+    # Second call: should succeed in restarted session, in tmp_path, and we get CLIResults.
+    second_after = await tool("pwd")
+    assert isinstance(second_after, CLIResult)
+    assert second_after.error is None
+    assert second_after.output.strip() == str(tmp_path)
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+    assert not _bash_tool_instance._session._timed_out
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+async def test_stop_marks_session_stopped_even_if_proc_already_exited(tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-STOP")
+    await tool("exit 0")
+    import useagent.tools.bash as bash_file
+
+    sess = bash_file._bash_tool_instance._session
+    assert sess and sess._process.returncode is not None
+    sess.stop()
+    assert sess._started is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+async def test_restart_helper_recreates_session_process(tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    await tool("echo warmup")
+    import useagent.tools.bash as bash_file
+
+    s = bash_file._bash_tool_instance._session
+    pid_before = s._process.pid
+    await bash_file._restart_bash_session_using_config_directory()
+    pid_after = bash_file._bash_tool_instance._session._process.pid
+    assert pid_before != pid_after
