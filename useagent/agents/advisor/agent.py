@@ -14,7 +14,7 @@ SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
 
 @conditional_microagents_triggers(load_microagents_from_project_dir())
-@alias_for_microagents("advisor")
+@alias_for_microagents("ADVISOR")
 def init_agent(config: AppConfig | None = None) -> Agent:
     if config is None:
         config = ConfigSingleton.config
@@ -28,5 +28,5 @@ def init_agent(config: AppConfig | None = None) -> Agent:
         output_retries=3,
     )
 
-    logger.debug("[Advisor Agent] Initialized Advisor Agent for output")
+    logger.debug("[Advisor Agent] Initialized Advisor Agent")
     return advisor_agent
