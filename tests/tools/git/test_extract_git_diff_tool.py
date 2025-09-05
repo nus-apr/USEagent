@@ -38,6 +38,16 @@ def _setup_git_repo_with_change(repo_path: Path):
     return file
 
 
+def _init_git_repo_without_content(repo_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=repo_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"], cwd=repo_path, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True
+    )
+
+
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_extract_diff_real_changes(tmp_path):
@@ -214,3 +224,122 @@ async def test_extract_diff_tracked_file_change_included_untracked_ignored(
     result = await extract_diff(project_dir=tmp_path)
     assert "diff --git a/a.txt" in result.output
     assert "new.txt" in result.output
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_issue_26_extract_diff_handles_non_utf8_text_file_change_should_not_crash(
+    tmp_path: Path,
+):
+    _init_git_repo_without_content(tmp_path)
+    p = tmp_path / "latin1.txt"
+    p.write_bytes(b"hola\xa0mundo\n")
+    subprocess.run(["git", "add", p.name], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add latin1"], cwd=tmp_path, check=True)
+
+    p.write_bytes(b"hola\xa0mundo\ncambio\xa0\n")
+
+    result = await extract_diff(project_dir=tmp_path)
+    assert isinstance(result, CLIResult)
+    assert result.output.strip()
+    assert (
+        ("diff --git" in result.output)
+        or ("Binary files" in result.output)
+        or (p.name in result.output)
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_issue_26_extract_diff_handles_binary_file_change_should_not_crash(
+    tmp_path: Path,
+):
+    _init_git_repo_without_content(tmp_path)
+    png = tmp_path / "img.png"
+    png.write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+        b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01\xe2!\xbc3"
+        b"\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    subprocess.run(["git", "add", png.name], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add png"], cwd=tmp_path, check=True)
+
+    data = png.read_bytes()
+    png.write_bytes(data[:-1] + bytes([data[-1] ^ 0xFF]))
+
+    result = await extract_diff(project_dir=tmp_path)
+    assert isinstance(result, CLIResult)
+    assert result.output.strip()
+    assert (
+        ("GIT binary patch" in result.output)
+        or ("Binary files" in result.output)
+        or (png.name in result.output)
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_issue_26_extract_diff_respects_non_utf8_filename_should_not_crash(
+    tmp_path: Path,
+):
+    _init_git_repo_without_content(tmp_path)
+    subprocess.run(
+        ["git", "config", "core.quotepath", "false"], cwd=tmp_path, check=True
+    )
+
+    fname = "über 🧪.txt"
+    fpath = tmp_path / fname
+    fpath.write_text("hi\n")
+    subprocess.run(["git", "add", fname], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "add unicode name"], cwd=tmp_path, check=True
+    )
+
+    fpath.write_text("hi\nchanged\n")
+
+    result = await extract_diff(project_dir=tmp_path)
+    assert isinstance(result, CLIResult)
+    assert "diff --git" in result.output
+    assert fname in result.output
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_with_color_enabled_should_not_strip_colors(tmp_path: Path):
+    _init_git_repo_without_content(tmp_path)
+    subprocess.run(["git", "config", "color.ui", "always"], cwd=tmp_path, check=True)
+
+    p = tmp_path / "a.txt"
+    p.write_text("a\n")
+    subprocess.run(["git", "add", "a.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
+
+    p.write_text("a\nb\n")
+
+    result = await extract_diff(project_dir=tmp_path)
+    assert isinstance(result, CLIResult)
+    assert "diff --git a/a.txt" in result.output
+    assert "\x1b[" in result.output  # no ANSI color sequences
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_issue_26_extract_diff_large_hunks_should_not_crash(tmp_path: Path):
+    _init_git_repo_without_content(tmp_path)
+
+    big = tmp_path / "big.txt"
+    big.write_bytes(b"x" * (2 * 1024 * 1024))
+    subprocess.run(["git", "add", big.name], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add big"], cwd=tmp_path, check=True)
+
+    big.write_bytes(big.read_bytes() + (b"\xa0" * (256 * 1024)) + b"\nmore\n")
+
+    result = await extract_diff(project_dir=tmp_path)
+    assert isinstance(result, CLIResult)
+    assert result.output.strip()
+    assert big.name in result.output

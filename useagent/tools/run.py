@@ -31,8 +31,12 @@ async def run(
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
         return (
             process.returncode or 0,
-            maybe_truncate(stdout.decode(), truncate_after=truncate_after),
-            maybe_truncate(stderr.decode(), truncate_after=truncate_after),
+            maybe_truncate(
+                stdout.decode("utf-8", errors="replace"), truncate_after=truncate_after
+            ),
+            maybe_truncate(
+                stderr.decode("utf-8", errors="replace"), truncate_after=truncate_after
+            ),
         )
     except TimeoutError as exc:
         try:
