@@ -501,6 +501,7 @@ async def _salvage_most_recent_triplet(
     third_cap: int = int(budget * 0.10)
     second_cap: int = int(budget * 0.25)
     newest_cap: int = int(budget * 0.50)
+    # DevNote: Intentionally reduce it below 100%, first to be safe and second that we won't hit the limit immediately again.
 
     capped: list[ModelMessage] = []
     n = len(triplet)

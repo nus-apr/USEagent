@@ -3,6 +3,7 @@ from pathlib import Path
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.tools import Tool
 
+import useagent.common.constants as constants
 from useagent.common.context_window import fit_messages_into_context_window
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
@@ -34,7 +35,10 @@ def init_agent(
         output_type=list[Location],
         tools=[
             Tool(
-                make_bash_tool_for_agent("SEARCH", bash_call_delay_in_seconds=0.35),
+                make_bash_tool_for_agent(
+                    "SEARCH",
+                    bash_call_delay_in_seconds=constants.VCS_AGENT_BASH_TOOL_DELAY,
+                ),
                 max_retries=4,
             )
         ],

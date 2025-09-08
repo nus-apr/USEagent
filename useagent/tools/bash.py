@@ -11,13 +11,14 @@ from pathlib import Path
 
 from loguru import logger
 
+import useagent.common.constants as constants
 from useagent.common.command_utility import has_heredoc, validate_heredoc
 from useagent.common.context_window import fit_message_into_context_window
+from useagent.common.guardrails import useagent_guard_rail
 from useagent.config import ConfigSingleton
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
-from useagent.tools.common import useagent_guard_rail
 
 
 class _BashSession:
@@ -27,12 +28,8 @@ class _BashSession:
     _process: asyncio.subprocess.Process
 
     command: str = "/bin/bash"
-    _output_delay: float = 0.1  # seconds
-    # DevNote: The timeout is quite large, but we have seen commands that need so long
-    # An example is `apt-get install openjdk-jdk-8` or similar large packages.
 
-    __DEFAULT_TIMEOUT: float = 3600  # seconds
-    _timeout: float = __DEFAULT_TIMEOUT
+    _timeout: float = constants.BASH_TOOL_DEFAULT_MAX_TIMEOUT
     _sentinel: str = "<<exit>>"
 
     def __init__(self):
@@ -187,7 +184,7 @@ class _BashSession:
                     )
                     stderr_content = stderr_buf.decode(errors="replace")
 
-                    if len(output) > 10000000:  # e.g., 10MB limit
+                    if len(output) > constants.BASH_TOOL_OUTPUT_MAX_LENGTH:
                         # DevNote: See Issue #31, we move this from a ValueError to a ToolOutPutError
                         logger.warning(
                             f"[Tool] Bash Tool tried to execute a command with large output (Command was {command})"
@@ -207,7 +204,7 @@ class _BashSession:
                 )
             finally:
                 self._timeout = (
-                    self.__DEFAULT_TIMEOUT
+                    constants.BASH_TOOL_DEFAULT_MAX_TIMEOUT
                 )  # TimeOuts might have changed for EOF
             if output.endswith("\n"):
                 output = output[:-1]
@@ -234,12 +231,18 @@ class _BashSession:
         # Possibly: Command outputs can be large / noisy, and exceed the context window.
         # We account for them by optionally shortening them, if configured (See Issue #30)
         output = (
-            fit_message_into_context_window(output, safety_buffer=0.40)
+            fit_message_into_context_window(
+                output,
+                safety_buffer=constants.BASH_TOOL_MESSAGE_RESPONSE_CONTEXT_LENGTH_BUFFER,
+            )
             if isinstance(output, str)
             else output
         )
         error = (
-            fit_message_into_context_window(error, safety_buffer=0.40)
+            fit_message_into_context_window(
+                error,
+                safety_buffer=constants.BASH_TOOL_MESSAGE_RESPONSE_CONTEXT_LENGTH_BUFFER,
+            )
             if isinstance(error, str)
             else error
         )
@@ -449,18 +452,18 @@ async def _bash_tool(
         and ConfigSingleton.config.optimization_toggles["shorten-log-output"]
     ):
         output_by_lines = result.output.splitlines()
-        if len(output_by_lines) > _PRINT_MAX_LENGTH_IN_LINES:
+        if len(output_by_lines) > constants.COMMAND_OUTPUT_MAX_PRINT_CUT_OFF:
             to_log = "\n".join(
-                output_by_lines[: _PRINT_MAX_LENGTH_IN_LINES // 2]
+                output_by_lines[: constants.COMMAND_OUTPUT_MAX_PRINT_CUT_OFF // 2]
                 + [
                     "[[ shortened in log for readability, presented in full for agent ]]"
                 ]
-                + output_by_lines[-(_PRINT_MAX_LENGTH_IN_LINES // 2) :]
+                + output_by_lines[-(constants.COMMAND_OUTPUT_MAX_PRINT_CUT_OFF // 2) :]
             )
         else:
             to_log = result.output
         logger.info(
-            f"[Tool] bash_tool {'shortened' if len(output_by_lines) > _PRINT_MAX_LENGTH_IN_LINES else ''} result: output={to_log}, error={result.error}"
+            f"[Tool] bash_tool {'shortened' if len(output_by_lines) > constants.COMMAND_OUTPUT_MAX_PRINT_CUT_OFF else ''} result: output={to_log}, error={result.error}"
         )
     else:
         if result.error == "bash has exited with returncode 2":

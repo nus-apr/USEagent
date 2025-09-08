@@ -3,6 +3,7 @@ from subprocess import DEVNULL
 
 from loguru import logger
 
+import useagent.common.constants as constants
 from useagent.utils import cd, run_command
 
 
@@ -27,10 +28,11 @@ class GitRepository:
         """
         logger.debug(f"Configuring git user and email (at {self.local_path})")
         run_command(
-            ["git", "config", "--local", "user.name", "USEagent"], cwd=self.local_path
+            ["git", "config", "--local", "user.name", constants.DEFAULT_GIT_USER],
+            cwd=self.local_path,
         )
         run_command(
-            ["git", "config", "--local", "user.email", "useagent@useagent.com"],
+            ["git", "config", "--local", "user.email", constants.DEFAULT_GIT_EMAIL],
             cwd=self.local_path,
         )
 

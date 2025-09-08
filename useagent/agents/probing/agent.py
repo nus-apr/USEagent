@@ -4,6 +4,7 @@ from loguru import logger
 from pydantic_ai import Agent
 from pydantic_ai.tools import Tool
 
+import useagent.common.constants as constants
 from useagent.common.context_window import fit_messages_into_context_window
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
@@ -45,10 +46,13 @@ def init_agent(output_type, config: AppConfig | None = None, deps_type=None) -> 
         deps_type=deps_type,  # type: ignore
         output_type=output_type,
         retries=2,
-        output_retries=3,
+        output_retries=constants.PROBING_AGENT_OUTPUT_RETRIES,
         tools=[
             Tool(
-                make_bash_tool_for_agent("PROBE", bash_call_delay_in_seconds=0.4),
+                make_bash_tool_for_agent(
+                    "PROBE",
+                    bash_call_delay_in_seconds=constants.PROBING_AGENT_BASH_TOOL_DELAY,
+                ),
                 max_retries=4,
             ),
         ],

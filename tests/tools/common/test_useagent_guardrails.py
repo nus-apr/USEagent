@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
+from useagent.common.guardrails import useagent_guard_rail
 from useagent.config import ConfigSingleton
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry
-from useagent.tools.common import useagent_guard_rail
 
 
 @pytest.fixture(autouse=True)

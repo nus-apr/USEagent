@@ -4,6 +4,7 @@ from typing import Union
 from pydantic_ai import Agent
 from pydantic_ai.tools import Tool
 
+import useagent.common.constants as constants
 from useagent.common.context_window import fit_messages_into_context_window
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
@@ -41,11 +42,14 @@ def init_agent(
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
         output_type=Union[DiffEntry, str],
-        retries=2,
-        output_retries=5,
+        retries=constants.VCS_AGENT_RETRIES,
+        output_retries=constants.VCS_AGENT_OUTPUT_RETRIES,
         tools=[
             Tool(
-                make_bash_tool_for_agent("VCS", bash_call_delay_in_seconds=0.25),
+                make_bash_tool_for_agent(
+                    "VCS",
+                    bash_call_delay_in_seconds=constants.VCS_AGENT_BASH_TOOL_DELAY,
+                ),
                 max_retries=3,
             ),
             Tool(view_commit_as_diff),

@@ -8,6 +8,7 @@ from pydantic_ai.messages import ModelMessage
 from pydantic_ai.tools import Tool
 from pydantic_ai.usage import Usage, UsageLimits
 
+import useagent.common.constants as constants
 from useagent.agents.advisor.agent import init_agent as init_advisor_agent
 from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
 from useagent.agents.probing.agent import init_agent as init_probing_agent
@@ -104,15 +105,18 @@ def init_agent(
         config.model,
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
-        retries=3,
-        output_retries=10,
+        retries=constants.META_AGENT_RETRIES,
+        output_retries=constants.META_AGENT_OUTPUT_RETRIES,
         tools=[
             Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
             Tool(view_task_state, takes_ctx=True, max_retries=0),
             Tool(remove_diffs_from_diff_store, takes_ctx=True, max_retries=5),
             Tool(view_command_history, max_retries=2),
             Tool(
-                make_bash_tool_for_agent("META", bash_call_delay_in_seconds=0.30),
+                make_bash_tool_for_agent(
+                    "META",
+                    bash_call_delay_in_seconds=constants.META_AGENT_BASH_TOOL_DELAY,
+                ),
                 max_retries=4,
             ),
             Tool(read_file_as_diff),
@@ -155,7 +159,7 @@ def init_agent(
 
     ### Define actions as tools to meta_agent. Each action interfaces to another agent in Pydantic AI.
 
-    @meta_agent.tool(retries=5)
+    @meta_agent.tool(retries=constants.PROBE_ENVIRONMENT_RETRIES)
     async def probe_environment(ctx: RunContext[TaskState]) -> Environment:
         """Investigate the currently active environment relevant to the project.
 
@@ -180,7 +184,9 @@ def init_agent(
         path_probing_agent = init_probing_agent(output_type=Path, deps_type=None)
         path_probing_agent_result = await path_probing_agent.run(
             deps=None,
-            usage_limits=UsageLimits(request_limit=35),
+            usage_limits=UsageLimits(
+                request_limit=constants.PROBING_AGENT_WORKDIR_REQUEST_LIMIT
+            ),
         )
         project_root = path_probing_agent_result.output
 
@@ -188,7 +194,9 @@ def init_agent(
         git_probing_agent = init_probing_agent(output_type=GitStatus, deps_type=None)
         git_probing_agent_result = await git_probing_agent.run(
             #    deps=starting_status,
-            usage_limits=UsageLimits(request_limit=90),
+            usage_limits=UsageLimits(
+                request_limit=constants.PROBING_AGENT_GIT_REQUEST_LIMIT
+            ),
         )
         git_status = git_probing_agent_result.output
 
@@ -199,7 +207,9 @@ def init_agent(
         )
         command_probing_agent_result = await command_probing_agent.run(
             deps=dep_commands,
-            usage_limits=UsageLimits(request_limit=115),
+            usage_limits=UsageLimits(
+                request_limit=constants.PROBING_AGENT_COMMAND_REQUEST_LIMIT
+            ),
         )
         commands = command_probing_agent_result.output
 
@@ -209,7 +219,9 @@ def init_agent(
         )
         package_probing_agent_result = await package_probing_agent.run(
             deps=[],
-            usage_limits=UsageLimits(request_limit=100),
+            usage_limits=UsageLimits(
+                request_limit=constants.PROBING_AGENT_PACKAGE_REQUEST_LIMIT
+            ),
         )
         packages = package_probing_agent_result.output
 
@@ -239,7 +251,7 @@ def init_agent(
 
         return env
 
-    @meta_agent.tool(retries=3)
+    @meta_agent.tool(retries=constants.EXECUTE_TESTS_RETRIES)
     async def execute_tests(ctx: RunContext[TaskState], instruction: str) -> TestResult:
         """Execute the projects tests or a subset of the tests.
 
@@ -262,7 +274,11 @@ def init_agent(
 
         test_agent = init_test_execution_agent()
         test_agent_output = await test_agent.run(
-            instruction, deps=ctx.deps, usage_limits=UsageLimits(request_limit=115)
+            instruction,
+            deps=ctx.deps,
+            usage_limits=UsageLimits(
+                request_limit=constants.EXECUTE_TESTS_AGENT_REQUEST_LIMIT
+            ),
         )
         test_result: TestResult = test_agent_output.output
 
@@ -273,7 +289,7 @@ def init_agent(
 
         return test_result
 
-    @meta_agent.tool(retries=6)
+    @meta_agent.tool(retries=constants.SEARCH_AGENT_RETRIES)
     async def search_code(
         ctx: RunContext[TaskState], instruction: str
     ) -> list[Location]:
@@ -288,7 +304,11 @@ def init_agent(
         logger.info(f"[MetaAgent] Invoked search_code with instruction: {instruction}")
         search_code_agent = init_search_code_agent()
         search_code_agent_result = await search_code_agent.run(
-            instruction, deps=ctx.deps, usage_limits=UsageLimits(request_limit=120)
+            instruction,
+            deps=ctx.deps,
+            usage_limits=UsageLimits(
+                request_limit=constants.SEARCH_AGENT_REQUEST_LIMIT
+            ),
         )
         locations = search_code_agent_result.output
         logger.info(f"[MetaAgent] search_code result: {locations}")
@@ -299,7 +319,7 @@ def init_agent(
         USAGE_TRACKER.add(search_code_agent.name, search_code_agent_result.usage())
         return locations
 
-    @meta_agent.tool(retries=4)
+    @meta_agent.tool(retries=constants.EDIT_CODE_RETRIES)
     async def edit_code(
         ctx: RunContext[TaskState], instruction: str
     ) -> DiffEntry | None:
@@ -321,7 +341,11 @@ def init_agent(
         edit_code_agent = init_edit_code_agent()
 
         edit_result = await edit_code_agent.run(
-            instruction, deps=ctx.deps, usage_limits=UsageLimits(request_limit=125)
+            instruction,
+            deps=ctx.deps,
+            usage_limits=UsageLimits(
+                request_limit=constants.EDIT_CODE_AGENT_REQUEST_LIMIT
+            ),
         )
         diff: DiffEntry = edit_result.output
         logger.info(f"[MetaAgent] edit_code result: {diff}")
@@ -344,7 +368,7 @@ def init_agent(
             USAGE_TRACKER.add(edit_code_agent.name, edit_result.usage())
             return diff
 
-    @meta_agent.tool(retries=4)
+    @meta_agent.tool(retries=constants.VCS_AGENT_RETRIES)
     async def vcs(
         ctx: RunContext[TaskState], instruction: str
     ) -> DiffEntry | str | None:
@@ -359,7 +383,11 @@ def init_agent(
         logger.info(f"[MetaAgent] Invoked vcs_agent with instruction: {instruction}")
         vcs_agent = init_vcs_agent()
 
-        vcs_result = await vcs_agent.run(instruction, deps=ctx.deps)
+        vcs_result = await vcs_agent.run(
+            instruction,
+            deps=ctx.deps,
+            usage_limits=UsageLimits(request_limit=constants.VCS_AGENT_REQUEST_LIMIT),
+        )
 
         match vcs_result.output:
             case DiffEntry():
@@ -400,7 +428,9 @@ def agent_loop(
     # actually running the agent
     prompt = "Invoke tools to complete the task."
     result = meta_agent.run_sync(
-        prompt, deps=task_state, usage_limits=UsageLimits(request_limit=100)
+        prompt,
+        deps=task_state,
+        usage_limits=UsageLimits(request_limit=constants.META_AGENT_REQUEST_LIMIT),
     )
     USAGE_TRACKER.add(meta_agent.name, result.usage())
     last_iteration_messages = result.all_messages()
@@ -409,9 +439,9 @@ def agent_loop(
         ConfigSingleton.is_initialized()
         and ConfigSingleton.config.optimization_toggles["reiterate-on-doubts"]
     ):
-        MAX_DOUBT_REITERATIONS, DOUBT_REITERATION = 2, 0
+        DOUBT_REITERATION = 0
         while (
-            DOUBT_REITERATION < MAX_DOUBT_REITERATIONS
+            DOUBT_REITERATION < constants.MAX_DOUBT_REITERATIONS
             and result.output
             and result.output.doubts
         ):
@@ -458,7 +488,9 @@ def agent_loop(
                 result = meta_agent.run_sync(
                     new_instruction,
                     deps=task_state,
-                    usage_limits=UsageLimits(request_limit=75),
+                    usage_limits=UsageLimits(
+                        request_limit=constants.META_AGENT_REQUEST_LIMIT
+                    ),
                     message_history=last_iteration_messages,
                 )
                 # TODO: Do we want to earmark this as 'META-reiteration'? At the moment it will just be 2nd Meta Agent Cost

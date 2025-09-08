@@ -4,9 +4,9 @@ from pathlib import Path
 from loguru import logger
 
 from useagent.common.context_window import fit_message_into_context_window
+from useagent.common.guardrails import useagent_guard_rail
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
-from useagent.tools.common import useagent_guard_rail
 from useagent.tools.run import maybe_truncate, run
 from useagent.utils import cd
 

@@ -6,12 +6,12 @@ from loguru import logger
 from pydantic_ai import RunContext
 
 from useagent.common.encoding import is_utf_8_encoded
+from useagent.common.guardrails import useagent_guard_rail
 from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.task_state import TaskState
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
-from useagent.tools.common import useagent_guard_rail
 from useagent.tools.run import run
 from useagent.utils import cd
 

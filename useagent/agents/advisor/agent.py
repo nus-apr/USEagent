@@ -3,6 +3,7 @@ from pathlib import Path
 from loguru import logger
 from pydantic_ai import Agent
 
+import useagent.common.constants as constants
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
@@ -24,8 +25,8 @@ def init_agent(config: AppConfig | None = None) -> Agent:
         config.model,
         instructions=SYSTEM_PROMPT,
         output_type=str,
-        retries=2,
-        output_retries=3,
+        retries=constants.ADVISOR_AGENT_RETRIES,
+        output_retries=constants.ADVISOR_AGENT_OUTPUT_RETRIES,
     )
 
     logger.debug("[Advisor Agent] Initialized Advisor Agent")

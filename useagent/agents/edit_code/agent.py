@@ -3,6 +3,7 @@ from pathlib import Path
 from pydantic_ai import Agent
 from pydantic_ai.tools import Tool
 
+import useagent.common.constants as constants
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
@@ -31,8 +32,8 @@ def init_agent(
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
         output_type=DiffEntry,
-        retries=3,
-        output_retries=12,  # DevNote: The diff-entries are hard to get right for the model. But they must fit their schema to make any sense.
+        retries=constants.EDIT_CODE_AGENT_RETRIES,
+        output_retries=constants.EDIT_CODE_AGENT_OUTPUT_RETRIES,
         tools=[
             Tool(view),
             Tool(create),

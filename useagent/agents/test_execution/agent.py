@@ -4,6 +4,7 @@ from loguru import logger
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.tools import Tool
 
+import useagent.common.constants as constants
 from useagent.common.context_window import fit_messages_into_context_window
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
@@ -31,13 +32,16 @@ def init_agent(
     test_execution_agent = Agent(
         config.model,
         instructions=SYSTEM_PROMPT,
-        retries=2,
-        output_retries=3,
+        retries=constants.EXECUTE_TESTS_RETRIES,
+        output_retries=constants.EXECUTE_TESTS_OUTPUT_RETRIES,
         deps_type=TaskState,
         output_type=TestResult,
         tools=[
             Tool(
-                make_bash_tool_for_agent("TESTEXEC", bash_call_delay_in_seconds=0.3),
+                make_bash_tool_for_agent(
+                    "TESTEXEC",
+                    bash_call_delay_in_seconds=constants.EXECUTE_TESTS_AGENT_BASH_TOOL_DELAY,
+                ),
                 max_retries=7,
             )
         ],
