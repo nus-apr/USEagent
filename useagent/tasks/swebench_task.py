@@ -9,6 +9,7 @@ from typing import Any
 from datasets import load_dataset
 from loguru import logger
 
+from useagent.config import ConfigSingleton
 from useagent.state.git_repo import GitRepository
 from useagent.tasks.task import Task
 
@@ -74,7 +75,41 @@ class SWEbenchTask(Task):
         logger.info(f"[Setup] Finished setting up {instance_id} into {working_dir}")
 
     def get_issue_statement(self) -> str:
-        return self.issue_statement
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles[
+                "swe-bench-additional-repair-instructions"
+            ]
+        ):
+
+            enriched_issue_statement: str = """
+            You are working on Open Source repositories and received an issue report, marked in its original form between <Issue> tags. 
+            The goal is to produce a patch that will resolve the issue. 
+            The patch must be applicable to the repository as you find it, i.e. it must be a single, fully-sufficient patch and not a combination of patches. 
+            
+            Before attempting a repair, find relevant code locations and the most relevant tests. 
+            Aim to verify your changes by identifying (or generating) relevant tests and execute them against your changes. 
+
+            Before finalizing your suggestion, reflect on alternative implementations that could lead to a resolution. 
+            Compare them against your initial attempt and explore them if they seem better. 
+            """
+            enriched_issue_statement += (
+                "\n<Issue>\n" + self.issue_statement + "\n</Issue>\n"
+            )
+
+            enriched_issue_statement += """
+            Additional Notes: 
+            - When revisiting or discarding attempts, pay attention to the git history. Your task is to produce an individual, standalone patch, so you might need to discard changes you have made to the repository. 
+            - Never report a patch for which you have not conducted at least some form of verification
+            - You can assume the issue is verified and can be solved. Never refrain from attempting a repair and never discard the problems mentions in the issue. 
+            - The environment you are starting from is a 'empty' Ubuntu 24.04 instance. You can (and should) make installs necessary to execute the project and its test-suite.
+            - Prefer simple patches over complex changes. Stay close to the project coding standard and to standard pythonic solutions. 
+            - Don't introduce too many code-comments. Keep it short and simple, and prefer descriptive names.
+            """
+
+            return enriched_issue_statement
+        else:
+            return self.issue_statement
 
     def get_working_directory(self) -> Path:
         return self._working_dir

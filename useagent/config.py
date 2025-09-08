@@ -31,6 +31,7 @@ def _default_optimization_toggles() -> dict[str, bool]:
             "vcs-agent-answer-instructions": True,
             "reiterate-on-doubts": True,
             "block-long-multiline-commands": True,
+            "swe-bench-additional-repair-instructions": True,
         },
     )
 
