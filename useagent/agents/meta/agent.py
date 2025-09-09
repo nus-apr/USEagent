@@ -418,9 +418,9 @@ def agent_loop(
             try:
                 # TODO: store the result? To have something in case of timeout?
                 logger.info(
-                    f"Attempt at solving the task produced a result with doubts: {result.output.doubts}. Attempting to resolve doubts with changes (RE-ITERATION {DOUBT_REITERATION})"
+                    f"[MetaAgent] Attempt at solving the task produced a result with doubts: {result.output.doubts}. Attempting to resolve doubts with changes (RE-ITERATION {DOUBT_REITERATION})"
                 )
-                logger.debug(f"Doubtful result was: {result.output}")
+                logger.debug(f"[MetaAgent] Doubtful result was: {result.output}")
                 current_bash_hist: list[
                     tuple[
                         NonEmptyStr, NonEmptyStr, CLIResult | ToolErrorInfo | Exception
@@ -468,12 +468,12 @@ def agent_loop(
                 last_iteration_messages = result.all_messages()
             except Exception as exc:
                 logger.error(
-                    f"Error while re-iterating the result after doubts. Re-using previous, initial result (with doubts). Exception was: {exc}"
+                    f"[MetaAgent] Error while re-iterating the result after doubts. Re-using previous, initial result (with doubts). Exception was: {exc}"
                 )
             finally:
                 DOUBT_REITERATION += 1
         else:
-            logger.debug("Task was finished without any doubts.")
+            logger.debug("[MetaAgent] Task was finished without any doubts.")
 
     if isinstance(result.output, CodeChange):
         diff_id = result.output.diff_id

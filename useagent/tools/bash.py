@@ -127,7 +127,12 @@ class _BashSession:
                     "block-long-multiline-commands"
                 ]
             ):
-                if command.count("\n") > 15 or len(command.splitlines()) > 15:
+                if (
+                    command.count("\n")
+                    > constants.BASH_TOOL_MAX_LINE_LENGTH_FOR_EOF_COMMANDS
+                    or len(command.splitlines())
+                    > constants.BASH_TOOL_MAX_LINE_LENGTH_FOR_EOF_COMMANDS
+                ):
                     return ToolErrorInfo(
                         message="You provided a large multi-line command. Such commands are currently intentionally de-actived, please refer from using them and prefer a sequence of short, simple commands, or consider different tools to write file-content. The command was not executed.",
                         supplied_arguments=[ArgumentEntry("command", command)],
@@ -143,7 +148,7 @@ class _BashSession:
                 logger.debug(
                     "Received a command with an EOF marker - reducing timeout to only allow short commands"
                 )
-                self._timeout = 8
+                self._timeout = constants.BASH_TOOL_REDUCED_TIMEOUT_FOR_EOF_COMMANDS
 
             # Build the command by encoding the intial command and add our 'finish' sentinel after.
             effective_command = (
@@ -428,7 +433,7 @@ async def _bash_tool(
     # For most calls, this is not a big issue, because the calls will take a while etc.
     # But for some of our agents and tools, it can rapid-fire simple commands (like looking for dependencies, echoing things, etc.)
     # And we'll hit this limit. So, for some agents (Probing Agent, VCS Agent) we add a speed bumper. Also: See Issue #16
-    _PRINT_MAX_LENGTH_IN_LINES: int = 60
+    _PRINT_MAX_LENGTH_IN_LINES: int = 50
 
     if (
         ConfigSingleton.is_initialized()
