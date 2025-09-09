@@ -33,11 +33,13 @@ def init_agent(
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
         output_type=list[Location],
+        retries=constants.SEARCH_AGENT_RETRIES,
+        output_retries=constants.SEARCH_AGENT_OUTPUT_RETRIES,
         tools=[
             Tool(
                 make_bash_tool_for_agent(
                     "SEARCH",
-                    bash_call_delay_in_seconds=constants.VCS_AGENT_BASH_TOOL_DELAY,
+                    bash_call_delay_in_seconds=constants.SEARCH_AGENT_BASH_TOOL_DELAY,
                 ),
                 max_retries=4,
             )
