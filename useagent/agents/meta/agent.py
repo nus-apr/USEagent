@@ -61,36 +61,6 @@ SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 USAGE_TRACKER = UsageTracker()
 
 
-async def summarize_old_messages(messages: list[ModelMessage]) -> list[ModelMessage]:
-    # After hitting 100 messages, summarize the oldest 30
-    MESSAGE_THRESHHOLD: int = 100
-    SUMMARY_FRAME: int = 30
-    if len(messages) > MESSAGE_THRESHHOLD:
-        logger.info(
-            f"[META] Summary triggered, summarizing oldest {SUMMARY_FRAME} messages"
-        )
-        summarize_agent = Agent(
-            ConfigSingleton.config.model,
-            instructions="""
-        Summarize this conversation, omitting small talk and unrelated topics.
-        Focus on the technical discussion, most relevant artifacts and next steps.
-        Filter out noisy artifacts or information that is not relevant to the goals. 
-        Summarize elements that have only been part from a `checklist` but have been successfully checked.
-        """,
-        )
-
-        oldest_messages = messages[:SUMMARY_FRAME]
-        summary = await summarize_agent.run(message_history=oldest_messages)
-        USAGE_TRACKER.add("SUMMARIZER", summary.usage())
-        logger.debug(
-            f"[META] last {SUMMARY_FRAME} messages summarized as: \n {summary.new_messages()}"
-        )
-        # Return the last message and the summary
-        return summary.new_messages() + messages[-1:]
-
-    return messages
-
-
 @conditional_microagents_triggers(load_microagents_from_project_dir())
 @alias_for_microagents("META")
 def init_agent(
@@ -122,7 +92,7 @@ def init_agent(
             Tool(read_file_as_diff),
         ],
         output_type=output_type,
-        history_processors=[fit_messages_into_context_window, summarize_old_messages],
+        history_processors=[fit_messages_into_context_window],
     )
 
     ## This adds the task description to instructions (SYSTEM prompt).
