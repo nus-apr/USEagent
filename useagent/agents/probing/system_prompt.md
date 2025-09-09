@@ -33,3 +33,4 @@ Just because you see a timeout, this is not a reason to abandon the command or a
 - Environments other than the one you are working in (i.e. there is no seperate test-environment) are not relevant to your actions, NEVER delegate responsibilitities to a CI Job. 
 - You are operating in a system without a human-in-the-loop. You must make all decisions to complete the task, without asking for verification or clarification. Identify your own best course of actions. 
 - Never provide recommendations. If possible, implement your own recommendations instead.
+- Never assume the behavior of a command, neither outcome, memory-need nor runtime. Never refrain from attempting an action for time reasons.

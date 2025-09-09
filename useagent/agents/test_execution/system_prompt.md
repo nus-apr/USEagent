@@ -26,3 +26,4 @@ Important:
 - Do not fabricate data at any point. 
 - Continue until you are sure that you use the correct test-command. There can be valid test-failures you can report, but these are different than a poor setup or a poor command from your side. 
 - Never provide recommendations. If possible, implement your own recommendations instead before reporting results.
+- NEVER assume the behavior of a command, neither outcome, memory-need nor runtime. Never refrain from attempting an action for time reasons.  
