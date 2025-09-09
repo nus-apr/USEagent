@@ -385,3 +385,64 @@ def test_postprocess_output_file_should_be_utf8(tmp_path: Path) -> None:
     txt = (tmp_path / f"{task.instance_id}.json").read_text(encoding="utf-8")
     data = json.loads(txt)
     assert data[task.instance_id]["model_patch"] == diff
+
+
+@pytest.mark.online
+@pytest.mark.slow
+@pytest.mark.parametrize("iid", ["sphinx-doc__sphinx-8265", "django__django-15695"])
+def test_postprocess_should_write_issue_and_gold_with_fake_result(
+    tmp_path: Path, iid: str
+) -> None:
+    task = SWEbenchTask(
+        instance_id=iid,
+        working_dir=tmp_path / f"wd_{iid}_fake",
+        dataset=DATASET,
+    )
+    outdir = tmp_path / f"preds_{iid}_fake"
+    fake_diff = "--- a/x.py\n+++ b/x.py\n+print('fake')\n"
+
+    task.postprocess_swebench_task(result=fake_diff, output_dir=outdir)
+
+    # JSON still produced
+    json_path = outdir / f"{task.instance_id}.json"
+    assert json_path.exists()
+
+    # New files: original_issue.txt and gold_patch.diff
+    issue_path = outdir / "original_issue.txt"
+    gold_path = outdir / "gold_patch.diff"
+
+    assert issue_path.exists()
+    assert gold_path.exists()
+
+    issue_txt = issue_path.read_text(encoding="utf-8")
+    gold_txt = gold_path.read_text(encoding="utf-8")
+
+    assert isinstance(issue_txt, str) and issue_txt.strip() != ""
+    assert isinstance(gold_txt, str) and gold_txt.strip() != ""
+
+
+@pytest.mark.online
+@pytest.mark.slow
+@pytest.mark.parametrize("iid", ["sphinx-doc__sphinx-8265", "django__django-15695"])
+def test_postprocess_should_write_issue_and_gold_with_empty_result(
+    tmp_path: Path, iid: str
+) -> None:
+    task = SWEbenchTask(
+        instance_id=iid,
+        working_dir=tmp_path / f"wd_{iid}_empty",
+        dataset=DATASET,
+    )
+    outdir = tmp_path / f"preds_{iid}_empty"
+
+    task.postprocess_swebench_task(result=None, output_dir=outdir)
+
+    # JSON with empty patch
+    data = json.loads((outdir / f"{task.instance_id}.json").read_text(encoding="utf-8"))
+    assert data[task.instance_id]["model_patch"] == ""
+
+    # New files still produced and match attributes
+    issue_path = outdir / "original_issue.txt"
+    gold_path = outdir / "gold_patch.diff"
+
+    assert issue_path.exists()
+    assert gold_path.exists()

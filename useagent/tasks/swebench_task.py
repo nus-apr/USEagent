@@ -64,6 +64,7 @@ class SWEbenchTask(Task):
         self.issue_statement = issue_statement
         self.uid = instance_id
         self._working_dir = working_dir
+        self.gold_patch = meta.get("gold_patch", "")
 
         logger.info(
             f"[Setup] SWE-bench {instance_id}: cloning {self.repo}@{self.base_commit} into {working_dir}"
@@ -107,6 +108,7 @@ class SWEbenchTask(Task):
             - The environment you are starting from is a 'empty' Ubuntu 24.04 instance. You can (and should) make installs necessary to execute the project and its test-suite.
             - Prefer simple patches over complex changes. Stay close to the project coding standard and to standard pythonic solutions. 
             - Don't introduce too many code-comments. Keep it short and simple, and prefer descriptive names.
+            - Executing the tests is a crucial element of this task, as otherwise you operate 'blind'. Never give up when you see errors during test-execution, and revisit the setup and installations until they are resolved. 
             """
 
             return enriched_issue_statement
@@ -121,17 +123,17 @@ class SWEbenchTask(Task):
         return _default_working_dir
 
     # --- internals ---
-
     @staticmethod
     def _hf_row_to_meta(row: dict[str, Any]) -> dict[str, str]:
-        repo = row.get("repo") or row.get("repo_name") or row.get("repository") or ""
-        base_commit = row.get("base_commit") or row.get("commit") or ""
+        repo = row.get("repo") or row.get("repository") or ""
+        base_commit = (
+            row.get("base_commit") or row.get("environment_setup_commit") or ""
+        )
         issue_statement = (
             row.get("problem_statement")
-            or row.get("title")
-            or row.get("summary")
             or f"SWE-bench task {row.get('instance_id','')}"
         )
+        gold_patch = row.get("patch") or ""
         if not repo:
             raise ValueError("Dataset row missing repo")
         if not base_commit:
@@ -140,6 +142,7 @@ class SWEbenchTask(Task):
             "repo": repo,
             "base_commit": base_commit,
             "issue_statement": issue_statement,
+            "gold_patch": gold_patch,
         }
 
     @staticmethod
@@ -289,7 +292,7 @@ class SWEbenchTask(Task):
         instance_id: str = self.instance_id
         model_patch: str = result if result is not None else ""
 
-        if model_patch and model_patch.strip():
+        if model_patch.strip():
             logger.info(
                 f"[Task] Postprocessing SWEbench Task {instance_id}, storing a Patch with {len(model_patch)} LoC to {output_dir}/{instance_id}.json"
             )
@@ -298,15 +301,33 @@ class SWEbenchTask(Task):
                 f"[Task] Proprocessing SWEBench Task {instance_id} received an empty result - storing a empty result to {output_dir}/{instance_id}.json"
             )
 
-        entry: dict[str, Any] = {"model_patch": model_patch}
-        entry["model_name_or_path"] = "useagent-turbo-dev"
-
+        entry: dict[str, Any] = {
+            "model_patch": model_patch,
+            "model_name_or_path": "useagent-turbo-dev",
+        }
         predictions: dict[str, Any] = {instance_id: entry}
 
         output_dir.mkdir(parents=True, exist_ok=True)
         out_path: Path = output_dir / f"{instance_id}.json"
-
-        # UTF-8, no BOM; normalize to '\n' to avoid platform-dependent newlines in the JSON file.
         with out_path.open("w", encoding="utf-8", newline="\n") as f:
             json.dump(predictions, f, ensure_ascii=False)
         logger.debug(f"[Task] finished writing SWEbench-Task {instance_id}")
+
+        issue_txt: str = getattr(self, "issue_statement", "")
+        gold_txt: str = getattr(self, "gold_patch", "")
+
+        (output_dir / "original_issue.txt").write_text(
+            issue_txt, encoding="utf-8", newline="\n"
+        )
+        (output_dir / "gold_patch.diff").write_text(
+            gold_txt, encoding="utf-8", newline="\n"
+        )
+
+        if not issue_txt.strip():
+            logger.warning(
+                "[Task] No issue description available; wrote empty original_issue.txt"
+            )
+        if not gold_txt.strip():
+            logger.warning(
+                "[Task] No gold patch available; wrote empty gold_patch.diff"
+            )
