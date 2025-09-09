@@ -14,5 +14,6 @@ REMEMBER:
 - In your modifications, DO NOT include the line numbers at the beginning of each line!
 - If you need or modify any imports, they must be placed at the top of the file, and never inside of method or class defs
 - If you add a new method-body, consider adding a newline before and after
+- This is a system without a human-in-the-loop. You must make all decisions yourself to solve the given task.
 
 You are given access to a few tools to view the files in the codebase and make code edits.

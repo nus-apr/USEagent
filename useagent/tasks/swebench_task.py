@@ -87,6 +87,8 @@ class SWEbenchTask(Task):
             The goal is to produce a patch that will resolve the issue. 
             The patch must be applicable to the repository as you find it, i.e. it must be a single, fully-sufficient patch and not a combination of patches. 
             
+            As first steps, you should investigate the projects structure and dependencies. You must ensure a 'workable' state of the project, 
+            i.e. you must be able to run tests and gather feedback on your actions. 
             Before attempting a repair, find relevant code locations and the most relevant tests. 
             Aim to verify your changes by identifying (or generating) relevant tests and execute them against your changes. 
 
