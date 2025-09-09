@@ -364,8 +364,15 @@ def init_agent(
                 diff: DiffEntry = vcs_result.output
                 logger.info(f"[MetaAgent] vcs_agent diff result: {diff}")
                 # update task state with the diff
-                diff_id: str = ctx.deps.diff_store.add_entry(diff)
-                logger.debug(f"[MetaAgent] Added diff entry with ID: {diff_id}")
+                try:
+                    diff_id: str = ctx.deps.diff_store.add_entry(diff)
+                    logger.debug(f"[MetaAgent] Added diff entry with ID: {diff_id}")
+                except ValueError as verr:
+                    if "diff already exists" in str(verr):
+                        logger.warning(
+                            "[MetaAgent] VCS Agent returned a (already known) diff towards the meta-agent"
+                        )
+                    # TODO: Do we want to add something more here than logging?
             case str():
                 logger.info(
                     f"[MetaAgent] VCS-agent returned a string: {vcs_result.output}"
