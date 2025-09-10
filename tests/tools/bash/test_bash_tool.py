@@ -1,5 +1,6 @@
 import asyncio
 import json
+import shlex
 import subprocess
 import time
 from pathlib import Path
@@ -1161,44 +1162,37 @@ async def test_restart_helper_recreates_session_process(tmp_path: Path):
 @pytest.mark.regression
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_issue_40_observed_timeouting_rg_command(
-    tmp_path: Path,
-) -> None:
-    async def _body() -> None:
-        init_bash_tool(str(tmp_path))
-        tool = make_bash_tool_for_agent("AGENT-RESTART")
-        result = await tool(
-            """rg "pytest|tox|nox|ansible-test|setup" -n --hidden --glob '!venv' || true"""
-        )
-        assert result
-        assert isinstance(result, CLIResult)
+@pytest.mark.timeout(10)  # in s
+async def test_issue_40_observed_timeouting_rg_command(tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    result = await tool(
+        """rg "pytest|tox|nox|ansible-test|setup" -n --hidden --glob '!venv' || true"""
+    )
 
-    await asyncio.wait_for(_body(), timeout=25)
+    assert result
 
 
 @pytest.mark.regression
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_issue_40_observed_timeouting_rg_command_variant_2(
-    tmp_path: Path,
-) -> None:
-    async def _body() -> None:
-        init_bash_tool(str(tmp_path))
-        tool = make_bash_tool_for_agent("AGENT-RESTART")
-        result = await tool(
-            """rg "pytest|unittest|tox|pdm run|uv run --group test|pytest" -n --hidden --glob '!venv' || true"""
-        )
-        assert result
-        assert isinstance(result, CLIResult)
+@pytest.mark.timeout(10)  # in s
+async def test_issue_40_observed_timeouting_rg_command_variant_2(tmp_path: Path):
+    # Exact 2nd example we observed in logs
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    result = await tool(
+        """rg "pytest|unittest|tox|pdm run|uv run --group test|pytest" -n --hidden --glob '!venv' || true"""
+    )
 
-    await asyncio.wait_for(_body(), timeout=25)
+    assert result
 
 
 @pytest.mark.regression
 @pytest.mark.asyncio
 @pytest.mark.tool
-@pytest.mark.timeout(25)  # in s
-async def test_issue_40_observed_timeouting_rg_command_without_hidden_is_fine(
+@pytest.mark.timeout(10)  # in s
+async def test_issue_40_observed_timeouting_rg_command_without_hidden(
     tmp_path: Path,
 ):
     init_bash_tool(str(tmp_path))
@@ -1208,4 +1202,33 @@ async def test_issue_40_observed_timeouting_rg_command_without_hidden_is_fine(
     )
 
     assert result
-    assert isinstance(result, CLIResult)
+
+
+@pytest.mark.regression
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.timeout(10)  # in s
+async def test_issue_40_rg_with_scope_should_finish_fast(tmp_path: Path) -> None:
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    cmd = "\"pytest|tox|nox|ansible-test|setup\" -n --glob '!venv' . || true"
+    r = await tool(cmd)
+    assert isinstance(r, CLIResult)
+
+
+@pytest.mark.regression
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.timeout(10)  # in s
+async def test_issue_40_rg_with_cd_and_scoped_should_finish_fast(
+    tmp_path: Path,
+) -> None:
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    cmd = (
+        f"cd {shlex.quote(str(tmp_path))} && "
+        "env -u RIPGREP_CONFIG_PATH rg --no-config "
+        "\"pytest|tox|nox|ansible-test|setup\" -n --glob '!venv' . || true"
+    )
+    r = await tool(cmd)
+    assert isinstance(r, CLIResult)
