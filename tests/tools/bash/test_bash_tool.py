@@ -1177,6 +1177,23 @@ async def test_issue_40_observed_timeouting_rg_command(tmp_path: Path):
 @pytest.mark.asyncio
 @pytest.mark.tool
 @pytest.mark.timeout(25)  # in s
+async def test_issue_40_observed_timeouting_rg_command_without_hidden_is_fine(
+    tmp_path: Path,
+):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    result = await tool(
+        """rg "pytest|tox|nox|ansible-test|setup" -n --glob '!venv' || true"""
+    )
+
+    assert result
+    assert isinstance(result, CLIResult)
+
+
+@pytest.mark.regression
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.timeout(25)  # in s
 async def test_issue_40_observed_timeouting_rg_command_variant_2(tmp_path: Path):
     # Exact 2nd example we observed in logs
     init_bash_tool(str(tmp_path))
