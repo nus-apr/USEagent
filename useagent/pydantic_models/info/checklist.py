@@ -16,25 +16,25 @@ class CheckList:
     The findings might deprecate or change over the trajectory. That is expected and the checklist-agent is instructed to pay respect to the history.
     """
 
-    has_successfully_installed_system_dependencies: bool | None
-    has_successfully_install_project_dependencies: bool | None
+    has_successfully_installed_system_dependencies: bool | None = None
+    has_successfully_install_project_dependencies: bool | None = None
 
-    has_successfully_build_project: bool | None
+    has_successfully_build_project: bool | None = None
 
     # DevNote: Successfully means there was no hard error, i.e. the test-suite starts running (might have test failures)
-    has_successfully_invoked_unit_tests: bool | None
-    has_successfully_invoked_all_tests: bool | None
+    has_successfully_invoked_unit_tests: bool | None = None
+    has_successfully_invoked_all_tests: bool | None = None
 
-    has_test_errors: bool | None
-    observed_test_errors: NonEmptyStr | None
-    has_test_failures: bool | None
-    observed_test_failures: NonEmptyStr | None
+    has_test_errors: bool | None = None
+    observed_test_errors: NonEmptyStr | None = None
+    has_test_failures: bool | None = None
+    observed_test_failures: NonEmptyStr | None = None
 
-    has_changed_or_edited_files: bool | None
-    file_changes_have_been_transferred_to_diff_store: bool | None
+    has_changed_or_edited_files: bool | None = None
+    file_changes_have_been_transferred_to_diff_store: bool | None = None
 
-    re_occurring_errors: NonEmptyStr | None
-    agent_has_attempted_error_repair: bool | None
+    re_occurring_errors: NonEmptyStr | None = None
+    agent_has_attempted_error_repair: bool | None = None
 
     @classmethod
     def get_output_instructions(cls) -> str:

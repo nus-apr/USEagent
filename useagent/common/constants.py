@@ -54,8 +54,13 @@ VCS_AGENT_RETRIES: Final[int] = 3
 VCS_AGENT_OUTPUT_RETRIES: Final[int] = 6
 VCS_AGENT_BASH_TOOL_DELAY: Final[float] = 0.35  # In Seconds
 
+ADVISOR_AGENT_REQUEST_LIMIT: Final[int] = 50
 ADVISOR_AGENT_RETRIES: Final[int] = 2
 ADVISOR_AGENT_OUTPUT_RETRIES: Final[int] = 3
+
+CHECKLIST_AGENT_REQUEST_LIMIT: Final[int] = 110
+CHECKLIST_AGENT_RETRIES: Final[int] = 2
+CHECKLIST_AGENT_OUTPUT_RETRIES: Final[int] = 5
 
 
 # =============================================================

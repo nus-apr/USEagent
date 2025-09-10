@@ -34,6 +34,7 @@ from useagent.tools.bash import (
 )
 from useagent.tools.edit import init_edit_tools, read_file_as_diff
 from useagent.tools.meta import (  # Agent-State Tools; Agent-Agent Tools
+    _gather_checklist,
     _set_usage_tracker,
     advising_on_doubts,
     edit_code,
@@ -218,6 +219,15 @@ def agent_loop(
                     task_desc=task_state._task.get_issue_statement(),
                     cmd_history=bash_infos,
                 )
+
+                checklist = _gather_checklist(
+                    task_instruction=new_instruction,
+                    task_state=task_state,
+                    cmd_history=bash_infos,
+                    environment=task_state.active_environment,
+                )
+                new_instruction += f"\n Checklist:\n {str(checklist)}"
+
                 result = meta_agent.run_sync(
                     new_instruction,
                     deps=task_state,

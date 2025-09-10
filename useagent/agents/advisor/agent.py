@@ -4,6 +4,7 @@ from loguru import logger
 from pydantic_ai import Agent
 
 import useagent.common.constants as constants
+from useagent.common.context_window import fit_messages_into_context_window
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
@@ -27,6 +28,7 @@ def init_agent(config: AppConfig | None = None) -> Agent:
         output_type=str,
         retries=constants.ADVISOR_AGENT_RETRIES,
         output_retries=constants.ADVISOR_AGENT_OUTPUT_RETRIES,
+        history_processors=[fit_messages_into_context_window],
     )
 
     logger.debug("[Advisor Agent] Initialized Advisor Agent")

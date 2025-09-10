@@ -8,6 +8,10 @@ from pydantic_ai.usage import Usage, UsageLimits
 
 import useagent.common.constants as constants
 from useagent.agents.advisor.agent import init_agent as init_advisor_agent
+from useagent.agents.checklist.agent import (
+    construct_instructions as construct_checklist_instructions,
+)
+from useagent.agents.checklist.agent import init_agent as init_checklist_agent
 from useagent.agents.edit_code.agent import init_agent as init_edit_code_agent
 from useagent.agents.probing.agent import init_agent as init_probing_agent
 from useagent.agents.search_code.agent import init_agent as init_search_code_agent
@@ -18,6 +22,7 @@ from useagent.pydantic_models.artifacts.code import Location
 from useagent.pydantic_models.artifacts.git import DiffEntry, DiffStore
 from useagent.pydantic_models.artifacts.test_result import TestResult
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr, PositiveInt
+from useagent.pydantic_models.info.checklist import CheckList
 from useagent.pydantic_models.info.environment import (
     Commands,
     Environment,
@@ -474,8 +479,39 @@ def advising_on_doubts(
 
     advisor_agent = init_advisor_agent()
     advise_result = advisor_agent.run_sync(
-        instructions, message_history=message_history
+        instructions,
+        message_history=message_history,
+        usage_limits=UsageLimits(request_limit=constants.ADVISOR_AGENT_REQUEST_LIMIT),
     )
     logger.debug(f"[Meta] Advice received from Advisor Agent: {advise_result.output}")
     USAGE_TRACKER.add(advisor_agent.name, advise_result.usage())
     return advise_result.output
+
+
+def _gather_checklist(
+    task_instruction: str,
+    task_state: TaskState,
+    cmd_history: list[str],
+    environment: Environment | None,
+    message_history: list[ModelMessage] | None = None,
+) -> CheckList:
+    logger.debug("[Meta] Asking for CheckList")
+    instructions = construct_checklist_instructions(
+        original_task=task_instruction,
+        bash_history=cmd_history,
+        task_state=task_state,
+        environment=environment,
+    )
+
+    checklist_agent = init_checklist_agent()
+    empty_checklist: CheckList = CheckList()
+
+    checklist_result = checklist_agent.run_sync(
+        instructions,
+        deps=empty_checklist,
+        usage_limits=UsageLimits(request_limit=constants.CHECKLIST_AGENT_REQUEST_LIMIT),
+        message_history=message_history,
+    )
+    logger.debug(f"[Meta] CheckList result: {checklist_result.output}")
+    USAGE_TRACKER.add(checklist_agent.name, checklist_agent.usage())
+    return checklist_result.output
