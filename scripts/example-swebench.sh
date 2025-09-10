@@ -4,7 +4,7 @@
 # Use --build to force a rebuild, use --rm-image for a complete clean slate rebuild (VERY SLOW).
 
 set -a
-source .env
+source ./.env
 set +a
 
 TASK_ID=sphinx-doc__sphinx-8265

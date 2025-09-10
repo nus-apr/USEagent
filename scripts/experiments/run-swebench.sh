@@ -10,7 +10,7 @@ MODEL_NAME=openai:gpt-5-mini
 INPUT_FILE="./resources/swe_verified_ids_shuffled.txt"
 
 # Config
-MAX=5                 # 0 = all
+MAX=30               # 0 = all
 MAX_THREADS=3
 TIMEOUT_SECS=7200     # 0 = no timeout
 
