@@ -1161,16 +1161,37 @@ async def test_restart_helper_recreates_session_process(tmp_path: Path):
 @pytest.mark.regression
 @pytest.mark.asyncio
 @pytest.mark.tool
-@pytest.mark.timeout(25)  # in s
-async def test_issue_40_observed_timeouting_rg_command(tmp_path: Path):
-    init_bash_tool(str(tmp_path))
-    tool = make_bash_tool_for_agent("AGENT-RESTART")
-    result = await tool(
-        """rg "pytest|tox|nox|ansible-test|setup" -n --hidden --glob '!venv' || true"""
-    )
+async def test_issue_40_observed_timeouting_rg_command(
+    tmp_path: Path,
+) -> None:
+    async def _body() -> None:
+        init_bash_tool(str(tmp_path))
+        tool = make_bash_tool_for_agent("AGENT-RESTART")
+        result = await tool(
+            """rg "pytest|tox|nox|ansible-test|setup" -n --hidden --glob '!venv' || true"""
+        )
+        assert result
+        assert isinstance(result, CLIResult)
 
-    assert result
-    assert isinstance(result, CLIResult)
+    await asyncio.wait_for(_body(), timeout=25)
+
+
+@pytest.mark.regression
+@pytest.mark.asyncio
+@pytest.mark.tool
+async def test_issue_40_observed_timeouting_rg_command_variant_2(
+    tmp_path: Path,
+) -> None:
+    async def _body() -> None:
+        init_bash_tool(str(tmp_path))
+        tool = make_bash_tool_for_agent("AGENT-RESTART")
+        result = await tool(
+            """rg "pytest|unittest|tox|pdm run|uv run --group test|pytest" -n --hidden --glob '!venv' || true"""
+        )
+        assert result
+        assert isinstance(result, CLIResult)
+
+    await asyncio.wait_for(_body(), timeout=25)
 
 
 @pytest.mark.regression
@@ -1184,22 +1205,6 @@ async def test_issue_40_observed_timeouting_rg_command_without_hidden_is_fine(
     tool = make_bash_tool_for_agent("AGENT-RESTART")
     result = await tool(
         """rg "pytest|tox|nox|ansible-test|setup" -n --glob '!venv' || true"""
-    )
-
-    assert result
-    assert isinstance(result, CLIResult)
-
-
-@pytest.mark.regression
-@pytest.mark.asyncio
-@pytest.mark.tool
-@pytest.mark.timeout(25)  # in s
-async def test_issue_40_observed_timeouting_rg_command_variant_2(tmp_path: Path):
-    # Exact 2nd example we observed in logs
-    init_bash_tool(str(tmp_path))
-    tool = make_bash_tool_for_agent("AGENT-RESTART")
-    result = await tool(
-        """rg "pytest|unittest|tox|pdm run|uv run --group test|pytest" -n --hidden --glob '!venv' || true"""
     )
 
     assert result
