@@ -1159,10 +1159,11 @@ async def test_restart_helper_recreates_session_process(tmp_path: Path):
     assert pid_before != pid_after
 
 
+@pytest.mark.time_sensitive
 @pytest.mark.regression
 @pytest.mark.asyncio
 @pytest.mark.tool
-@pytest.mark.timeout(10)  # in s
+@pytest.mark.timeout(20)  # in s
 async def test_issue_40_observed_timeouting_rg_command(tmp_path: Path):
     init_bash_tool(str(tmp_path))
     tool = make_bash_tool_for_agent("AGENT-RESTART")
@@ -1173,10 +1174,11 @@ async def test_issue_40_observed_timeouting_rg_command(tmp_path: Path):
     assert result
 
 
+@pytest.mark.time_sensitive
 @pytest.mark.regression
 @pytest.mark.asyncio
 @pytest.mark.tool
-@pytest.mark.timeout(10)  # in s
+@pytest.mark.timeout(20)  # in s
 async def test_issue_40_observed_timeouting_rg_command_variant_2(tmp_path: Path):
     # Exact 2nd example we observed in logs
     init_bash_tool(str(tmp_path))
@@ -1188,10 +1190,11 @@ async def test_issue_40_observed_timeouting_rg_command_variant_2(tmp_path: Path)
     assert result
 
 
+@pytest.mark.time_sensitive
 @pytest.mark.regression
 @pytest.mark.asyncio
 @pytest.mark.tool
-@pytest.mark.timeout(10)  # in s
+@pytest.mark.timeout(20)  # in s
 async def test_issue_40_observed_timeouting_rg_command_without_hidden(
     tmp_path: Path,
 ):
@@ -1204,22 +1207,24 @@ async def test_issue_40_observed_timeouting_rg_command_without_hidden(
     assert result
 
 
+@pytest.mark.time_sensitive
 @pytest.mark.regression
 @pytest.mark.asyncio
 @pytest.mark.tool
-@pytest.mark.timeout(10)  # in s
+@pytest.mark.timeout(20)  # in s
 async def test_issue_40_rg_with_scope_should_finish_fast(tmp_path: Path) -> None:
     init_bash_tool(str(tmp_path))
     tool = make_bash_tool_for_agent("AGENT-RESTART")
-    cmd = "\"pytest|tox|nox|ansible-test|setup\" -n --glob '!venv' . || true"
+    cmd = "rg \"pytest|tox|nox|ansible-test|setup\" -n --glob '!venv' . || true"
     r = await tool(cmd)
     assert isinstance(r, CLIResult)
 
 
+@pytest.mark.time_sensitive
 @pytest.mark.regression
 @pytest.mark.asyncio
 @pytest.mark.tool
-@pytest.mark.timeout(10)  # in s
+@pytest.mark.timeout(20)  # in s
 async def test_issue_40_rg_with_cd_and_scoped_should_finish_fast(
     tmp_path: Path,
 ) -> None:

@@ -150,6 +150,10 @@ class _BashSession:
                 )
                 self._timeout = constants.BASH_TOOL_REDUCED_TIMEOUT_FOR_EOF_COMMANDS
 
+            # See Issue #40, Hotfix
+            if command.startswith("rg") or " rg " in command:
+                self._timeout = constants.BASH_TOOL_REDUCED_TIMEOUT_FOR_RG_COMMANDS
+
             # Build the command by encoding the intial command and add our 'finish' sentinel after.
             effective_command = (
                 command.encode("UTF-8", "") + f"; echo '{self._sentinel}'\n".encode()
