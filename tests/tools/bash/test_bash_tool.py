@@ -1158,18 +1158,32 @@ async def test_restart_helper_recreates_session_process(tmp_path: Path):
     assert pid_before != pid_after
 
 
+@pytest.mark.regression
 @pytest.mark.asyncio
 @pytest.mark.tool
-async def test_timeout_cmd(tmp_path: Path):
+@pytest.mark.timeout(25)  # in s
+async def test_issue_40_observed_timeouting_rg_command(tmp_path: Path):
     init_bash_tool(str(tmp_path))
     tool = make_bash_tool_for_agent("AGENT-RESTART")
-    await tool(
+    result = await tool(
         """rg "pytest|tox|nox|ansible-test|setup" -n --hidden --glob '!venv' || true"""
     )
-    import useagent.tools.bash as bash_file
 
-    s = bash_file._bash_tool_instance._session
-    pid_before = s._process.pid
-    await bash_file._restart_bash_session_using_config_directory()
-    pid_after = bash_file._bash_tool_instance._session._process.pid
-    assert pid_before != pid_after
+    assert result
+    assert isinstance(result, CLIResult)
+
+
+@pytest.mark.regression
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.timeout(25)  # in s
+async def test_issue_40_observed_timeouting_rg_command_variant_2(tmp_path: Path):
+    # Exact 2nd example we observed in logs
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    result = await tool(
+        """rg "pytest|unittest|tox|pdm run|uv run --group test|pytest" -n --hidden --glob '!venv' || true"""
+    )
+
+    assert result
+    assert isinstance(result, CLIResult)
