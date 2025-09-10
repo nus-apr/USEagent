@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from uuid import uuid4
 
 from loguru import logger
 
@@ -313,6 +314,121 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
     success_msg += "Review the changes and make sure they are as expected. Edit the file again if necessary."
 
     return CLIResult(output=success_msg)
+
+
+def replace_file(file_content: str, file_path: str | Path) -> CLIResult | ToolErrorInfo:
+    """
+    Fully replaces a given file with a completely new string.
+    The old file content is completely discarded in favour of the new file_content.
+    If there are any errors appearing, the file will remain unchanged.
+
+    Args:
+        file_path (str | pathlib.Path): The path to the file where the replacement will occur.
+        file_content (str): The string that will contain.
+
+    Returns:
+        CLIResult: The result of the replacement operation, containing a confirmation or error.
+    """
+    logger.info(
+        f"[Tool] Invoked edit_tool `replace_file`. Replacing contents at {file_path}, content preview: {file_content[:15]} ..."
+    )
+
+    try:
+        supplied_arguments = [
+            ArgumentEntry("file_path", str(file_path)),
+            ArgumentEntry(
+                "file_content",
+                str(file_content[:50] + ("..." if len(file_content) > 50 else "")),
+            ),
+        ]
+    except ValueError:
+        supplied_arguments = []
+
+    if not file_content or not str(file_content).strip():
+        return ToolErrorInfo(
+            message="Received an empty or None file_content argument.",
+            supplied_arguments=supplied_arguments,
+        )
+
+    # Normalize path
+    if isinstance(file_path, str):
+        path = _make_path_absolute(file_path)
+    else:
+        path = (
+            file_path
+            if file_path.is_absolute()
+            else _make_path_absolute(str(file_path))
+        )
+
+    if (
+        guard_rail_tool_error := useagent_guard_rail(
+            str(file_path), supplied_arguments=supplied_arguments
+        )
+    ) is not None:
+        return guard_rail_tool_error
+
+    if not path.exists():
+        return ToolErrorInfo(
+            message=f"Filepath {file_path} does not exist. `replace_file` only works for existing files.",
+            supplied_arguments=supplied_arguments,
+        )
+    if path.is_dir():
+        return ToolErrorInfo(
+            message=f"Filepath {file_path} is a directory - `replace_file` can only be applied to files.",
+            supplied_arguments=supplied_arguments,
+        )
+
+    n_lines: int = file_content.count("\n") + 1
+    if n_lines > 50:
+        logger.warning(
+            f"[Tool] edit_tool `replace_file`: Large content detected ({n_lines} lines) for {file_path}"
+        )
+
+    # Write to a temp file first, then atomically replace
+    # DevNote: We had an issue otherwise that a file was deleted, then the write failed, and then we had a corrupted system state.
+    try:
+
+        tmp_path = path.with_name(f".{path.name}.replace.{uuid4().hex}.tmp")
+        _write_err = _write_file(tmp_path, file_content)
+        if isinstance(_write_err, ToolErrorInfo):
+            logger.warning(
+                f"[Tool] edit_tool `replace_file`: Failed to write temp file {tmp_path}: {_write_err.message}"
+            )
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return ToolErrorInfo(
+                message=_write_err.message,
+                supplied_arguments=supplied_arguments,
+            )
+
+        # Atomic replace
+        try:
+            os.replace(str(tmp_path), str(path))
+        except Exception as e:
+            logger.error(
+                f"[Tool] edit_tool `replace_file`: Failed to atomically replace {path} with {tmp_path}: {e}"
+            )
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return ToolErrorInfo(
+                message=f"Failed to replace file atomically: {e}",
+                supplied_arguments=supplied_arguments,
+            )
+
+    except Exception as e:
+        logger.warning(f"[Tool] edit_tool `replace_file`: Unexpected failure: {e}")
+        return ToolErrorInfo(
+            message=f"Failed to replace file: {e}",
+            supplied_arguments=supplied_arguments,
+        )
+
+    return CLIResult(output=f"File replaced successfully at: {file_path}")
 
 
 async def insert(

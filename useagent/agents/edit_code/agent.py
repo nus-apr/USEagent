@@ -12,7 +12,14 @@ from useagent.microagents.decorators import (
 from useagent.microagents.management import load_microagents_from_project_dir
 from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.task_state import TaskState
-from useagent.tools.edit import create, insert, read_file_as_diff, str_replace, view
+from useagent.tools.edit import (
+    create,
+    insert,
+    read_file_as_diff,
+    replace_file,
+    str_replace,
+    view,
+)
 from useagent.tools.git import extract_diff
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
@@ -41,6 +48,7 @@ def init_agent(
             Tool(insert),
             Tool(extract_diff),
             Tool(read_file_as_diff),
+            Tool(replace_file),
         ],
     )
 
