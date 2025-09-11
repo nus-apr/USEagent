@@ -189,7 +189,7 @@ async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
         CLIResult: The result of the create operation, indicating success or failure.
     """
     logger.info(
-        f"[Tool] Invoked edit_tool `create`. Creating {file_path}, content preview: {file_text[:15]} ..."
+        f"[Tool] Invoked edit_tool `create`. Creating {file_path}, content preview: {file_text[:55]} ..."
     )
 
     try:
@@ -224,6 +224,9 @@ async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
         )
 
     _write_file(path, file_text)
+    if not path.exists():
+        logger.error(f"[Tool] Creating File at {path} failed")
+
     return CLIResult(output=f"File created successfully at: {file_path}")
 
 
@@ -428,6 +431,10 @@ def replace_file(file_content: str, file_path: str | Path) -> CLIResult | ToolEr
             supplied_arguments=supplied_arguments,
         )
 
+    if not path.exists():
+        logger.error(
+            f"[Tool] Replacing File at {path} failed - currently no file at this path"
+        )
     return CLIResult(output=f"File replaced successfully at: {file_path}")
 
 
