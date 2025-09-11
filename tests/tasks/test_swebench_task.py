@@ -175,6 +175,7 @@ def test_assert_instance_exists_should_raise_for_empty_or_whitespace_only(
         SWEbenchTask._assert_instance_exists(bad, DATASET, SPLITS)
 
 
+@pytest.mark.slow
 @pytest.mark.online
 @pytest.mark.parametrize("unknown", ["unknown__repo-99999", "definitely__not-00000"])
 def test_assert_instance_exists_should_raise_for_unknown_ids(unknown: str) -> None:
@@ -205,6 +206,7 @@ def test_constructor_should_strip_instance_id_and_set_attribute(
     assert task.instance_id == expected
 
 
+@pytest.mark.slow
 @pytest.mark.online
 @pytest.mark.parametrize("iid", KNOWN_IDS)
 def test_load_instance_meta_should_return_nonempty_issue_statement(iid: str) -> None:

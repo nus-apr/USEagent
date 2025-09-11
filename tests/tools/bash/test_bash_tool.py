@@ -461,6 +461,7 @@ PY
     # DevNote: These do have a result.error, because the syntax is not handled well. But not the observed issue in the experiments
 
 
+@pytest.mark.slow
 @pytest.mark.time_sensitive
 @pytest.mark.regression
 @pytest.mark.tool
@@ -923,6 +924,7 @@ SCRIPT
     assert result and isinstance(result, ToolErrorInfo)
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 @pytest.mark.regression
 @pytest.mark.tool
@@ -956,6 +958,7 @@ SH
     assert _bash_tool_instance._session._timed_out
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 @pytest.mark.regression
 @pytest.mark.tool

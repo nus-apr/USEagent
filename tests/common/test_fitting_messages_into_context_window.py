@@ -436,6 +436,7 @@ async def test_only_oldest_exceeds_window_keep_length_and_mark_or_truncate_only_
     assert total <= ConfigSingleton.config.lookup_model_context_window()
 
 
+@pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_all_ten_messages_oversized_result_two_newest_with_markers_or_truncation() -> (
