@@ -513,5 +513,5 @@ def _gather_checklist(
         message_history=message_history,
     )
     logger.debug(f"[Meta] CheckList result: {checklist_result.output}")
-    USAGE_TRACKER.add(checklist_agent.name, checklist_agent.usage())
+    USAGE_TRACKER.add(checklist_agent.name, checklist_result.usage())
     return checklist_result.output
