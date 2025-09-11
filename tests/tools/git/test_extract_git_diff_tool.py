@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from useagent.pydantic_models.tools.cliresult import CLIResult
+from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.git import extract_diff
 
 # DevNote:
@@ -343,3 +344,29 @@ async def test_issue_26_extract_diff_large_hunks_should_not_crash(tmp_path: Path
     assert isinstance(result, CLIResult)
     assert result.output.strip()
     assert big.name in result.output
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_issue_41_extract_diff_missing_directory_should_return_tool_error_info(
+    tmp_path: Path,
+):
+    missing = tmp_path / "does_not_exist"
+    assert not missing.exists()
+    result = await extract_diff(project_dir=missing)
+    assert result
+    assert isinstance(result, ToolErrorInfo)
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_issue_41_extract_diff_missing_file_should_return_tool_error_info(
+    tmp_path: Path,
+):
+    missing = tmp_path / "does_not_exist.txt"
+    assert not missing.exists()
+    result = await extract_diff(project_dir=missing)
+    assert result
+    assert isinstance(result, ToolErrorInfo)

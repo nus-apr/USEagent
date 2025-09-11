@@ -210,6 +210,8 @@ async def extract_diff(
         CLIResult: The result of the diff extraction, or a ToolErrorInfo containing information of a miss-usage or command failure.
                    The CLIResult will contain all information necessary to form a diff, but it is not a diff itself.
     """
+    if project_dir and isinstance(project_dir, str):
+        project_dir = Path(project_dir)
     project_dir = project_dir or Path(".").absolute()
 
     logger.info(
@@ -223,6 +225,17 @@ async def extract_diff(
         )
     ) is not None:
         return guard_rail_tool_error
+
+    if not project_dir.exists():
+        return ToolErrorInfo(
+            message=f"Directory {project_dir} does not exist.",
+            supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
+        )
+    if not project_dir.is_dir():
+        return ToolErrorInfo(
+            message=f"Filepath {project_dir} is a directory - `extract_diff` is meant for folders.",
+            supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
+        )
 
     with cd(project_dir):
         await run(
