@@ -41,6 +41,11 @@ class _BashSession:
         if self._started:
             return
 
+        if not init_dir:
+            # Some processes really need a CWD, e.g. `rg` (see Issue #40)
+            # We may have a nice getcwd from our DockerFile, which we will retrieve with os.getcwd()
+            init_dir = os.getcwd()
+
         if (
             init_dir
             and (guard_rail_tool_error := useagent_guard_rail(init_dir)) is not None
