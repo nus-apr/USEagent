@@ -475,7 +475,7 @@ async def _bash_tool(
             f"[Tool] bash_tool {'shortened' if len(output_by_lines) > constants.COMMAND_OUTPUT_MAX_PRINT_CUT_OFF else ''} result: output={to_log}, error={result.error}"
         )
     else:
-        if result.error == "bash has exited with returncode 2":
+        if result.error and result.error == "bash has exited with returncode 2":
             logger.warning(
                 f"[Tool] the provided bash command {command} resulted in a bash-internal timeout (return code 2)"
             )
@@ -484,7 +484,7 @@ async def _bash_tool(
                 message="Your command made the bash session timeout ('bash has exited with returncode 2'), no results could be retrieved and the bash has been restarted.",
                 supplied_arguments=[ArgumentEntry("command", str(command))],
             )
-        elif result.error == "bash has exited with returncode 127":
+        elif result.error and result.error == "bash has exited with returncode 127":
             # DevNote: Sometimes the BashTool can reach an un-restorable case after poor commands (merging total commands in stdin). This will be seen by this error code.
             # See Issue #36 on this. The source is currently unknown, but restarting the bash cannot harm on a normal unknown command.
             logger.warning(
@@ -493,6 +493,14 @@ async def _bash_tool(
             await _restart_bash_session_using_config_directory()
             return ToolErrorInfo(
                 message="Your commands (possibly previous comands) lead to a faulty state in the bash tool. The BashTool has now been restarted. Please revisit your commands, and avoid commands with offset output.",
+                supplied_arguments=[ArgumentEntry("command", command)],
+            )
+        elif result.error and "bash has exited with returncode" in result.error.lower():
+            # DevNote: See the one above, #36 and #42. There can be any exit code, either good (0) or any other (1,100,xxx).
+            # Generate a more generic ToolError Message about it but definetely restart the bash.
+            await _restart_bash_session_using_config_directory()
+            return ToolErrorInfo(
+                message=f"Your commands (possibly previous comands) lead to a an exit in the bash tool {result.error}. The BashTool has now been restarted. Please revisit or retry your commands.",
                 supplied_arguments=[ArgumentEntry("command", command)],
             )
         else:

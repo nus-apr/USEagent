@@ -1237,3 +1237,46 @@ async def test_issue_40_rg_with_cd_and_scoped_should_finish_fast(
     )
     r = await tool(cmd)
     assert isinstance(r, CLIResult)
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.parametrize("code", [0, 1, 100, 127, 110, 141])
+async def test_issue_42_nonzero_exit_should_surface_then_recover(
+    tmp_path: Path, code: int
+):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-EXITCODES")
+
+    # Call 1: Kill the Shell - It will finish successfully and give us a result about finishing silently
+    res1 = await tool(f"exit {code}")
+    print(res1)
+    assert isinstance(res1, CLIResult)
+
+    # Call 2: Will see the stopped shell, print error and restart
+    res2 = await tool("echo hello")
+    assert isinstance(res2, ToolErrorInfo)
+
+    # Call 3: Shell was restarted after Call 2, and is back up and normal again.
+    res3 = await tool("echo hello")
+    assert isinstance(res3, CLIResult)
+    assert "hello" in res3.output
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.parametrize("code", [0, 1, 100, 127, 110, 141])
+async def test_issue_42_nonzero_exit_wrapped_in_bash_should_surface_then_recover(
+    tmp_path: Path, code: int
+):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-EXITCODES")
+
+    res1 = await tool(f"bash -c 'exit {code}'")
+    print(res1)
+    assert isinstance(res1, CLIResult)
+
+    # DevNote: When wrapped in bash, only the sub-sub-process is killed, not our bash.
+    # So we get immediate results, and no need to restart anything.
+    res2 = await tool("echo hello")
+    assert isinstance(res2, CLIResult)
