@@ -75,16 +75,21 @@ def test_project_path_unchanged(temp_project_dir, tmp_path):
     assert (working_dir / "file.txt").read_text() == original_content
 
 
-@pytest.mark.parametrize(
-    "custom_dir", [None, Path("/tmp/custom1"), Path("/tmp/custom2")]
-)
-def test_get_working_directory(temp_project_dir, tmp_path, custom_dir):
-    if custom_dir is None:
-        task = LocalTask("Issue", str(temp_project_dir))
+def test_get_working_directory_none(temp_project_dir: Path):
+    task = LocalTask("Issue", str(temp_project_dir))
+    try:
         assert task.get_working_directory() == Path("/tmp/working_dir")
-    else:
-        task = LocalTask("Issue", str(temp_project_dir), custom_dir)
-        assert task.get_working_directory() == custom_dir
+    except PermissionError:
+        pytest.skip("No permission to access /tmp/working_dir (shared device?)")
+
+
+@pytest.mark.parametrize("custom_name", ["custom1", "custom2", "foo/bar/custom3"])
+def test_get_working_directory_custom(
+    temp_project_dir: Path, tmp_path: Path, custom_name: str
+):
+    custom_dir = tmp_path / custom_name
+    task = LocalTask("Issue", str(temp_project_dir), custom_dir)
+    assert task.get_working_directory() == custom_dir
 
 
 def test_git_history_copied(temp_project_dir, tmp_path):
