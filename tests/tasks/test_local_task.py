@@ -76,8 +76,8 @@ def test_project_path_unchanged(temp_project_dir, tmp_path):
 
 
 def test_get_working_directory_none(temp_project_dir: Path):
-    task = LocalTask("Issue", str(temp_project_dir))
     try:
+        task = LocalTask("Issue", str(temp_project_dir))
         assert task.get_working_directory() == Path("/tmp/working_dir")
     except PermissionError:
         pytest.skip("No permission to access /tmp/working_dir (shared device?)")
