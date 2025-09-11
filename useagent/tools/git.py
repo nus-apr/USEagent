@@ -241,8 +241,8 @@ async def extract_diff(
         await run(
             "git add ."
         )  # Git Add is necessary to see changes to newly created files
-        _, cached_out, stderr_1 = await run("git diff --cached")
-        _, working_out, stderr_2 = await run("git diff")
+        _, cached_out, stderr_1 = await run("git diff --no-color --cached")
+        _, working_out, stderr_2 = await run("git diff --no-color")
         stdout = cached_out + working_out
 
         if stderr_1 or stderr_2:
@@ -257,7 +257,9 @@ async def extract_diff(
         logger.debug(
             f"[Tool] edit_tool `extract_diff`: Received {stdout[:25]} ... from {project_dir}"
         )
-        return CLIResult(output=f"Here's the diff of the current state:\n{stdout}")
+        # return CLIResult(output=f"Here's the diff of the current state:\n{stdout}")
+        output = stdout + "\n" if not stdout.endswith("\n") else stdout
+        return CLIResult(output=output)
 
 
 # DevNote:

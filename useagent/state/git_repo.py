@@ -35,6 +35,10 @@ class GitRepository:
             ["git", "config", "--local", "user.email", constants.DEFAULT_GIT_EMAIL],
             cwd=self.local_path,
         )
+        run_command(
+            ["git", "config", "--local", "color.ui", "never"],
+            cwd=self.local_path,
+        )
 
     def initialize_git_if_needed(self) -> None:
         # DevNote:

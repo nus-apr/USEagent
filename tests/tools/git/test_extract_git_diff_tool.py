@@ -308,25 +308,6 @@ async def test_issue_26_extract_diff_respects_non_utf8_filename_should_not_crash
     assert fname in result.output
 
 
-@pytest.mark.tool
-@pytest.mark.asyncio
-async def test_extract_diff_with_color_enabled_should_not_strip_colors(tmp_path: Path):
-    _init_git_repo_without_content(tmp_path)
-    subprocess.run(["git", "config", "color.ui", "always"], cwd=tmp_path, check=True)
-
-    p = tmp_path / "a.txt"
-    p.write_text("a\n")
-    subprocess.run(["git", "add", "a.txt"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
-
-    p.write_text("a\nb\n")
-
-    result = await extract_diff(project_dir=tmp_path)
-    assert isinstance(result, CLIResult)
-    assert "diff --git a/a.txt" in result.output
-    assert "\x1b[" in result.output  # no ANSI color sequences
-
-
 @pytest.mark.regression
 @pytest.mark.tool
 @pytest.mark.asyncio

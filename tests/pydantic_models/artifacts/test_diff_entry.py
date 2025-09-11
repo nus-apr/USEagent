@@ -249,6 +249,16 @@ index 1234567..89abcde 100644
 """
 
 
+FROM_CORRUPTED_PATCH_TESTS = """\
+diff --git a/test.txt b/test.txt
+index 2fd0152..4791a8d 100644
+--- a/test.txt
++++ b/test.txt
+@@ -1 +1,2 @@
+ original content
++new line
+"""
+
 ### ================================================================
 ###                              Basics
 ### ================================================================
@@ -455,6 +465,14 @@ def test_code_block_flag_diff_annotation_with_trailing_newline() -> None:
 def test_has_no_newline_eof_marker(diff_content: str, expected_flag: bool):
     entry = DiffEntry(diff_content=diff_content)
     assert entry.has_no_newline_eof_marker == expected_flag
+
+
+@pytest.mark.pydantic_model
+@pytest.mark.regression
+def test_issue_43_diffentry_string_cleaning_will_not_lead_to_corrupted_patch():
+    entry = DiffEntry(diff_content=FROM_CORRUPTED_PATCH_TESTS)
+    assert entry
+    assert entry.diff_content.endswith("\n")
 
 
 ### ================================================================

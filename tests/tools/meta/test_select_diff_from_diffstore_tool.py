@@ -57,11 +57,11 @@ def test_single_entry_selection():
 
 @pytest.mark.regression
 @pytest.mark.tool
-def test_single_entry_selection_not_string_equal_due_to_stripping_whitespace():
+def test_single_entry_selection_are_string_equal():
     store = DiffStore()
     key = store.add_entry(DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE))
     result = _select_diff_from_diff_store(store, key)
-    assert not result == EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE
+    assert result == EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE
 
 
 @pytest.mark.tool
