@@ -43,9 +43,11 @@ LABEL maintainer.Yuntong="Yuntong Zhang <ang.unong@gmail.com>"
 LABEL maintainer.Leonhard="Leonhard Applis <leonhard.applis@protonmail.com>"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates tzdata curl git openssh-client python3 python3-venv lsb-release make tree ripgrep && \
+    ca-certificates tzdata curl wget git openssh-client python3 python3-venv lsb-release make tree ripgrep && \
     rm -rf /var/lib/apt/lists/*
 
+RUN wget -O /etc/apt/sources.list.d/gitlab-ci-local.sources https://gitlab-ci-local-ppa.firecow.dk/gitlab-ci-local.sources
+RUN apt-get update -y && apt-get install gitlab-ci-local -y
 # bring only the ready venv and migrated data
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /artifact/data /app/data
