@@ -43,7 +43,7 @@ EXECUTE_TESTS_RETRIES: Final[int] = 3
 EXECUTE_TESTS_AGENT_BASH_TOOL_DELAY: Final[float] = 0.35  # In Seconds
 EXECUTE_TESTS_OUTPUT_RETRIES: Final[int] = 6
 
-EDIT_CODE_AGENT_REQUEST_LIMIT: Final[int] = 110
+EDIT_CODE_AGENT_REQUEST_LIMIT: Final[int] = 135
 EDIT_CODE_RETRIES: Final[int] = 4
 EDIT_CODE_AGENT_RETRIES: Final[int] = 4
 # DevNote: The diff-entries are hard to get right for the model. But they must fit their schema to make any sense.
