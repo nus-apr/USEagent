@@ -226,6 +226,10 @@ async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
     _write_file(path, file_text)
     if not path.exists():
         logger.error(f"[Tool] Creating File at {path} failed")
+    else:
+        logger.debug(
+            f"[Tool] Successfully wrote {len(file_text)} lines of content to {path}"
+        )
 
     return CLIResult(output=f"File created successfully at: {file_path}")
 
@@ -434,6 +438,10 @@ def replace_file(file_content: str, file_path: str | Path) -> CLIResult | ToolEr
     if not path.exists():
         logger.error(
             f"[Tool] Replacing File at {path} failed - currently no file at this path"
+        )
+    else:
+        logger.debug(
+            f"[Tool] Successfully wrote {len(file_content)} lines of content to {path}"
         )
     return CLIResult(output=f"File replaced successfully at: {file_path}")
 
