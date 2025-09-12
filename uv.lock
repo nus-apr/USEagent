@@ -2399,6 +2399,7 @@ dependencies = [
     { name = "pydantic-ai" },
     { name = "sentencepiece" },
     { name = "tiktoken" },
+    { name = "unidiff" },
     { name = "usebench" },
 ]
 
@@ -2433,6 +2434,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.12.3" },
     { name = "sentencepiece", specifier = ">=0.2.1" },
     { name = "tiktoken", specifier = ">=0.9.0" },
+    { name = "unidiff", specifier = ">=0.7.5" },
     { name = "usebench", git = "ssh://git@github.com/nus-apr/use-bench.git?rev=0a985ae" },
 ]
 provides-extras = ["dev"]

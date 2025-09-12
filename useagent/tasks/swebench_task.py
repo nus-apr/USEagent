@@ -89,7 +89,7 @@ class SWEbenchTask(Task):
             The patch must be applicable to the repository as you find it, i.e. it must be a single, fully-sufficient patch and not a combination of patches. 
             
             As first steps, you should investigate the projects structure and dependencies. You must ensure a 'workable' state of the project, 
-            i.e. you must be able to run tests and gather feedback on your actions. 
+            i.e. you must be able to run tests and gather feedback on your actions. Do not attempt any changes before you can execute the tests. 
             Before attempting a repair, find relevant code locations and the most relevant tests. 
             Aim to verify your changes by identifying (or generating) relevant tests and execute them against your changes. 
 
@@ -107,8 +107,13 @@ class SWEbenchTask(Task):
             - You can assume the issue is verified and can be solved. Never refrain from attempting a repair and never discard the problems mentions in the issue. 
             - The environment you are starting from is a 'empty' Ubuntu 24.04 instance. You can (and should) make installs necessary to execute the project and its test-suite.
             - Prefer simple patches over complex changes. Stay close to the project coding standard and to standard pythonic solutions. 
-            - Don't introduce too many code-comments. Keep it short and simple, and prefer descriptive names.
+            - Don't introduce too many code-comments. Keep it short and simple. prefer descriptive names.
             - Executing the tests is a crucial element of this task, as otherwise you operate 'blind'. Never give up when you see errors during test-execution, and revisit the setup and installations until they are resolved. 
+            - Patch refers to a `git patch`. You have tools that generate and manage git patches for you.
+            - Assume the project must be executable and testable, and that you are capable of installing all necessary dependencies if you use the right commands. Think about where you could find dependencies that appear as missing in error messages. 
+            - You can (and should) use your tools to verify the validity of the patch-format
+
+            REMEMBER: Running tests for the projects is crucial, and you must bring the project into an executable state to retrieve test results. NEVER suggest a patch that was not evaluated against the test-suite. 
             """
 
             return enriched_issue_statement
@@ -302,15 +307,15 @@ class SWEbenchTask(Task):
             )
 
         entry: dict[str, Any] = {
+            "instance_id": instance_id,
             "model_patch": model_patch,
             "model_name_or_path": "useagent-turbo-dev",
         }
-        predictions: dict[str, Any] = {instance_id: entry}
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        out_path: Path = output_dir / f"{instance_id}.json"
+        out_path: Path = output_dir / "swe_datapoint.json"
         with out_path.open("w", encoding="utf-8", newline="\n") as f:
-            json.dump(predictions, f, ensure_ascii=False)
+            json.dump(entry, f, ensure_ascii=False)
         logger.debug(f"[Task] finished writing SWEbench-Task {instance_id}")
 
         issue_txt: str = getattr(self, "issue_statement", "")
