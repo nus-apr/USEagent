@@ -21,7 +21,7 @@ MAX_DOUBT_REITERATIONS: Final[int] = (
 # =============================================================
 
 META_AGENT_REQUEST_LIMIT: Final[int] = 100
-META_AGENT_OUTPUT_RETRIES: Final[int] = 25
+META_AGENT_OUTPUT_RETRIES: Final[int] = 40
 META_AGENT_RETRIES: Final[int] = 3
 META_AGENT_BASH_TOOL_DELAY: Final[float] = 0.25  # In Seconds
 
@@ -45,13 +45,13 @@ EXECUTE_TESTS_OUTPUT_RETRIES: Final[int] = 8
 
 EDIT_CODE_AGENT_REQUEST_LIMIT: Final[int] = 135
 EDIT_CODE_RETRIES: Final[int] = 4
-EDIT_CODE_AGENT_RETRIES: Final[int] = 4
+EDIT_CODE_AGENT_RETRIES: Final[int] = 8
 # DevNote: The diff-entries are hard to get right for the model. But they must fit their schema to make any sense.
-EDIT_CODE_AGENT_OUTPUT_RETRIES: Final[int] = 25
+EDIT_CODE_AGENT_OUTPUT_RETRIES: Final[int] = 45
 
 VCS_AGENT_REQUEST_LIMIT: Final[int] = 100
-VCS_AGENT_RETRIES: Final[int] = 3
-VCS_AGENT_OUTPUT_RETRIES: Final[int] = 20
+VCS_AGENT_RETRIES: Final[int] = 6
+VCS_AGENT_OUTPUT_RETRIES: Final[int] = 45
 VCS_AGENT_BASH_TOOL_DELAY: Final[float] = 0.35  # In Seconds
 
 ADVISOR_AGENT_REQUEST_LIMIT: Final[int] = 50
