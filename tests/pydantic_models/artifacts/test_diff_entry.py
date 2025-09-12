@@ -127,7 +127,7 @@ NO_INDEX_ADDITION = """\
 diff --git a/foo.txt b/foo.txt
 --- /dev/null
 +++ b/foo.txt
-@@ -1 +1 @@
+@@ -0,0 +1 @@
 +Hello world
 """
 
@@ -166,25 +166,26 @@ TWO_HUNK_DIFF = """\
 diff --git a/example.py b/example.py
 --- a/example.py
 +++ b/example.py
-@@ -1,3 +1,4 @@
+@@ -1,2 +1,3 @@
 +import os
  def foo():
      pass
 
-@@ -10,7 +11,7 @@
+@@ -5,2 +5,2 @@
  def bar():
 -    return 42
 +    return 43
 """
+
 THREE_HUNK_DIFF = """\
 diff --git a/sample.txt b/sample.txt
 --- a/sample.txt
 +++ b/sample.txt
-@@ -1,2 +1,3 @@
+@@ -1,1 +1,2 @@
  Line 1
 +Line 1.5
 
-@@ -5,3 +6,3 @@
+@@ -5,1 +5,1 @@
 -Old line
 +New line
 
@@ -626,3 +627,180 @@ index 123abcd..456efgh 100644
 def test_multihunk_with_poor_spacing_raises_errors(diff_content: str):
     with pytest.raises(ValueError):
         DiffEntry(diff_content=diff_content)
+
+
+# Seen after most #44 changes, the lines don't match up
+SWE_BENCH_OFFSET_HUNKS: str = """
+diff --git a/django/db/backends/ddl_references.py b/django/db/backends/ddl_references.py
+--- a/django/db/backends/ddl_references.py
++++ b/django/db/backends/ddl_references.py
+@@ -84,8 +84,10 @@
+     def __str__(self):
+         def col_str(column, idx):
+-            try:
+-                return self.quote_name(column) + self.col_suffixes[idx]
+-            except IndexError:
+-                return self.quote_name(column)
++            try:
++                suffix = self.col_suffixes[idx]
++                return self.quote_name(column) + (' ' + suffix if suffix else '')
++            except IndexError:
++                return self.quote_name(column)
+@@ -112,9 +114,13 @@
+     def __str__(self):
+         def col_str(column, idx):
+             # Index.__init__() guarantees that self.opclasses is the same
+             # length as self.columns.
+-            col = '{} {}'.format(self.quote_name(column), self.opclasses[idx])
+-            try:
+-                col = '{} {}'.format(col, self.col_suffixes[idx])
+-            except IndexError:
+-                pass
++            col = self.quote_name(column)
++            op = self.opclasses[idx]
++            if op:
++                col = '{} {}'.format(col, op)
++            try:
++                suffix = self.col_suffixes[idx]
++                if suffix:
++                    col = '{} {}'.format(col, suffix)
++            except IndexError:
++                pass
+             return col
+"""
+
+
+@pytest.mark.pydantic_model
+def test_valid_format_but_poor_line_numbers_should_raise():
+    with pytest.raises(ValueError):
+        DiffEntry(diff_content=SWE_BENCH_OFFSET_HUNKS)
+
+
+# The index hash 00000 is only ok for deletions or additions and never for file changes
+SWE_OK_HUNKS_BUT_POOR_INDEX: str = """
+diff --git a/lib/matplotlib/patches.py b/lib/matplotlib/patches.py
+index 0000000..0000000 100644
+--- a/lib/matplotlib/patches.py
++++ b/lib/matplotlib/patches.py
+@@ -589,4 +589,3 @@
+-        # Patch has traditionally ignored the dashoffset.
+-        with cbook._setattr_cm(
+-                 self, _dash_pattern=(0, self._dash_pattern[1])), \
+-             self._bind_draw_path_function(renderer) as draw_path:
++        # Preserve the dash pattern (including offset) when drawing patches.
++        # Historically patches ignored the dash offset; allow it now.
++        with self._bind_draw_path_function(renderer) as draw_path:
+"""
+
+
+@pytest.mark.pydantic_model
+def test_valid_hunks_but_index_doesnt_make_sense_should_raise():
+    with pytest.raises(ValueError):
+        DiffEntry(diff_content=SWE_OK_HUNKS_BUT_POOR_INDEX)
+
+
+SWE_ANOTHER_POOR_HUNK_COUNTING: str = """
+diff --git a/django/core/management/commands/makemigrations.py b/django/core/management/commands/makemigrations.py
+--- a/django/core/management/commands/makemigrations.py
++++ b/django/core/management/commands/makemigrations.py
+@@ -230,13 +230,16 @@
+         )
+-        # If --check was supplied, exit with non-zero status when there are changes
+-        if check_changes and changes:
+-            sys.exit(1)
+-
+-        if not changes:
++        # If --check was supplied, ensure we do not write migration files.
++        # Run in dry-run mode so the command still prints the expected
++        # migration summaries/paths (useful for --scriptable consumers).
++        if check_changes:
++            self.dry_run = True
++
++        if not changes:
+"""
+
+
+@pytest.mark.pydantic_model
+def test_valid_format_but_poor_line_numbers_should_raise_variant_2():
+    with pytest.raises(ValueError):
+        DiffEntry(diff_content=SWE_ANOTHER_POOR_HUNK_COUNTING)
+
+
+SWE_LARGE_SCIKIT_LEARN_EXAMPLE_WITH_POOR_HUNKS: str = '''
+diff --git a/sklearn/linear_model/least_angle.py b/sklearn/linear_model/least_angle.py
+--- a/sklearn/linear_model/least_angle.py
++++ b/sklearn/linear_model/least_angle.py
+@@ -1482,31 +1482,38 @@
+-    def fit(self, X, y, copy_X=True):
+-        """Fit the model using X, y as training data.
+-
+-        Parameters
+-        ----------
+-        X : array-like, shape (n_samples, n_features)
+-            training data.
+-
+-        y : array-like, shape (n_samples,)
+-            target values. Will be cast to X's dtype if necessary
+-
+-        copy_X : boolean, optional, default True
+-            If ``True``, X will be copied; else, it may be overwritten.
+-
+-        Returns
+-        -------
+-        self : object
+-            returns an instance of self.
+-        """
+-        X, y = check_X_y(X, y, y_numeric=True)
+-
+-        X, y, Xmean, ymean, Xstd = LinearModel._preprocess_data(
+-            X, y, self.fit_intercept, self.normalize, self.copy_X)
+-        max_iter = self.max_iter
+-
+-        Gram = self.precompute
+-
+-        alphas_, active_, coef_path_, self.n_iter_ = lars_path(
+-            X, y, Gram=Gram, copy_X=copy_X, copy_Gram=True, alpha_min=0.0,
+-            method='lasso', verbose=self.verbose, max_iter=max_iter,
+-            eps=self.eps, return_n_iter=True, positive=self.positive)
++    def fit(self, X, y, copy_X=None):
++        """Fit the model using X, y as training data.
++
++        Parameters
++        ----------
++        X : array-like, shape (n_samples, n_features)
++            training data.
++
++        y : array-like, shape (n_samples,)
++            target values. Will be cast to X's dtype if necessary
++
++        copy_X : boolean or None, optional (default=None)
++            If provided, this overrides the instance setting ``self.copy_X``.
++            If ``True``, X will be copied; else, it may be overwritten.
++
++        Returns
++        -------
++        self : object
++            returns an instance of self.
++        """
++        X, y = check_X_y(X, y, y_numeric=True)
++
++        if copy_X is None:
++            copy_X = self.copy_X
++
++        X, y, Xmean, ymean, Xstd = LinearModel._preprocess_data(
++            X, y, self.fit_intercept, self.normalize, copy_X)
++        max_iter = self.max_iter
++
++        Gram = self.precompute
++
++        alphas_, active_, coef_path_, self.n_iter_ = lars_path(
++            X, y, Gram=Gram, copy_X=copy_X, copy_Gram=True, alpha_min=0.0,
++            method='lasso', verbose=self.verbose, max_iter=max_iter,
++            eps=self.eps, return_n_iter=True, positive=self.positive)
+'''
+
+
+@pytest.mark.pydantic_model
+def test_valid_format_but_poor_line_numbers_should_raise_variant_3():
+    with pytest.raises(ValueError):
+        DiffEntry(diff_content=SWE_LARGE_SCIKIT_LEARN_EXAMPLE_WITH_POOR_HUNKS)

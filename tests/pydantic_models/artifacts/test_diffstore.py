@@ -70,7 +70,7 @@ new file mode 100644
 index 0000000..e69de29
 --- /dev/null
 +++ b/README.md
-@@ -0,0 +5 @@
+@@ -0,0 +1,5 @@
 +# Example
 +
 +```python
