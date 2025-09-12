@@ -21,13 +21,13 @@ MAX_DOUBT_REITERATIONS: Final[int] = (
 # =============================================================
 
 META_AGENT_REQUEST_LIMIT: Final[int] = 100
-META_AGENT_OUTPUT_RETRIES: Final[int] = 10
+META_AGENT_OUTPUT_RETRIES: Final[int] = 25
 META_AGENT_RETRIES: Final[int] = 3
 META_AGENT_BASH_TOOL_DELAY: Final[float] = 0.25  # In Seconds
 
 SEARCH_AGENT_REQUEST_LIMIT: Final[int] = 110
 SEARCH_AGENT_RETRIES: Final[int] = 5
-SEARCH_AGENT_OUTPUT_RETRIES: Final[int] = 6
+SEARCH_AGENT_OUTPUT_RETRIES: Final[int] = 8
 SEARCH_AGENT_BASH_TOOL_DELAY: Final[float] = 0.3  # In Seconds
 
 PROBING_AGENT_WORKDIR_REQUEST_LIMIT: Final[int] = 25
@@ -41,17 +41,17 @@ PROBING_AGENT_OUTPUT_RETRIES: Final[int] = 3
 EXECUTE_TESTS_AGENT_REQUEST_LIMIT: Final[int] = 115
 EXECUTE_TESTS_RETRIES: Final[int] = 3
 EXECUTE_TESTS_AGENT_BASH_TOOL_DELAY: Final[float] = 0.35  # In Seconds
-EXECUTE_TESTS_OUTPUT_RETRIES: Final[int] = 6
+EXECUTE_TESTS_OUTPUT_RETRIES: Final[int] = 8
 
 EDIT_CODE_AGENT_REQUEST_LIMIT: Final[int] = 135
 EDIT_CODE_RETRIES: Final[int] = 4
 EDIT_CODE_AGENT_RETRIES: Final[int] = 4
 # DevNote: The diff-entries are hard to get right for the model. But they must fit their schema to make any sense.
-EDIT_CODE_AGENT_OUTPUT_RETRIES: Final[int] = 12
+EDIT_CODE_AGENT_OUTPUT_RETRIES: Final[int] = 25
 
 VCS_AGENT_REQUEST_LIMIT: Final[int] = 100
 VCS_AGENT_RETRIES: Final[int] = 3
-VCS_AGENT_OUTPUT_RETRIES: Final[int] = 6
+VCS_AGENT_OUTPUT_RETRIES: Final[int] = 20
 VCS_AGENT_BASH_TOOL_DELAY: Final[float] = 0.35  # In Seconds
 
 ADVISOR_AGENT_REQUEST_LIMIT: Final[int] = 50
@@ -60,7 +60,7 @@ ADVISOR_AGENT_OUTPUT_RETRIES: Final[int] = 3
 
 CHECKLIST_AGENT_REQUEST_LIMIT: Final[int] = 110
 CHECKLIST_AGENT_RETRIES: Final[int] = 2
-CHECKLIST_AGENT_OUTPUT_RETRIES: Final[int] = 5
+CHECKLIST_AGENT_OUTPUT_RETRIES: Final[int] = 10
 
 
 # =============================================================
