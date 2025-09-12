@@ -10,7 +10,6 @@ from useagent.common.guardrails import useagent_guard_rail
 from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.task_state import TaskState
-from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
 from useagent.tools.run import run
 from useagent.utils import cd
@@ -195,7 +194,7 @@ def _commit_exists(repo: Path, commit: str) -> bool:
 
 async def extract_diff(
     project_dir: Path | str | None = None,
-) -> CLIResult | ToolErrorInfo:
+) -> DiffEntry | ToolErrorInfo:
     """
     Extract the diff of the current state of the repository.
     This is achieved using `git diff` for both cached and uncached, i.E. will show all files in the index.
@@ -207,8 +206,8 @@ async def extract_diff(
         project_dir(Path|str|None, default None): Path at which to execute the extraction. If None, the current project dir will be used.
 
     Returns:
-        CLIResult: The result of the diff extraction, or a ToolErrorInfo containing information of a miss-usage or command failure.
-                   The CLIResult will contain all information necessary to form a diff, but it is not a diff itself.
+        DiffEntry: The result of the diff extraction, or a ToolErrorInfo containing information of a miss-usage or command failure.
+                    The DiffEntry will be the exact diff, and you should not make changes to it, not to invalidate it or corrupt it.
     """
     if project_dir and isinstance(project_dir, str):
         project_dir = Path(project_dir)
@@ -238,28 +237,32 @@ async def extract_diff(
         )
 
     with cd(project_dir):
-        await run(
-            "git add ."
-        )  # Git Add is necessary to see changes to newly created files
-        _, cached_out, stderr_1 = await run("git diff --no-color --cached")
-        _, working_out, stderr_2 = await run("git diff --no-color")
-        stdout = cached_out + working_out
+        # Git Add is necessary to see changes to newly created files with the git diff
+        await run("git add --intent-to-add .")
+        _, stdout, stderr = await run("git diff HEAD")
 
-        if stderr_1 or stderr_2:
+        if stderr:
             return ToolErrorInfo(
-                message=f"Failed to extract diff: {stderr_1 + stderr_2}",
-                supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
+                message=f"Failed to extract diff: {stderr}",
+                supplied_arguments=[
+                    ArgumentEntry("project_dir", str(project_dir)),
+                ],
             )
 
         if not stdout or not stdout.strip():
             logger.debug("[Tool] edit_tool `extract_diff`: Received empty Diff")
-            return CLIResult(output="No changes detected in the repository.")
+            return ToolErrorInfo(
+                message="No changes detected in the repository.",
+                supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
+            )
         logger.debug(
             f"[Tool] edit_tool `extract_diff`: Received {stdout[:25]} ... from {project_dir}"
         )
+
         # return CLIResult(output=f"Here's the diff of the current state:\n{stdout}")
         output = stdout + "\n" if not stdout.endswith("\n") else stdout
-        return CLIResult(output=output)
+        parsed = DiffEntry(output)
+        return parsed
 
 
 # DevNote:

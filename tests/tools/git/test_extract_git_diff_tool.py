@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from useagent.pydantic_models.tools.cliresult import CLIResult
+from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.git import extract_diff
 
@@ -57,9 +57,9 @@ async def test_extract_diff_real_changes(tmp_path):
 
     result = await extract_diff(project_dir=tmp_path)
 
-    assert isinstance(result, CLIResult)
-    assert "diff --git" in result.output
-    assert "+new line" in result.output
+    assert isinstance(result, DiffEntry)
+    assert "diff --git" in result.diff_content
+    assert "+new line" in result.diff_content
 
 
 @pytest.mark.tool
@@ -70,8 +70,7 @@ async def test_extract_diff_no_changes_after_commit(tmp_path):
 
     result = await extract_diff(project_dir=tmp_path)
 
-    assert isinstance(result, CLIResult)
-    assert result.output.strip() == "No changes detected in the repository."
+    assert not isinstance(result, DiffEntry)
 
 
 @pytest.mark.tool
@@ -84,9 +83,12 @@ async def test_extract_diff_single_file_edit(tmp_path):
 
     result = await extract_diff(project_dir=tmp_path)
 
-    assert "diff --git" in result.output
-    assert "+another line" in result.output
-    assert "-original content" in result.output or "+modified content" in result.output
+    assert "diff --git" in result.diff_content
+    assert "+another line" in result.diff_content
+    assert (
+        "-original content" in result.diff_content
+        or "+modified content" in result.diff_content
+    )
 
 
 @pytest.mark.tool
@@ -109,8 +111,8 @@ async def test_extract_diff_respects_gitignore(tmp_path):
     (tmp_path / "tracked.txt").write_text("t2\n")
 
     result = await extract_diff(project_dir=tmp_path)
-    assert "ignored.txt" not in result.output
-    assert "tracked.txt" in result.output
+    assert "ignored.txt" not in result.diff_content
+    assert "tracked.txt" in result.diff_content
 
 
 @pytest.mark.tool
@@ -130,8 +132,8 @@ async def test_extract_diff_multiple_files(tmp_path):
 
     result = await extract_diff(project_dir=tmp_path)
 
-    assert "diff --git a/test.txt" in result.output
-    assert "diff --git a/other.txt" in result.output
+    assert "diff --git a/test.txt" in result.diff_content
+    assert "diff --git a/other.txt" in result.diff_content
 
 
 @pytest.mark.tool
@@ -143,8 +145,8 @@ async def test_extract_diff_file_deletion(tmp_path):
 
     result = await extract_diff(project_dir=tmp_path)
 
-    assert "diff --git" in result.output
-    assert "deleted file mode" in result.output
+    assert "diff --git" in result.diff_content
+    assert "deleted file mode" in result.diff_content
 
 
 @pytest.mark.tool
@@ -166,8 +168,8 @@ async def test_extract_diff_nested_file(tmp_path):
 
     result = await extract_diff(project_dir=tmp_path)
 
-    assert "diff --git a/nested/nested.txt" in result.output
-    assert "+modified" in result.output
+    assert "diff --git a/nested/nested.txt" in result.diff_content
+    assert "+modified" in result.diff_content
 
 
 @pytest.mark.regression
@@ -194,9 +196,9 @@ async def test_extract_diff_untracked_file_is_not_included(tmp_path: Path):
     (tmp_path / "untracked.txt").write_text("should not appear\n")
 
     result = await extract_diff(project_dir=tmp_path)
-    assert isinstance(result, CLIResult)
-    assert "untracked.txt" in result.output
-    assert not result.output.strip() == "No changes detected in the repository."
+    assert isinstance(result, DiffEntry)
+    assert "untracked.txt" in result.diff_content
+    assert not result.diff_content.strip() == "No changes detected in the repository."
 
 
 @pytest.mark.regression
@@ -224,8 +226,8 @@ async def test_extract_diff_tracked_file_change_included_untracked_ignored(
     (tmp_path / "new.txt").write_text("untracked\n")
 
     result = await extract_diff(project_dir=tmp_path)
-    assert "diff --git a/a.txt" in result.output
-    assert "new.txt" in result.output
+    assert "diff --git a/a.txt" in result.diff_content
+    assert "new.txt" in result.diff_content
 
 
 @pytest.mark.regression
@@ -243,43 +245,38 @@ async def test_issue_26_extract_diff_handles_non_utf8_text_file_change_should_no
     p.write_bytes(b"hola\xa0mundo\ncambio\xa0\n")
 
     result = await extract_diff(project_dir=tmp_path)
-    assert isinstance(result, CLIResult)
-    assert result.output.strip()
+    assert isinstance(result, DiffEntry)
+    assert result.diff_content.strip()
     assert (
-        ("diff --git" in result.output)
-        or ("Binary files" in result.output)
-        or (p.name in result.output)
+        ("diff --git" in result.diff_content)
+        or ("Binary files" in result.diff_content)
+        or (p.name in result.diff_content)
     )
 
 
 @pytest.mark.regression
 @pytest.mark.tool
 @pytest.mark.asyncio
-async def test_issue_26_extract_diff_handles_binary_file_change_should_not_crash(
+async def test_issue_26_extract_diff_handles_binary_file_change_should_raise(
     tmp_path: Path,
 ):
-    _init_git_repo_without_content(tmp_path)
-    png = tmp_path / "img.png"
-    png.write_bytes(
-        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
-        b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
-        b"\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01\xe2!\xbc3"
-        b"\x00\x00\x00\x00IEND\xaeB`\x82"
-    )
-    subprocess.run(["git", "add", png.name], cwd=tmp_path, check=True)
-    subprocess.run(["git", "commit", "-m", "add png"], cwd=tmp_path, check=True)
+    # DevNote: we changed this with #44 and currently bytes are not really allowed.
+    with pytest.raises(ValueError):
+        _init_git_repo_without_content(tmp_path)
+        png = tmp_path / "img.png"
+        png.write_bytes(
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+            b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+            b"\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01\xe2!\xbc3"
+            b"\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        subprocess.run(["git", "add", png.name], cwd=tmp_path, check=True)
+        subprocess.run(["git", "commit", "-m", "add png"], cwd=tmp_path, check=True)
 
-    data = png.read_bytes()
-    png.write_bytes(data[:-1] + bytes([data[-1] ^ 0xFF]))
+        data = png.read_bytes()
+        png.write_bytes(data[:-1] + bytes([data[-1] ^ 0xFF]))
 
-    result = await extract_diff(project_dir=tmp_path)
-    assert isinstance(result, CLIResult)
-    assert result.output.strip()
-    assert (
-        ("GIT binary patch" in result.output)
-        or ("Binary files" in result.output)
-        or (png.name in result.output)
-    )
+        await extract_diff(project_dir=tmp_path)
 
 
 @pytest.mark.regression
@@ -304,28 +301,60 @@ async def test_issue_26_extract_diff_respects_non_utf8_filename_should_not_crash
     fpath.write_text("hi\nchanged\n")
 
     result = await extract_diff(project_dir=tmp_path)
-    assert isinstance(result, CLIResult)
-    assert "diff --git" in result.output
-    assert fname in result.output
+    assert isinstance(result, DiffEntry)
+    assert "diff --git" in result.diff_content
+    assert fname in result.diff_content
 
 
 @pytest.mark.regression
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_issue_26_extract_diff_large_hunks_should_not_crash(tmp_path: Path):
-    _init_git_repo_without_content(tmp_path)
+    # DevNote: we changed this with #44 and currently bytes are not really allowed.
+    with pytest.raises(ValueError):
+        _init_git_repo_without_content(tmp_path)
 
-    big = tmp_path / "big.txt"
-    big.write_bytes(b"x" * (2 * 1024 * 1024))
-    subprocess.run(["git", "add", big.name], cwd=tmp_path, check=True)
-    subprocess.run(["git", "commit", "-m", "add big"], cwd=tmp_path, check=True)
+        big = tmp_path / "big.txt"
+        big.write_bytes(b"x" * (2 * 1024 * 1024))
+        subprocess.run(["git", "add", big.name], cwd=tmp_path, check=True)
+        subprocess.run(["git", "commit", "-m", "add big"], cwd=tmp_path, check=True)
 
-    big.write_bytes(big.read_bytes() + (b"\xa0" * (256 * 1024)) + b"\nmore\n")
+        big.write_bytes(big.read_bytes() + (b"\xa0" * (256 * 1024)) + b"\nmore\n")
 
-    result = await extract_diff(project_dir=tmp_path)
-    assert isinstance(result, CLIResult)
-    assert result.output.strip()
-    assert big.name in result.output
+        result = await extract_diff(project_dir=tmp_path)
+        assert isinstance(result, DiffEntry)
+        assert result.diff_content.strip()
+        assert big.name in result.diff_content
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_issue_26_extract_diff_large_hunks_from_text_should_crash_due_to_truncation(
+    tmp_path: Path,
+):
+    # Too large git diffs will get a truncation and contain a <note> etc. about it
+    # But that is not a valid git diff then.
+    with pytest.raises(ValueError):
+        _init_git_repo_without_content(tmp_path)
+
+        big = tmp_path / "big.txt"
+
+        initial = "".join(f"line {i}\n" for i in range(200_000))
+        big.write_text(initial, encoding="utf-8")
+        subprocess.run(["git", "add", big.name], cwd=tmp_path, check=True)
+        subprocess.run(["git", "commit", "-m", "add big"], cwd=tmp_path, check=True)
+
+        modified = (
+            "line 0 changed\n"
+            + "".join(f"line {i}\n" for i in range(1, 200_000))
+            + "".join(f"new {i}\n" for i in range(100_000))
+        )
+        big.write_text(modified, encoding="utf-8")
+
+        result = await extract_diff(project_dir=tmp_path)
+
+        result.diff_content
 
 
 @pytest.mark.regression
@@ -357,6 +386,8 @@ async def test_issue_41_extract_diff_missing_file_should_return_tool_error_info(
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_extract_diff_repo_without_commits_should_list_untracked(tmp_path: Path):
+    # DevNote: This got deprecated with Issue #44 because we change the git extraction logic a bit.
+    # Now we must have a git commit that was already initialized.
     subprocess.run(["git", "init"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
     subprocess.run(
@@ -366,9 +397,7 @@ async def test_extract_diff_repo_without_commits_should_list_untracked(tmp_path:
     (tmp_path / "new.txt").write_text("hello\n")
 
     result = await extract_diff(project_dir=tmp_path)
-    assert isinstance(result, CLIResult)
-    assert "new.txt" in result.output
-    assert result.output.strip() != "No changes detected in the repository."
+    assert not isinstance(result, DiffEntry)
 
 
 @pytest.mark.tool
@@ -391,8 +420,14 @@ async def test_extract_diff_rename_should_show_similarity_index(tmp_path: Path):
     b.write_text("line1\nline2\nline3\nextra\n")
 
     result = await extract_diff(project_dir=tmp_path)
-    assert "rename from a.txt" in result.output or "similarity index" in result.output
-    assert "rename to b.txt" in result.output or "similarity index" in result.output
+    assert (
+        "rename from a.txt" in result.diff_content
+        or "similarity index" in result.diff_content
+    )
+    assert (
+        "rename to b.txt" in result.diff_content
+        or "similarity index" in result.diff_content
+    )
 
 
 @pytest.mark.tool
@@ -414,9 +449,9 @@ async def test_extract_diff_exec_bit_change_should_show_mode_change(tmp_path: Pa
     result = await extract_diff(project_dir=tmp_path)
     # Git shows either old/new mode lines or the 100644 -> 100755 transition
     assert (
-        ("new mode 100755" in result.output)
-        or ("old mode 100644" in result.output)
-        or ("100644" in result.output and "100755" in result.output)
+        ("new mode 100755" in result.diff_content)
+        or ("old mode 100644" in result.diff_content)
+        or ("100644" in result.diff_content and "100755" in result.diff_content)
     )
 
 
@@ -450,8 +485,8 @@ async def test_extract_diff_symlink_target_change_should_be_reported(tmp_path: P
     os.symlink(tgt2.name, link)
 
     result = await extract_diff(project_dir=tmp_path)
-    assert "link.txt" in result.output
-    assert "120000" in result.output or "symbolic link" in result.output
+    assert "link.txt" in result.diff_content
+    assert "120000" in result.diff_content or "symbolic link" in result.diff_content
 
 
 @pytest.mark.tool
@@ -473,7 +508,7 @@ async def test_extract_diff_whitespace_only_change_behavior_should_show_change(
     p.write_text("a   b   c\n")  # whitespace-only edit
 
     result = await extract_diff(project_dir=tmp_path)
-    assert isinstance(result, CLIResult)
+    assert isinstance(result, DiffEntry)
     # Baseline: by default whitespace diffs appear
-    assert "diff --git" in result.output
-    assert "ws.txt" in result.output
+    assert "diff --git" in result.diff_content
+    assert "ws.txt" in result.diff_content

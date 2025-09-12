@@ -8,10 +8,12 @@ from pathlib import Path
 
 import pytest
 
+from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.state.git_repo import GitRepository
-from useagent.tools.edit import extract_diff, init_edit_tools, replace_file
+from useagent.tools.edit import init_edit_tools, replace_file
+from useagent.tools.git import extract_diff
 
 
 @pytest.mark.integration
@@ -30,10 +32,10 @@ async def test_replace_file_then_extract_diff_should_show_modification(tmp_path:
     assert target.read_text() == "v2\n"
 
     diff_result = await extract_diff(project_dir=tmp_path)
-    assert isinstance(diff_result, CLIResult)
-    assert "diff --git" in diff_result.output
-    assert "tracked.txt" in diff_result.output
-    assert "v2" in diff_result.output
+    assert isinstance(diff_result, DiffEntry)
+    assert "diff --git" in diff_result.diff_content
+    assert "tracked.txt" in diff_result.diff_content
+    assert "v2" in diff_result.diff_content
 
 
 @pytest.mark.integration
@@ -51,6 +53,5 @@ async def test_replace_file_failure_should_yield_toolerror_and_no_diff(tmp_path:
     result_replace = replace_file(bad_str, target)
     assert isinstance(result_replace, ToolErrorInfo)
 
-    diff_result = await extract_diff(project_dir=tmp_path)
-    assert isinstance(diff_result, CLIResult)
-    assert diff_result.output.strip() == "No changes detected in the repository."
+    result = await extract_diff(project_dir=tmp_path)
+    assert isinstance(result, ToolErrorInfo)

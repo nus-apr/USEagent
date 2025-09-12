@@ -9,7 +9,6 @@ from useagent.common.guardrails import useagent_guard_rail
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
 from useagent.tools.run import maybe_truncate, run
-from useagent.utils import cd
 
 SNIPPET_LINES: int = 4
 
@@ -530,54 +529,6 @@ async def insert(
     )
     success_msg += "Review the changes and make sure they are as expected (correct indentation, no duplicate lines, etc). Edit the file again if necessary."
     return CLIResult(output=success_msg)
-
-
-async def extract_diff(
-    project_dir: Path | str | None = None,
-) -> CLIResult | ToolErrorInfo:
-    """
-    Extract the diff of the current state of the repository.
-
-    Returns:
-        CLIResult: The result of the diff extraction, containing the output or error.
-    """
-    assert _project_dir is not None, "Project directory must be initialized first."
-    project_dir = project_dir or _project_dir
-
-    logger.info(
-        f"[Tool] Invoked edit_tool `extract_diff`. Extracting a patch from {project_dir} (type: {type(project_dir)})"
-    )
-
-    if (
-        guard_rail_tool_error := useagent_guard_rail(
-            project_dir,
-            supplied_arguments=[
-                ArgumentEntry("project_dir", str(project_dir)),
-            ],
-        )
-    ) is not None:
-        return guard_rail_tool_error
-
-    with cd(project_dir):
-        # Git Add is necessary to see changes to newly created files with the git diff
-        await run("git add --intent-to-add .")
-        _, stdout, stderr = await run("git diff HEAD")
-
-        if stderr:
-            return ToolErrorInfo(
-                message=f"Failed to extract diff: {stderr}",
-                supplied_arguments=[
-                    ArgumentEntry("project_dir", str(project_dir)),
-                ],
-            )
-
-        if not stdout or not stdout.strip():
-            logger.debug("[Tool] edit_tool `extract_diff`: Received empty Diff")
-            return CLIResult(output="No changes detected in the repository.")
-        logger.debug(
-            f"[Tool] edit_tool `extract_diff`: Received {stdout[:25]} ... from {project_dir}"
-        )
-        return CLIResult(output=f"Here's the diff of the current state:\n{stdout}")
 
 
 async def read_file_as_diff(path_to_file: Path | str) -> CLIResult | ToolErrorInfo:

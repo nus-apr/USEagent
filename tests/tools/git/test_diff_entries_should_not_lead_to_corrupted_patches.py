@@ -23,8 +23,8 @@ async def test_change_patch_from_repo_a_applies_to_repo_b_should_modify_file(
     (repo_a / "test.txt").write_text("original content\nnew line\n")
 
     diff_result = await extract_diff(project_dir=repo_a)
-    assert isinstance(diff_result, CLIResult)
-    patch = diff_result.output
+    assert isinstance(diff_result, DiffEntry)
+    patch = diff_result.diff_content
     assert patch.startswith("diff --git ")
     assert "+new line" in patch
     patch_path = tmp_path / "change.patch"
@@ -53,7 +53,7 @@ async def test_new_file_patch_identical_baseline_should_create_file(tmp_path: Pa
     subprocess.run(["git", "add", "test.txt"], cwd=repo_a, check=True)
 
     diff_result = await extract_diff(project_dir=repo_a)
-    patch = diff_result.output
+    patch = diff_result.diff_content
     assert "test.txt" in patch
     (tmp_path / "newfile_same.patch").write_text(patch)
 
@@ -82,7 +82,7 @@ async def test_new_file_patch_different_baseline_should_create_file(tmp_path: Pa
     subprocess.run(["git", "add", "test.txt"], cwd=repo_a, check=True)
 
     diff_result = await extract_diff(project_dir=repo_a)
-    patch = diff_result.output
+    patch = diff_result.diff_content
     assert "test.txt" in patch
     (tmp_path / "newfile_diff.patch").write_text(patch)
 
