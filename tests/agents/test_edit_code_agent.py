@@ -17,7 +17,7 @@ new file mode 100644
 index 0000000..e69de29
 --- /dev/null
 +++ b/newfile.txt
-@@
+@@ -0,0 +1 @@
 +Hello world
 """
 

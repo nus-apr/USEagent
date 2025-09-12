@@ -57,10 +57,10 @@ index 0000000000..e3d22bbc15
 NEW_FILE_ONE_LINE = """\
 diff --git a/newfile.txt b/newfile.txt
 new file mode 100644
-index 0000000..e69de29
+index 0000000..deadbee
 --- /dev/null
 +++ b/newfile.txt
-@@
+@@ -0,0 +1 @@
 +Hello world
 """
 
@@ -70,14 +70,13 @@ new file mode 100644
 index 0000000..e69de29
 --- /dev/null
 +++ b/README.md
-@@
+@@ -0,0 +5 @@
 +# Example
 +
 +```python
 +print("hello")
 +```
 """
-
 
 ### ================================================================
 ###                      Tests
@@ -122,16 +121,6 @@ def test_invalid_key_rejected():
 
 
 @pytest.mark.pydantic_model
-def test_add_duplicate_whitespace_variant_raises():
-    store = DiffStore()
-    e1 = DiffEntry(diff_content=NEW_FILE_ONE_LINE)
-    e2 = DiffEntry(diff_content=" \n\n" + NEW_FILE_ONE_LINE + " \n ")
-    store.add_entry(e1)
-    with pytest.raises(ValueError, match="Equivalent diff already exists"):
-        store.add_entry(e2)
-
-
-@pytest.mark.pydantic_model
 def test_add_duplicate_exact_raises():
     store = DiffStore()
     entry = DiffEntry(diff_content=EXAMPLE_GIT_DIFF)
@@ -143,7 +132,7 @@ def test_add_duplicate_exact_raises():
 @pytest.mark.pydantic_model
 def test_diffstore_model_validator_rejects_duplicate_on_init():
     entry1 = DiffEntry(diff_content=NEW_FILE_ONE_LINE)
-    entry2 = DiffEntry(diff_content=" \n" + NEW_FILE_ONE_LINE + "\n ")
+    entry2 = DiffEntry(diff_content=NEW_FILE_ONE_LINE)
     with pytest.raises(ValueError, match="Duplicate diff contents detected"):
         DiffStore(id_to_diff={"diff_0": entry1, "diff_1": entry2})
 

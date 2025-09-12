@@ -11,10 +11,9 @@ new file mode 100644
 index 0000000..e69de29
 --- /dev/null
 +++ b/newfile.txt
-@@
+@@ -0,0 +1 @@
 +Hello world
 """
-
 
 EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE_VARIATION = """\
 diff --git a/newfile.txt b/newfile.txt
@@ -22,7 +21,7 @@ new file mode 100644
 index 0000000..e69de29
 --- /dev/null
 +++ b/newfile.txt
-@@
+@@ -0,0 +1 @@
 +Goodbye world
 """
 

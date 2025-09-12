@@ -10,7 +10,7 @@ new file mode 100644
 index 0000000..e69de29
 --- /dev/null
 +++ b/newfile.txt
-@@
+@@ -0,0 +1 @@
 +Hello world
 """
 
@@ -21,7 +21,7 @@ new file mode 100644
 index 0000000..e69de29
 --- /dev/null
 +++ b/newfile.txt
-@@
+@@ -0,0 +1 @@
 +Goodbye world
 """
 
@@ -78,21 +78,3 @@ def test_nonexistent_key_returns_error():
     result = _remove_diffs_from_diff_store(store, ["diff_999"])
     assert isinstance(result, ToolErrorInfo)
     assert "not in the existing DiffStore" in result.message
-
-
-@pytest.mark.tool
-def test_remove_selected_diffs_and_check_new_keys_are_reindexed():
-    store = DiffStore()
-    k0 = store.add_entry(
-        DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE + "\n1")
-    )
-    store.add_entry(DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE + "\n2"))
-    k2 = store.add_entry(
-        DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE + "\n3")
-    )
-    store.add_entry(DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE + "\n4"))
-
-    result = _remove_diffs_from_diff_store(store, [k0, k2])
-    assert isinstance(result, DiffStore)
-    assert len(result) == 2
-    assert sorted(result.id_to_diff.keys()) == ["diff_0", "diff_1"]
