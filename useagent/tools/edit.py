@@ -560,14 +560,12 @@ async def extract_diff(
 
     with cd(project_dir):
         # Git Add is necessary to see changes to newly created files with the git diff
-        await run("git add .")
-        _, cached_out, stderr_1 = await run("git diff --cached")
-        _, working_out, stderr_2 = await run("git diff")
-        stdout = cached_out + working_out
+        await run("git add --intent-to-add .")
+        _, stdout, stderr = await run("git diff HEAD")
 
-        if stderr_1 or stderr_2:
+        if stderr:
             return ToolErrorInfo(
-                message=f"Failed to extract diff: {stderr_1 + stderr_2}",
+                message=f"Failed to extract diff: {stderr}",
                 supplied_arguments=[
                     ArgumentEntry("project_dir", str(project_dir)),
                 ],

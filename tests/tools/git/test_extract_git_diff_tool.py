@@ -1,4 +1,5 @@
 import os
+import stat
 import subprocess
 from pathlib import Path
 
@@ -351,3 +352,128 @@ async def test_issue_41_extract_diff_missing_file_should_return_tool_error_info(
     result = await extract_diff(project_dir=missing)
     assert result
     assert isinstance(result, ToolErrorInfo)
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_repo_without_commits_should_list_untracked(tmp_path: Path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True
+    )
+
+    (tmp_path / "new.txt").write_text("hello\n")
+
+    result = await extract_diff(project_dir=tmp_path)
+    assert isinstance(result, CLIResult)
+    assert "new.txt" in result.output
+    assert result.output.strip() != "No changes detected in the repository."
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_rename_should_show_similarity_index(tmp_path: Path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True
+    )
+
+    a = tmp_path / "a.txt"
+    a.write_text("line1\nline2\nline3\n")
+    subprocess.run(["git", "add", "a.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add a"], cwd=tmp_path, check=True)
+
+    # git mv + small change to keep similarity high
+    subprocess.run(["git", "mv", "a.txt", "b.txt"], cwd=tmp_path, check=True)
+    b = tmp_path / "b.txt"
+    b.write_text("line1\nline2\nline3\nextra\n")
+
+    result = await extract_diff(project_dir=tmp_path)
+    assert "rename from a.txt" in result.output or "similarity index" in result.output
+    assert "rename to b.txt" in result.output or "similarity index" in result.output
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_exec_bit_change_should_show_mode_change(tmp_path: Path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True
+    )
+
+    sh = tmp_path / "script.sh"
+    sh.write_text("#!/bin/sh\necho hi\n")
+    subprocess.run(["git", "add", "script.sh"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add script"], cwd=tmp_path, check=True)
+
+    os.chmod(sh, os.stat(sh).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    result = await extract_diff(project_dir=tmp_path)
+    # Git shows either old/new mode lines or the 100644 -> 100755 transition
+    assert (
+        ("new mode 100755" in result.output)
+        or ("old mode 100644" in result.output)
+        or ("100644" in result.output and "100755" in result.output)
+    )
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not hasattr(os, "symlink"), reason="symlink not supported on this platform"
+)
+async def test_extract_diff_symlink_target_change_should_be_reported(tmp_path: Path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True
+    )
+
+    tgt1 = tmp_path / "target1.txt"
+    tgt2 = tmp_path / "target2.txt"
+    tgt1.write_text("one\n")
+    tgt2.write_text("two\n")
+
+    link = tmp_path / "link.txt"
+    os.symlink(tgt1.name, link)  # relative link
+    subprocess.run(
+        ["git", "add", "target1.txt", "target2.txt", "link.txt"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(["git", "commit", "-m", "add link"], cwd=tmp_path, check=True)
+
+    link.unlink()
+    os.symlink(tgt2.name, link)
+
+    result = await extract_diff(project_dir=tmp_path)
+    assert "link.txt" in result.output
+    assert "120000" in result.output or "symbolic link" in result.output
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_whitespace_only_change_behavior_should_show_change(
+    tmp_path: Path,
+):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True
+    )
+
+    p = tmp_path / "ws.txt"
+    p.write_text("a b c\n")
+    subprocess.run(["git", "add", "ws.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
+
+    p.write_text("a   b   c\n")  # whitespace-only edit
+
+    result = await extract_diff(project_dir=tmp_path)
+    assert isinstance(result, CLIResult)
+    # Baseline: by default whitespace diffs appear
+    assert "diff --git" in result.output
+    assert "ws.txt" in result.output
