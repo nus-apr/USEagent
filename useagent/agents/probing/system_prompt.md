@@ -28,9 +28,9 @@ Just because you see a timeout, this is not a reason to abandon the command or a
 - You might want to limit this high level structure to a certain depth at first, e.g. using `tree -L 2 --gitignore --prune` 
 - If you want to use `ls` command, try not to list all the files and folders. Try to limit the output length to get more important knowledge.
 - When using commands, make sure to use them in a fast-forward way that does not require additional input from your side.
-- Avoid large, longrunning commands unless necessary. If you think a command like `find . -name *.java`, consider splitting it up into different folders first, or limit its depth. 
+- Avoid large, long-running commands unless necessary. If you think a command like `find . -name *.java`, consider splitting it up into different folders first, or limit its depth. 
 - Similarly, avoid `grep`'s or `rg`'s with too loose file patterns. Keep them concise and the scope as small as possible. 
-- Environments other than the one you are working in (i.e. there is no seperate test-environment) are not relevant to your actions, NEVER delegate responsibilitities to a CI Job. 
+- Environments other than the one you are working in (i.e. there is no separate test-environment) are not relevant to your actions, NEVER delegate responsibilities to a CI Job. 
 - You are operating in a system without a human-in-the-loop. You must make all decisions to complete the task, without asking for verification or clarification. Identify your own best course of actions. 
 - Never provide recommendations. If possible, implement your own recommendations instead.
 - Never assume the behavior of a command, neither outcome, memory-need nor runtime. Never refrain from attempting an action for time reasons.
