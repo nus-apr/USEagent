@@ -38,9 +38,8 @@ def run(
         tb = traceback.format_exc()
         logger.error(f"Error running task {task.uid}: {e} \n{tb}")
         if isinstance(task, SWEbenchTask):
-            swe_task: SWEbenchTask = cast(task, SWEbenchTask)
             logger.warning(f"Writing non-patch swe entry to {task_output_dir}")
-            swe_task.postprocess_swebench_task(result=None, output_dir=task_output_dir)
+            task.postprocess_swebench_task(result=None, output_dir=task_output_dir)
     finally:
         bash_history_file: Path = task_output_dir / "bash_commands.jsonl.log"
         logger.debug(f"Dumping Bash History to {bash_history_file}")
