@@ -16,6 +16,7 @@ from useagent.pydantic_models.output.action import Action
 from useagent.pydantic_models.output.answer import Answer
 from useagent.pydantic_models.output.code_change import CodeChange
 from useagent.pydantic_models.task_state import TaskState
+from useagent.tasks.swebench_task import SWEbenchTask
 from useagent.tasks.task import Task
 from useagent.tools.meta import get_bash_history
 from useagent.utils import log_commit_sha
@@ -36,6 +37,10 @@ def run(
     except Exception as e:
         tb = traceback.format_exc()
         logger.error(f"Error running task {task.uid}: {e} \n{tb}")
+        if isinstance(task, SWEbenchTask):
+            swe_task: SWEbenchTask = cast(task, SWEbenchTask)
+            logger.warning(f"Writing non-patch swe entry to {task_output_dir}")
+            swe_task.postprocess_swebench_task(result=None, output_dir=task_output_dir)
     finally:
         bash_history_file: Path = task_output_dir / "bash_commands.jsonl.log"
         logger.debug(f"Dumping Bash History to {bash_history_file}")

@@ -206,9 +206,7 @@ def agent_loop(
                     case CodeChange():
                         artifact = (
                             str(
-                                (task_state.diff_store.id_to_diff())[
-                                    result.output.diff_id
-                                ]
+                                task_state.diff_store.id_to_diff[result.output.diff_id]  # type: ignore
                             )
                             + "\nExplanation:"
                             + result.output.explanation
