@@ -42,7 +42,6 @@ from useagent.tools.meta import (  # Agent-State Tools; Agent-Agent Tools
     probe_environment,
     search_code,
     select_diff_from_diff_store,
-    vcs,
     view_command_history,
     view_task_state,
 )
@@ -94,7 +93,8 @@ def init_agent(
                 takes_ctx=True,
                 max_retries=constants.EXECUTE_TESTS_RETRIES,
             ),
-            Tool(vcs, takes_ctx=True, max_retries=constants.VCS_AGENT_RETRIES),
+            # TODO: Re-enable VCS tool after #44 seems ok
+            # Tool(vcs, takes_ctx=True, max_retries=constants.VCS_AGENT_RETRIES),
         ],
         output_type=output_type,
         history_processors=[fit_messages_into_context_window],
