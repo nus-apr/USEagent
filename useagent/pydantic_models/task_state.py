@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, PrivateAttr
 
 from useagent.pydantic_models.artifacts.code import Location
-from useagent.pydantic_models.artifacts.git import DiffStore
+from useagent.pydantic_models.artifacts.git.diff_store import DiffStore
 from useagent.pydantic_models.info.environment import Environment
 from useagent.state.git_repo import GitRepository
 from useagent.tasks.task import Task

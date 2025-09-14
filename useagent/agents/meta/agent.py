@@ -14,7 +14,7 @@ from useagent.microagents.decorators import (
     conditional_microagents_triggers,
 )
 from useagent.microagents.management import load_microagents_from_project_dir
-from useagent.pydantic_models.artifacts.git import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.output.action import Action
 from useagent.pydantic_models.output.answer import Answer
@@ -40,7 +40,6 @@ from useagent.tools.meta import (  # Agent-State Tools; Agent-Agent Tools
     edit_code,
     execute_tests,
     probe_environment,
-    remove_diffs_from_diff_store,
     search_code,
     select_diff_from_diff_store,
     vcs,
@@ -71,7 +70,6 @@ def init_agent(
             # Non-Agentic Tools
             Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
             Tool(view_task_state, takes_ctx=True, max_retries=0),
-            Tool(remove_diffs_from_diff_store, takes_ctx=True, max_retries=5),
             Tool(view_command_history, max_retries=2),
             Tool(
                 make_bash_tool_for_agent(
@@ -207,7 +205,11 @@ def agent_loop(
                         artifact = result.output.answer
                     case CodeChange():
                         artifact = (
-                            str(task_state.diff_store.id_to_diff[result.output.diff_id])
+                            str(
+                                (task_state.diff_store.id_to_diff())[
+                                    result.output.diff_id
+                                ]
+                            )
                             + "\nExplanation:"
                             + result.output.explanation
                         )
@@ -252,7 +254,7 @@ def agent_loop(
         diff_id = result.output.diff_id
         logger.info(f"[Post-Processing] Resolving {diff_id} in DiffStore:")
         try:
-            diff_entry: DiffEntry | None = task_state.diff_store.id_to_diff[diff_id]
+            diff_entry: DiffEntry | None = task_state.diff_store.id_to_diff[diff_id]  # type: ignore
             diff_content: str = (
                 diff_entry.diff_content
                 if diff_entry
@@ -266,7 +268,9 @@ def agent_loop(
             if output_dir and isinstance(task_state._task, SWEbenchTask):
                 task_state._task.postprocess_swebench_task(diff_content, output_dir)
         except Exception as e:
-            logger.error(f"[Post-Processing] Issue finding {diff_id} in DiffStore")
+            logger.error(
+                f"[Post-Processing] Issue finding {diff_id} in DiffStore {task_state.diff_store}"
+            )
             logger.error(e)
 
     return result.output, USAGE_TRACKER, result.all_messages()

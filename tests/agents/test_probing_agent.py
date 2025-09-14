@@ -7,7 +7,7 @@ from pydantic_ai.models.test import TestModel
 
 from useagent.agents.probing.agent import init_agent
 from useagent.config import AppConfig
-from useagent.pydantic_models.artifacts.git import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
 from useagent.pydantic_models.info.environment import GitStatus, Package
 
 models.ALLOW_MODEL_REQUESTS = False

@@ -12,7 +12,7 @@ from useagent.microagents.decorators import (
     conditional_microagents_triggers,
 )
 from useagent.microagents.management import load_microagents_from_project_dir
-from useagent.pydantic_models.artifacts.git import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
 from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.bash import make_bash_tool_for_agent
 from useagent.tools.git import (

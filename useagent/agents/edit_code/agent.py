@@ -10,7 +10,7 @@ from useagent.microagents.decorators import (
     conditional_microagents_triggers,
 )
 from useagent.microagents.management import load_microagents_from_project_dir
-from useagent.pydantic_models.artifacts.git import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
 from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.edit import (
     create,
@@ -46,8 +46,8 @@ def init_agent(
             Tool(create),
             Tool(str_replace),
             Tool(insert),
-            Tool(extract_diff),
-            Tool(read_file_as_diff),
+            Tool(extract_diff, takes_ctx=True),
+            Tool(read_file_as_diff, takes_ctx=True),
             Tool(replace_file),
         ],
     )

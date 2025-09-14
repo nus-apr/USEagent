@@ -21,6 +21,9 @@ MODEL_NAME=google-gla:gemini-2.5-flash
 rm -rf ./useagent-turbo-tmp
 mkdir ./useagent-turbo-tmp
 echo "Hi, this is a simple file" > ./useagent-turbo-tmp/README.md
+cd ./useagent-turbo-tmp
+git init && git add . && git commit -m "Initial Commit"
+cd ..
 rm -rf ./useagent-turbo-tmp-out
 mkdir ./useagent-turbo-tmp-out
 

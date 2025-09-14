@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from useagent.pydantic_models.artifacts.git import DiffEntry, _is_valid_patch
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry, _is_valid_patch
 
 ### ================================================================
 ###                      Test Data

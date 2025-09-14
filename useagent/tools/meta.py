@@ -19,7 +19,8 @@ from useagent.agents.test_execution.agent import init_agent as init_test_executi
 from useagent.agents.vcs.agent import init_agent as init_vcs_agent
 from useagent.config import ConfigSingleton
 from useagent.pydantic_models.artifacts.code import Location
-from useagent.pydantic_models.artifacts.git import DiffEntry, DiffStore
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff_store import DiffEntryKey, DiffStore
 from useagent.pydantic_models.artifacts.test_result import TestResult
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr, PositiveInt
 from useagent.pydantic_models.info.checklist import CheckList
@@ -73,79 +74,11 @@ def select_diff_from_diff_store(
     return _select_diff_from_diff_store(diff_store, diff_store_key)
 
 
-def remove_diffs_from_diff_store(
-    ctx: RunContext[TaskState], keys_of_diffs_to_remove: list[str]
-) -> DiffStore | ToolErrorInfo:
-    """
-    Remove all given diffs from the Diff Store.
-    This action can be used if there are many partial diffs that are no longer relevant,
-    if some diffs are known to be faulty / malformed or to keep only the most promising diffs in a growing diffstore.
-    The result will be the newly constructed DiffStore without the specified elements, which will have new keys in place.
-
-    Args:
-        keys_of_diffs_to_remove (List[str]): The keys of which diffs to remove. Must be valid keys for elements in the diff-store.
-
-    Returns:
-        DiffStore: The updated DiffStore - The TaskStates' field will also be updated as a side-effect.
-    """
-    if (
-        ConfigSingleton.is_initialized()
-        and ConfigSingleton.config.optimization_toggles["meta-agent-speed-bumps"]
-    ):
-        time.sleep(constants.DIFF_STORE_INTERACTION_DELAY)
-    diff_store = ctx.deps.diff_store
-    result = _remove_diffs_from_diff_store(diff_store, keys_of_diffs_to_remove)
-    if isinstance(result, DiffStore):
-        logger.debug(
-            f"Overwritting existing diffstore ({len(diff_store)} entries) with new diffstore ({len(result)} entries)"
-        )
-        ctx.deps.diff_store = result
-    return result
-
-
-def _remove_diffs_from_diff_store(
-    diff_store: DiffStore, keys_of_diffs_to_remove: list[str]
-) -> DiffStore | ToolErrorInfo:
-    logger.info(
-        f"[Tool] Invoked remove_diffs_from_diff_store tool removing {keys_of_diffs_to_remove}"
-    )
-    if not keys_of_diffs_to_remove:
-        return ToolErrorInfo(message="Supplied no keys to remove.")
-    for key in keys_of_diffs_to_remove:
-        if not key.startswith("diff_"):
-            return ToolErrorInfo(
-                message=f"Supplied at least one key ({key}) that does not match the required format 'diff_X'",
-                supplied_arguments=[
-                    ArgumentEntry(
-                        "keys_of_diffs_to_remove", str(keys_of_diffs_to_remove)
-                    )
-                ],
-            )
-        if key not in diff_store.id_to_diff.keys():
-            return ToolErrorInfo(
-                message=f"Supplied at least one key ({key}) that is not in the existing DiffStore",
-                supplied_arguments=[
-                    ArgumentEntry(
-                        "keys_of_diffs_to_remove", str(keys_of_diffs_to_remove)
-                    )
-                ],
-            )
-
-    diffs_to_keep = [
-        k for k in diff_store.id_to_diff.keys() if k not in keys_of_diffs_to_remove
-    ]
-    new_diff_store: DiffStore = DiffStore()
-    for diff_to_keep in diffs_to_keep:
-        new_diff_store.add_entry(diff_store.id_to_diff[diff_to_keep])
-
-    return new_diff_store
-
-
 def _select_diff_from_diff_store(
     diff_store: DiffStore, index: str
 ) -> str | ToolErrorInfo:
     logger.info(
-        f"[Tool] Invoked select_diff_from_diff_store tool with index {index} ({len(diff_store)} entries in diff_store [{','.join(list(diff_store.id_to_diff.keys())[:8])}])"
+        f"[Tool] Invoked select_diff_from_diff_store tool with index {index} ({len(diff_store)} entries in diff_store [{','.join(list(diff_store.id_to_diff.keys())[:8])}])"  # type: ignore
     )
     if len(diff_store) == 0:
         return ToolErrorInfo(
@@ -158,12 +91,12 @@ def _select_diff_from_diff_store(
     # DevNote: Let's help a little if we got an integer
     if index.isdigit() and int(index) >= 0:
         index = "diff_" + index
-    if index not in diff_store.id_to_diff.keys():
+    if index not in diff_store.id_to_diff.keys():  # type: ignore
         logger.debug(
-            f"[Tool] poor key-choice: {index} was tried to select but does not exist [{','.join(list(diff_store.id_to_diff.keys())[:8])}]"
+            f"[Tool] poor key-choice: {index} was tried to select but does not exist [{','.join(list(diff_store.id_to_diff.keys())[:8])}]"  # type: ignore
         )
         appendix = "Available keys in diff_store: " + " ".join(
-            list(diff_store.id_to_diff.keys())[:8]
+            list(diff_store.id_to_diff.keys())[:8]  # type: ignore
         )
         return ToolErrorInfo(
             message=f"Key {index} was not in the diff_store. {appendix}",
@@ -173,7 +106,8 @@ def _select_diff_from_diff_store(
             ],
         )
     else:
-        entry: DiffEntry = diff_store.id_to_diff[index]
+        # TODO: Pull diff_store.id_to_diff up and have only one type ignore here.
+        entry: DiffEntry = diff_store.id_to_diff[index]  # type: ignore
         if not entry.diff_content or not (entry.diff_content.strip()):
             logger.warning("[Tool] An empty diff was selected by the agent.")
         return entry.diff_content
@@ -372,7 +306,9 @@ async def search_code(ctx: RunContext[TaskState], instruction: str) -> list[Loca
     return locations
 
 
-async def edit_code(ctx: RunContext[TaskState], instruction: str) -> DiffEntry | None:
+async def edit_code(
+    ctx: RunContext[TaskState], instruction: str
+) -> DiffEntryKey | None:
     """Edit the codebase based on the provided instruction.
 
     To invoke the EditCode tool, think step by step:
@@ -395,26 +331,11 @@ async def edit_code(ctx: RunContext[TaskState], instruction: str) -> DiffEntry |
         deps=ctx.deps,
         usage_limits=UsageLimits(request_limit=constants.EDIT_CODE_AGENT_REQUEST_LIMIT),
     )
-    diff: DiffEntry = edit_result.output
-    logger.info(f"[MetaAgent] edit_code result: {diff}")
-    # update task state with the diff
-    try:
-        diff_id: str = ctx.deps.diff_store.add_entry(diff)
-        logger.info(f"[MetaAgent] Added diff entry with ID: {diff_id}")
-    except ValueError as verr:
-        if "diff already exists" in str(verr):
-            logger.warning(
-                "[MetaAgent] Edit-Code Agent returned a (already known) diff towards the meta-agent"
-            )
-            existing_diff_id = (ctx.deps.diff_store.diff_to_id())[diff.diff_content]
-            raise ValueError(
-                f"The edit-code agent returned a diff identical to an existing diff_id {existing_diff_id}. Reconsider your instructions or revisit the existing diff_id {existing_diff_id}."
-            )
-        else:
-            raise verr
-    finally:
-        USAGE_TRACKER.add(edit_code_agent.name, edit_result.usage())
-        return diff
+    diff_key: DiffEntryKey = edit_result.output
+    logger.info(f"[MetaAgent] edit_code result: {diff_key}")
+    # DevNote: Since #44 adding diffs to diffstore is done at `extract_diff`
+    USAGE_TRACKER.add(edit_code_agent.name, edit_result.usage())
+    return diff_key
 
 
 async def vcs(ctx: RunContext[TaskState], instruction: str) -> DiffEntry | str | None:
@@ -436,12 +357,13 @@ async def vcs(ctx: RunContext[TaskState], instruction: str) -> DiffEntry | str |
     )
 
     match vcs_result.output:
+        # TODO: Revamp this too for #44
         case DiffEntry():
             diff: DiffEntry = vcs_result.output
             logger.info(f"[MetaAgent] vcs_agent diff result: {diff}")
             # update task state with the diff
             try:
-                diff_id: str = ctx.deps.diff_store.add_entry(diff)
+                diff_id: str = ctx.deps.diff_store._add_entry(diff)
                 logger.debug(f"[MetaAgent] Added diff entry with ID: {diff_id}")
             except ValueError as verr:
                 if "diff already exists" in str(verr):

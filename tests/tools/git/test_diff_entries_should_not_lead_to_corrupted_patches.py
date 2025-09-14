@@ -1,13 +1,13 @@
-# tests/tools/git/test_extract_diff_patch_apply.py
+# tests/tools/git/test__extract_diff_patch_apply.py
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from useagent.pydantic_models.artifacts.git import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.state.git_repo import GitRepository
-from useagent.tools.git import extract_diff
+from useagent.tools.git import _extract_diff
 
 
 @pytest.mark.integration
@@ -22,7 +22,7 @@ async def test_change_patch_from_repo_a_applies_to_repo_b_should_modify_file(
     GitRepository(str(repo_a))
     (repo_a / "test.txt").write_text("original content\nnew line\n")
 
-    diff_result = await extract_diff(project_dir=repo_a)
+    diff_result = await _extract_diff(project_dir=repo_a)
     assert isinstance(diff_result, DiffEntry)
     patch = diff_result.diff_content
     assert patch.startswith("diff --git ")
@@ -52,7 +52,7 @@ async def test_new_file_patch_identical_baseline_should_create_file(tmp_path: Pa
     (repo_a / "test.txt").write_text("hello\n")
     subprocess.run(["git", "add", "test.txt"], cwd=repo_a, check=True)
 
-    diff_result = await extract_diff(project_dir=repo_a)
+    diff_result = await _extract_diff(project_dir=repo_a)
     patch = diff_result.diff_content
     assert "test.txt" in patch
     (tmp_path / "newfile_same.patch").write_text(patch)
@@ -81,7 +81,7 @@ async def test_new_file_patch_different_baseline_should_create_file(tmp_path: Pa
     (repo_a / "test.txt").write_text("payload\n")
     subprocess.run(["git", "add", "test.txt"], cwd=repo_a, check=True)
 
-    diff_result = await extract_diff(project_dir=repo_a)
+    diff_result = await _extract_diff(project_dir=repo_a)
     patch = diff_result.diff_content
     assert "test.txt" in patch
     (tmp_path / "newfile_diff.patch").write_text(patch)

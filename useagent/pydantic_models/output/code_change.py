@@ -1,6 +1,7 @@
 from pydantic import field_validator
 from pydantic.dataclasses import dataclass
 
+from useagent.pydantic_models.artifacts.git.diff_store import DiffEntryKey
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 
 
@@ -9,8 +10,8 @@ class CodeChange:
     explanation: NonEmptyStr
     # DevNote:
     # Initially we had a DiffEntry here, but it was very hard for the Meta-Agent to formulate this dataclass then.
-    # We now use the diff_id and resolve it later.
-    diff_id: NonEmptyStr
+    # We now use the diff_id and resolve it later. (Also see #44 for a rundown of issues)
+    diff_id: DiffEntryKey
     doubts: NonEmptyStr | None
 
     @field_validator("diff_id")

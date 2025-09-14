@@ -1,11 +1,16 @@
 import os
+from collections.abc import Mapping
 from pathlib import Path
 from uuid import uuid4
 
 from loguru import logger
+from pydantic_ai import RunContext
 
 from useagent.common.context_window import fit_message_into_context_window
 from useagent.common.guardrails import useagent_guard_rail
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff_store import DiffEntryKey
+from useagent.pydantic_models.task_state import TaskState
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
 from useagent.tools.run import maybe_truncate, run
@@ -531,19 +536,66 @@ async def insert(
     return CLIResult(output=success_msg)
 
 
-async def read_file_as_diff(path_to_file: Path | str) -> CLIResult | ToolErrorInfo:
+async def read_file_as_diff(
+    ctx: RunContext[TaskState], path_to_file: Path | str
+) -> DiffEntryKey | ToolErrorInfo:
     """
     Reports a file at a given `path_to_file` as a git diff that would create this file (if it was absent).
     Does not take any git history of the file into account, just it's current state.
-
+    If successful, the diff will be stored in the DiffStore.
 
     Args:
         path_to_file (Path | str): The path to the file.
 
     Returns:
-        CLIResult: The git diff that would create the file.
+        DiffEntryKey: The key that points to the resulting diff in the RunContexts DiffStore.
     """
+    extract_result: DiffEntry | ToolErrorInfo = await _read_file_as_diff(path_to_file)
+    if isinstance(extract_result, ToolErrorInfo):
+        logger.debug(
+            f"[Tool] `read_file_as_diff` resulted in a ToolError {extract_result.message}"
+        )
+        return extract_result
+    logger.debug(
+        f"[Tool] Successfully extracted a DiffEntry (with {len(extract_result.diff_content)} lines) from {str(path_to_file)}"
+    )
+    try:
+        logger.debug("[Tool] `read_file_as_diff` trying to add DiffEntry to DiffStore")
+        diff_id: DiffEntryKey = ctx.deps.diff_store._add_entry(extract_result)
+        logger.info(
+            f"[Tool] `read_file_as_diff` added diff entry with ID: {diff_id} to `ctx.deps.diff_store`."
+        )
+        return diff_id
+    except ValueError as verr:
+        if "diff already exists" in str(verr):
+            logger.warning(
+                "[Tool] `read_file_as_diff` returned a (already known) diff towards the `ctx.deps.diff_store`"
+            )
+            logger.debug(f"DiffStore was:{ctx.deps.diff_store}")
+            reversed_key_lookup: Mapping[DiffEntry, DiffEntryKey] = (  # type: ignore
+                ctx.deps.diff_store.diff_to_id
+            )
+            existing_diff_id: DiffEntryKey = reversed_key_lookup[  # type: ignore
+                extract_result.diff_content
+            ]
+            return ToolErrorInfo(
+                message=f" `read_file_as_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. Reuse {existing_diff_id} or reconsider what you want to achieve.",
+                supplied_arguments=[ArgumentEntry("project_dir", str(path_to_file))],
+            )
+        else:
+            raise verr
+    except Exception as ex:
+        return ToolErrorInfo(
+            message=f"An unhandled exception occurred during diff-extraction ({ex}), please reconsider what you were trying to do.",
+            supplied_arguments=[ArgumentEntry("project_dir", str(path_to_file))],
+        )
 
+    pass
+
+
+async def _read_file_as_diff(path_to_file: Path | str) -> DiffEntry | ToolErrorInfo:
+
+    # TODO: Edit this ! Use RunContext as usual.
     logger.info(
         f"[Tool] Invoked edit_tool `read_file_as_diff`. Extracting a file as patch from {path_to_file} (type: {type(path_to_file)})"
     )
@@ -575,9 +627,15 @@ async def read_file_as_diff(path_to_file: Path | str) -> CLIResult | ToolErrorIn
             supplied_arguments=supplied_arguments,
         )
 
-    return CLIResult(
-        output=f"This is a patch would newly create the file at {str(path)}:\n{stdout}"
-    )
+    try:
+        parsed_diff_entry: DiffEntry = DiffEntry(stdout)
+        return parsed_diff_entry
+    except Exception as ex:
+        logger.warning(f"Unhandled Exception during parsing diff_entry: {ex}")
+        return ToolErrorInfo(
+            message=f"Unhandled Exception while trying to form a DiffEntry from {stdout}, exception was: {ex}",
+            supplied_arguments=supplied_arguments,
+        )
 
 
 def __reset_project_dir():

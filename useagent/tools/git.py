@@ -7,7 +7,8 @@ from pydantic_ai import RunContext
 
 from useagent.common.encoding import is_utf_8_encoded
 from useagent.common.guardrails import useagent_guard_rail
-from useagent.pydantic_models.artifacts.git import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff_store import DiffEntryKey
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.task_state import TaskState
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
@@ -193,10 +194,11 @@ def _commit_exists(repo: Path, commit: str) -> bool:
 
 
 async def extract_diff(
+    ctx: RunContext[TaskState],
     project_dir: Path | str | None = None,
-) -> DiffEntry | ToolErrorInfo:
+) -> DiffEntryKey | ToolErrorInfo:
     """
-    Extract the diff of the current state of the repository.
+    Extract a git-diff of the current state of the repository.
     This is achieved using `git diff` for both cached and uncached, i.E. will show all files in the index.
     This will also add all files in the current repository to the index using `git add .`
     For extracting other, existing diffs from commits consider `view_commit_as_diff`.
@@ -206,9 +208,50 @@ async def extract_diff(
         project_dir(Path|str|None, default None): Path at which to execute the extraction. If None, the current project dir will be used.
 
     Returns:
-        DiffEntry: The result of the diff extraction, or a ToolErrorInfo containing information of a miss-usage or command failure.
-                    The DiffEntry will be the exact diff, and you should not make changes to it, not to invalidate it or corrupt it.
+        DiffEntryKey: The key to find the resulting git patch in the diff_store, or a ToolErrorInfo containing information of a miss-usage or command failure.
     """
+    extract_result: DiffEntry | ToolErrorInfo = await _extract_diff(project_dir)
+    if isinstance(extract_result, ToolErrorInfo):
+        logger.debug(
+            f"[Tool] `extract_diff` resulted in a ToolError {extract_result.message}"
+        )
+        return extract_result
+    logger.debug(
+        f"[Tool] Successfully extracted a DiffEntry (with {len(extract_result.diff_content)} lines) from {str(project_dir)}"
+    )
+    try:
+        logger.debug("[Tool] Trying to add DiffEntry to DiffStore")
+        diff_id: DiffEntryKey = ctx.deps.diff_store._add_entry(extract_result)
+        logger.info(
+            f"[Tool] Added diff entry with ID: {diff_id} to `ctx.deps.diff_store`."
+        )
+        return diff_id
+    except ValueError as verr:
+        if "diff already exists" in str(verr):
+            logger.warning(
+                "[Tool] `extract_diff` returned a (already known) diff towards the `ctx.deps.diff_store`"
+            )
+            logger.debug(f"DiffStore was:{ctx.deps.diff_store}")
+            reversed_key_lookup = ctx.deps.diff_store.diff_to_id
+            existing_diff_id: DiffEntryKey = reversed_key_lookup[  # type: ignore
+                extract_result.diff_content
+            ]
+            return ToolErrorInfo(
+                message=f" `extract_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. Reuse {existing_diff_id} or reconsider what you want to achieve.",
+                supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
+            )
+        else:
+            raise verr
+    except Exception as ex:
+        return ToolErrorInfo(
+            message=f"An unhandled exception occurred during diff-extraction ({ex}), please reconsider what you were trying to do.",
+            supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
+        )
+
+
+async def _extract_diff(
+    project_dir: Path | str | None = None,
+) -> DiffEntry | ToolErrorInfo:
     if project_dir and isinstance(project_dir, str):
         project_dir = Path(project_dir)
     project_dir = project_dir or Path(".").absolute()
@@ -216,7 +259,7 @@ async def extract_diff(
     logger.info(
         f"[Tool] Invoked edit_tool `extract_diff`. Extracting a patch from {project_dir} (type: {type(project_dir)})"
     )
-
+    # TODO: Handle non-git repositories ... also, why is my `example-local.sh` not a git repo??
     if (
         guard_rail_tool_error := useagent_guard_rail(
             project_dir,
