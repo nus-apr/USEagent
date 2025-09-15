@@ -53,6 +53,27 @@ def _init_git_repo_without_content(repo_path: Path) -> None:
     )
 
 
+def _init_repo_with_tracked(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True
+    )
+    (tmp_path / "tracked.txt").write_text("t\n")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
+
+
+def _maybe_write_dotignore(tmp_path: Path, ignore: bool) -> None:
+    if not ignore:
+        return
+    (tmp_path / ".gitignore").write_text(
+        "**/.*\n" "!.gitignore\n" "!.gitattributes\n" "!.gitmodules\n"
+    )
+    subprocess.run(["git", "add", ".gitignore"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add ignore"], cwd=tmp_path, check=True)
+
+
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test__extract_diff_real_changes(tmp_path):
@@ -515,6 +536,172 @@ async def test__extract_diff_whitespace_only_change_behavior_should_show_change(
     # Baseline: by default whitespace diffs appear
     assert "diff --git" in result.diff_content
     assert "ws.txt" in result.diff_content
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test__extract_diff_hidden_file_in_root_should_show_when_not_ignored(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+
+    (tmp_path / ".hidden.txt").write_text("secret\n")
+    (tmp_path / "tracked.txt").write_text("t2\n")
+
+    result = await _extract_diff(
+        project_dir=tmp_path, exclude_hidden_folders_and_files_from_diff=False
+    )
+    assert isinstance(result, DiffEntry)
+    assert "tracked.txt" in result.diff_content
+    assert ".hidden.txt" in result.diff_content
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test__extract_diff_hidden_file_in_root_should_not_show_when_ignored(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+
+    (tmp_path / ".gitignore").write_text(
+        "**/.*\n!.gitignore\n!.gitattributes\n!.gitmodules\n"
+    )
+    subprocess.run(["git", "add", ".gitignore"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add ignore"], cwd=tmp_path, check=True)
+
+    (tmp_path / ".hidden.txt").write_text("secret\n")
+    (tmp_path / "tracked.txt").write_text("t2\n")
+
+    result = await _extract_diff(project_dir=tmp_path)
+    assert isinstance(result, DiffEntry)
+    assert "tracked.txt" in result.diff_content
+    assert ".hidden.txt" not in result.diff_content
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test__extract_diff_non_hidden_file_in_hidden_dir_should_show_when_not_ignored(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / "visible.txt").write_text("inside\n")
+    (tmp_path / "tracked.txt").write_text("t2\n")
+
+    result = await _extract_diff(project_dir=tmp_path)
+    assert isinstance(result, DiffEntry)
+    assert "tracked.txt" in result.diff_content
+    assert ".hidden/visible.txt" in result.diff_content
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test__extract_diff_non_hidden_file_in_hidden_dir_should_not_show_when_ignored(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+
+    (tmp_path / ".gitignore").write_text(
+        "**/.*\n!.gitignore\n!.gitattributes\n!.gitmodules\n"
+    )
+    subprocess.run(["git", "add", ".gitignore"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add ignore"], cwd=tmp_path, check=True)
+
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / "visible.txt").write_text("inside\n")
+    (tmp_path / "tracked.txt").write_text("t2\n")
+
+    result = await _extract_diff(project_dir=tmp_path)
+    assert isinstance(result, DiffEntry)
+    assert "tracked.txt" in result.diff_content
+    assert ".hidden/visible.txt" not in result.diff_content
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test__extract_diff_hidden_file_in_hidden_dir_should_show_when_not_ignored_and_extract_diff_wants_secret_files(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / ".verysecret").write_text("shh\n")
+    (tmp_path / "tracked.txt").write_text("t2\n")
+
+    result = await _extract_diff(
+        project_dir=tmp_path, exclude_hidden_folders_and_files_from_diff=False
+    )
+    assert isinstance(result, DiffEntry)
+    assert "tracked.txt" in result.diff_content
+    assert ".hidden/.verysecret" in result.diff_content
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test__extract_diff_hidden_file_in_hidden_dir_should_not_show_when_default_extract_diffs_ignores_hidden(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / ".verysecret").write_text("shh\n")
+    (tmp_path / "tracked.txt").write_text("t2\n")
+
+    result = await _extract_diff(project_dir=tmp_path)
+    assert isinstance(result, DiffEntry)
+    assert "tracked.txt" in result.diff_content
+    assert ".hidden/.verysecret" not in result.diff_content
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test__extract_diff_hidden_file_in_hidden_dir_should_not_show_when_ignored_and_extract_diff_does_not_want_secret_files(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+
+    (tmp_path / ".gitignore").write_text(
+        "**/.*\n!.gitignore\n!.gitattributes\n!.gitmodules\n"
+    )
+    subprocess.run(["git", "add", ".gitignore"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add ignore"], cwd=tmp_path, check=True)
+
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / ".verysecret").write_text("shh\n")
+    (tmp_path / "tracked.txt").write_text("t2\n")
+
+    result = await _extract_diff(
+        project_dir=tmp_path, exclude_hidden_folders_and_files_from_diff=False
+    )
+    assert isinstance(result, DiffEntry)
+    assert "tracked.txt" in result.diff_content
+    assert ".hidden/.verysecret" not in result.diff_content
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test__extract_diff_hidden_file_in_hidden_dir_should_not_show_when_ignored_and_extract_diff_wants_secret_files(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+
+    (tmp_path / ".gitignore").write_text(
+        "**/.*\n!.gitignore\n!.gitattributes\n!.gitmodules\n"
+    )
+    subprocess.run(["git", "add", ".gitignore"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add ignore"], cwd=tmp_path, check=True)
+
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / ".verysecret").write_text("shh\n")
+    (tmp_path / "tracked.txt").write_text("t2\n")
+
+    result = await _extract_diff(
+        project_dir=tmp_path, exclude_hidden_folders_and_files_from_diff=True
+    )
+    assert isinstance(result, DiffEntry)
+    assert "tracked.txt" in result.diff_content
+    assert ".hidden/.verysecret" not in result.diff_content
 
 
 ### ======================================

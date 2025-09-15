@@ -594,8 +594,6 @@ async def read_file_as_diff(
 
 
 async def _read_file_as_diff(path_to_file: Path | str) -> DiffEntry | ToolErrorInfo:
-
-    # TODO: Edit this ! Use RunContext as usual.
     logger.info(
         f"[Tool] Invoked edit_tool `read_file_as_diff`. Extracting a file as patch from {path_to_file} (type: {type(path_to_file)})"
     )

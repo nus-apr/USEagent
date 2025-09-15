@@ -196,6 +196,7 @@ def _commit_exists(repo: Path, commit: str) -> bool:
 async def extract_diff(
     ctx: RunContext[TaskState],
     project_dir: Path | str | None = None,
+    exclude_hidden_folders_and_files_from_diff: bool = True,
 ) -> DiffEntryKey | ToolErrorInfo:
     """
     Extract a git-diff of the current state of the repository.
@@ -206,11 +207,15 @@ async def extract_diff(
 
     Args:
         project_dir(Path|str|None, default None): Path at which to execute the extraction. If None, the current project dir will be used.
+        exclude_hidden_folders_and_files_from_diff(bool): Whether or not hidden files and folders (.venv, .gitignore) will be considered for the patch. Default: False, hidden folders are ignored.
 
     Returns:
         DiffEntryKey: The key to find the resulting git patch in the diff_store, or a ToolErrorInfo containing information of a miss-usage or command failure.
     """
-    extract_result: DiffEntry | ToolErrorInfo = await _extract_diff(project_dir)
+    extract_result: DiffEntry | ToolErrorInfo = await _extract_diff(
+        project_dir=project_dir,
+        exclude_hidden_folders_and_files_from_diff=exclude_hidden_folders_and_files_from_diff,
+    )
     if isinstance(extract_result, ToolErrorInfo):
         logger.debug(
             f"[Tool] `extract_diff` resulted in a ToolError {extract_result.message}"
@@ -251,6 +256,7 @@ async def extract_diff(
 
 async def _extract_diff(
     project_dir: Path | str | None = None,
+    exclude_hidden_folders_and_files_from_diff: bool = True,
 ) -> DiffEntry | ToolErrorInfo:
     if project_dir and isinstance(project_dir, str):
         project_dir = Path(project_dir)
@@ -269,22 +275,36 @@ async def _extract_diff(
         return guard_rail_tool_error
 
     if not project_dir.exists():
+        logger.warning(
+            f"[Tool] trying to run extract-diff on non existent path: {str(project_dir)}"
+        )
         return ToolErrorInfo(
             message=f"Directory {project_dir} does not exist.",
             supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
         )
     if not project_dir.is_dir():
+        logger.warning(
+            f"[Tool] trying to run extract-diff on a file {str(project_dir)} (folder needed)"
+        )
         return ToolErrorInfo(
             message=f"Filepath {project_dir} is a directory - `extract_diff` is meant for folders.",
             supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
         )
 
     with cd(project_dir):
-        # Git Add is necessary to see changes to newly created files with the git diff
-        await run("git add --intent-to-add .")
-        _, stdout, stderr = await run("git diff HEAD")
+        # Git Add -N is necessary to see changes to newly created files with the git diff
+        git_add_command = (
+            "git add --intent-to-add . ':(glob,exclude)**/.*'"
+            if exclude_hidden_folders_and_files_from_diff
+            else "git add --intent-to-add ."
+        )
+        await run(git_add_command)
+        exit_code, stdout, stderr = await run("git diff HEAD")
 
-        if stderr:
+        if exit_code != 0 and stderr:
+            logger.warning(
+                f"[Tool] extracting diff exited non-zero {exit_code}: {str(stderr)}"
+            )
             return ToolErrorInfo(
                 message=f"Failed to extract diff: {stderr}",
                 supplied_arguments=[
@@ -299,7 +319,7 @@ async def _extract_diff(
                 supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
             )
         logger.debug(
-            f"[Tool] edit_tool `extract_diff`: Received {stdout[:25]} ... from {project_dir}"
+            f"[Tool] edit_tool `_extract_diff`: Received {stdout[:25]} ... from {project_dir}"
         )
 
         # return CLIResult(output=f"Here's the diff of the current state:\n{stdout}")
