@@ -222,7 +222,7 @@ async def extract_diff(
         )
         return extract_result
     logger.debug(
-        f"[Tool] Successfully extracted a DiffEntry (with {len(extract_result.diff_content)} lines) from {str(project_dir)}"
+        f"[Tool] Successfully extracted a DiffEntry (with {len(extract_result.diff_content)} lines) from {str(project_dir) if project_dir else '(default workdir)'}"
     )
     try:
         logger.debug("[Tool] Trying to add DiffEntry to DiffStore")
@@ -242,7 +242,7 @@ async def extract_diff(
                 extract_result.diff_content
             ]
             return ToolErrorInfo(
-                message=f" `extract_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. Reuse {existing_diff_id} or reconsider what you want to achieve.",
+                message=f" `extract_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. It was not added to the diff-store. Reuse {existing_diff_id} or make further changes to create another diff. The corresponding diff was: \n{extract_result}",
                 supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
             )
         else:
@@ -322,8 +322,17 @@ async def _extract_diff(
             f"[Tool] edit_tool `_extract_diff`: Received {stdout[:25]} ... from {project_dir}"
         )
 
-        # return CLIResult(output=f"Here's the diff of the current state:\n{stdout}")
         output = stdout + "\n" if not stdout.endswith("\n") else stdout
+
+        if output and output.strip() and len(output.splitlines()) > 10000:
+            logger.warning(
+                f"[Tool] `extract_diff` produced a large patch with {len(output.splitlines())} lines changed - this is rejected"
+            )
+            return ToolErrorInfo(
+                message=f"The received patch was too large and is likely an error. It had {len(output.splitlines())} lines, which is too much to handle. Reconsider your scope for patch extraction, edit the .gitignore to achieve a smaller patch or restore some of the files to their unchanged state.",
+                supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
+            )
+
         parsed = DiffEntry(output)
         return parsed
 

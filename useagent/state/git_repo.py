@@ -39,6 +39,10 @@ class GitRepository:
             ["git", "config", "--local", "color.ui", "never"],
             cwd=self.local_path,
         )
+        run_command(
+            ["git", "config", "--local", "init.defaultBranch", "master"],
+            cwd=self.local_path,
+        )
 
     def initialize_git_if_needed(self) -> None:
         # DevNote:
