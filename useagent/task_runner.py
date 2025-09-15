@@ -27,9 +27,12 @@ def run(
     output_dir: str,
     output_type: Literal[CodeChange, Answer, Action] = CodeChange,
 ):
-    start_time_s = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    task_output_dir = Path(output_dir) / f"{task.uid}_{start_time_s}"
+    start_time = datetime.now()
+
+    task_output_dir = (
+        Path(output_dir) / f"{task.uid}_{start_time.strftime("%Y-%m-%d_%H-%M-%S")}"
+    )
     task_output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -41,6 +44,12 @@ def run(
             logger.warning(f"Writing non-patch swe entry to {task_output_dir}")
             task.postprocess_swebench_task(result=None, output_dir=task_output_dir)
     finally:
+        end_time = datetime.now()
+        duration = end_time - start_time
+        logger.info(
+            f"Task {task.uid} ended after {(duration.total_seconds()):.2f} seconds"
+        )
+
         bash_history_file: Path = task_output_dir / "bash_commands.jsonl.log"
         logger.debug(f"Dumping Bash History to {bash_history_file}")
         with open(bash_history_file, "w") as f:

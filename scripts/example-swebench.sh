@@ -7,9 +7,10 @@ set -a
 source ./.env
 set +a
 
-TASK_ID=sphinx-doc__sphinx-8265
-#MODEL_NAME=google-gla:gemini-2.5-flash
-MODEL_NAME=openai:gpt-5-mini
+#TASK_ID=sphinx-doc__sphinx-8265
+TASK_ID=matplotlib__matplotlib-26466
+MODEL_NAME=google-gla:gemini-2.5-flash
+#MODEL_NAME=openai:gpt-5-mini
 
 if [[ "$1" == "--build" ]]; then
   docker rm -f useagent-turbo-test 2>/dev/null
