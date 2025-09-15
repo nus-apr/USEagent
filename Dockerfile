@@ -64,6 +64,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends sudo && rm -rf 
 RUN useradd -m -u 0 -o -g 0 app
 USER app
 
+RUN git config --global init.defaultBranch main
+
 # Most Tasks will work (not start!) in /tmp/working_dir, we can help some tools by setting this as default cwd
 RUN mkdir /tmp/working_dir
 WORKDIR /tmp/working_dir
