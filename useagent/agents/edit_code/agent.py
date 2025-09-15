@@ -4,6 +4,7 @@ from pydantic_ai import Agent
 from pydantic_ai.tools import Tool
 
 import useagent.common.constants as constants
+from useagent.common.context_window import fit_messages_into_context_window
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
@@ -50,7 +51,21 @@ def init_agent(
             Tool(read_file_as_diff, takes_ctx=True),
             Tool(replace_file),
         ],
+        history_processors=[fit_messages_into_context_window],
     )
+
+    @agent.instructions
+    def add_instructions_on_git_diffs(self) -> str:
+        return """
+        You are tasked to create a git diff using the specified and relevant tools. 
+        The relevant extraction tools will make a git diff for you, based on the file changes you made, and only return a reference to the diff. 
+
+        Assume that your results cannot be merged or combined upstream - you must report a single diff that contains all changes at once. 
+
+        Pay special attention to the ToolErrors you might encounter, especially those that you see frequently. 
+        You should not call the extraction tools `read_file_as_diff` and `extract_diff` twice in a row (with the same parameters) as they will not result in a different result. 
+        If you see any ToolError from these extraction tools, think deeply whether your available diffs are sufficient, or exactly which changes are necessary to create diffs closer to your instructions.
+        """
 
     @agent.instructions
     def add_output_instructions(self) -> str:

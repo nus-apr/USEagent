@@ -579,7 +579,7 @@ async def read_file_as_diff(
                 extract_result.diff_content
             ]
             return ToolErrorInfo(
-                message=f" `read_file_as_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. Reuse {existing_diff_id} or reconsider what you want to achieve.",
+                message=f" `read_file_as_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. Not returning / storing a new diff. Reuse {existing_diff_id} or reconsider what you want to achieve.",
                 supplied_arguments=[ArgumentEntry("project_dir", str(path_to_file))],
             )
         else:
@@ -622,6 +622,15 @@ async def _read_file_as_diff(path_to_file: Path | str) -> DiffEntry | ToolErrorI
     if stderr:
         return ToolErrorInfo(
             message=f"Failed to make a patch from file: {stderr}",
+            supplied_arguments=supplied_arguments,
+        )
+
+    if stdout and stdout.strip() and len(stdout.splitlines()) > 1000:
+        logger.warning(
+            f"[Tool] `read_file_as_diff` hit a huge file with {len(stdout.splitlines())} lines - aborting, not making a patch"
+        )
+        return ToolErrorInfo(
+            message=f"Received a (too) large file when using `read_file_as_diff` - patch with {len(stdout.splitlines())} lines.",
             supplied_arguments=supplied_arguments,
         )
 

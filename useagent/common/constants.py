@@ -43,11 +43,12 @@ EXECUTE_TESTS_RETRIES: Final[int] = 3
 EXECUTE_TESTS_AGENT_BASH_TOOL_DELAY: Final[float] = 0.35  # In Seconds
 EXECUTE_TESTS_OUTPUT_RETRIES: Final[int] = 8
 
-EDIT_CODE_AGENT_REQUEST_LIMIT: Final[int] = 135
-EDIT_CODE_RETRIES: Final[int] = 4
-EDIT_CODE_AGENT_RETRIES: Final[int] = 8
 # DevNote: The diff-entries are hard to get right for the model. But they must fit their schema to make any sense.
-EDIT_CODE_AGENT_OUTPUT_RETRIES: Final[int] = 45
+# It's also wasting a lot on generating the same diffs and chewing on these git diffs...
+EDIT_CODE_AGENT_REQUEST_LIMIT: Final[int] = 200
+EDIT_CODE_RETRIES: Final[int] = 5
+EDIT_CODE_AGENT_RETRIES: Final[int] = 17
+EDIT_CODE_AGENT_OUTPUT_RETRIES: Final[int] = 20
 
 VCS_AGENT_REQUEST_LIMIT: Final[int] = 100
 VCS_AGENT_RETRIES: Final[int] = 6

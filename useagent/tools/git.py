@@ -242,12 +242,15 @@ async def extract_diff(
                 extract_result.diff_content
             ]
             return ToolErrorInfo(
-                message=f" `extract_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. It was not added to the diff-store. Reuse {existing_diff_id} or make further changes to create another diff. The corresponding diff was: \n{extract_result}",
+                message=f" `extract_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. It was not added to the diff-store. Reuse {existing_diff_id} or make further changes to create another diff. Never rerun this tool without changes. The corresponding diff was: \n{extract_result}",
                 supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
             )
         else:
             raise verr
     except Exception as ex:
+        logger.error(
+            f"Hit an unhandled exception ({ex}) while extracting diff from {str(project_dir) if project_dir else '(default directory)'}"
+        )
         return ToolErrorInfo(
             message=f"An unhandled exception occurred during diff-extraction ({ex}), please reconsider what you were trying to do.",
             supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
@@ -265,7 +268,6 @@ async def _extract_diff(
     logger.info(
         f"[Tool] Invoked edit_tool `extract_diff`. Extracting a patch from {project_dir} (type: {type(project_dir)})"
     )
-    # TODO: Handle non-git repositories ... also, why is my `example-local.sh` not a git repo??
     if (
         guard_rail_tool_error := useagent_guard_rail(
             project_dir,
@@ -324,7 +326,7 @@ async def _extract_diff(
 
         output = stdout + "\n" if not stdout.endswith("\n") else stdout
 
-        if output and output.strip() and len(output.splitlines()) > 10000:
+        if output and output.strip() and len(output.splitlines()) > 2500:
             logger.warning(
                 f"[Tool] `extract_diff` produced a large patch with {len(output.splitlines())} lines changed - this is rejected"
             )
