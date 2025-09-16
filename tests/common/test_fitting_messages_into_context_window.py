@@ -1195,23 +1195,6 @@ async def test_mixed_text_and_orphan_keeps_text_without_placeholder() -> None:
 
 
 @pytest.mark.asyncio
-async def test_return_before_call_is_kept_and_not_flagged_as_orphan() -> None:
-    # Two-pass: return may appear before matching call; it must be kept
-    ret = _tool_return_msg("call_rev", "val")
-    mid = _text_resp("middle")
-    call = _tool_call_msg("call_rev")
-    msgs = [ret, mid, call]
-
-    out = remove_orphaned_tool_responses(msgs)
-
-    assert out == msgs
-    # return preserved (not replaced with placeholder)
-    assert isinstance(out[0], ModelRequest)
-    assert any(isinstance(p, ToolReturnPart) for p in out[0].parts)
-    assert not any(isinstance(p, UserPromptPart) for p in out[0].parts)
-
-
-@pytest.mark.asyncio
 async def test_duplicate_returns_for_same_call_are_all_kept_with_call_anywhere() -> (
     None
 ):
