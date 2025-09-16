@@ -32,7 +32,7 @@ from useagent.tools.bash import (
     init_bash_tool,
     make_bash_tool_for_agent,
 )
-from useagent.tools.edit import init_edit_tools, read_file_as_diff
+from useagent.tools.edit import init_edit_tools
 from useagent.tools.meta import (  # Agent-State Tools; Agent-Agent Tools
     _gather_checklist,
     _set_usage_tracker,
@@ -77,7 +77,8 @@ def init_agent(
                 ),
                 max_retries=4,
             ),
-            Tool(read_file_as_diff),
+            # TODO: Figure out how to make this work with SWE - we often see a patch as a full file rather than a delta.
+            # Tool(read_file_as_diff),
             # Agent-Agent Tools
             Tool(edit_code, takes_ctx=True, max_retries=constants.EDIT_CODE_RETRIES),
             Tool(
@@ -176,6 +177,10 @@ def agent_loop(
             DOUBT_REITERATION < constants.MAX_DOUBT_REITERATIONS
             and result.output
             and result.output.doubts
+            and result.output.doubts.lower() != "none"
+            and result.output.doubts.lower() != "none."
+            and result.output.doubts.lower() != "no"
+            and result.output.doubts.lower() != "no."
         ):
             try:
                 # TODO: store the result? To have something in case of timeout?
