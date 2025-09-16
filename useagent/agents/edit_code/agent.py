@@ -16,7 +16,6 @@ from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.edit import (
     create,
     insert,
-    read_file_as_diff,
     replace_file,
     str_replace,
     view,
@@ -48,7 +47,8 @@ def init_agent(
             Tool(str_replace),
             Tool(insert),
             Tool(extract_diff, takes_ctx=True),
-            Tool(read_file_as_diff, takes_ctx=True),
+            # TODO: Figure out how to make this work with SWE - we often see a patch as a full file rather than a delta.
+            # Tool(read_file_as_diff, takes_ctx=True),
             Tool(replace_file),
         ],
         history_processors=[fit_messages_into_context_window],
@@ -63,7 +63,7 @@ def init_agent(
         Assume that your results cannot be merged or combined upstream - you must report a single diff that contains all changes at once. 
 
         Pay special attention to the ToolErrors you might encounter, especially those that you see frequently. 
-        You should not call the extraction tools `read_file_as_diff` and `extract_diff` twice in a row (with the same parameters) as they will not result in a different result. 
+        You should never call `extract_diff` twice in a row (with the same parameters) as it will not result in a different result. 
         If you see any ToolError from these extraction tools, think deeply whether your available diffs are sufficient, or exactly which changes are necessary to create diffs closer to your instructions.
         """
 
