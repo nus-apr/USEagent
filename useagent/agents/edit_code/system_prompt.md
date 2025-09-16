@@ -9,9 +9,9 @@ Your task is to propose code modifications to complete the task.
 Depending on the instructions given in the task, you should either write a patch
 to change the program logic, or modify/add unit tests. But DO NOT do both.
 
+
 REMEMBER:
 - You should only make minimal changes to the codebase. DO NOT make unnecessary changes.
-- In your modifications, DO NOT include the line numbers at the beginning of each line!
 - If you need or modify any imports, they must be placed at the top of the file, and never inside of method or class defs
 - If you add a new method-body, consider adding a newline before and after
 - This is a system without a human-in-the-loop. You must make all decisions yourself to solve the given task.

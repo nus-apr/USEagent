@@ -11,7 +11,7 @@ from useagent.microagents.decorators import (
     conditional_microagents_triggers,
 )
 from useagent.microagents.management import load_microagents_from_project_dir
-from useagent.pydantic_models.artifacts.git.diff import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff_store import DiffEntryKey
 from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.edit import (
     create,
@@ -29,7 +29,7 @@ SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 @alias_for_microagents("EDIT")
 def init_agent(
     config: AppConfig | None = None,
-) -> Agent[TaskState, DiffEntry]:
+) -> Agent[TaskState, DiffEntryKey]:  # type: ignore
     if config is None:
         config = ConfigSingleton.config
     assert config is not None
@@ -38,7 +38,7 @@ def init_agent(
         config.model,
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
-        output_type=DiffEntry,
+        output_type=DiffEntryKey,  # type: ignore
         retries=constants.EDIT_CODE_AGENT_RETRIES,
         output_retries=constants.EDIT_CODE_AGENT_OUTPUT_RETRIES,
         tools=[
@@ -60,7 +60,7 @@ def init_agent(
         You are tasked to create a git diff using the specified and relevant tools. 
         The relevant extraction tools will make a git diff for you, based on the file changes you made, and only return a reference to the diff. 
 
-        Assume that your results cannot be merged or combined upstream - you must report a single diff that contains all changes at once. 
+        Assume that your results cannot be merged or combined upstream - you must report a single diff that contains all changes at once.
 
         Pay special attention to the ToolErrors you might encounter, especially those that you see frequently. 
         You should never call `extract_diff` twice in a row (with the same parameters) as it will not result in a different result. 
@@ -69,13 +69,12 @@ def init_agent(
 
     @agent.instructions
     def add_output_instructions(self) -> str:
-        return (
-            """
+        return """
         ------------------------------------------------
         Output:
-        Your expected output is a `DiffEntry`. 
+        Your expected output is a `DiffEntryKey`. 
+        After you called a method that extracts git diffs, a successful extraction will store the DiffEntry in your TaskState and return you a diff_entry. 
+        A diffentry must match the pattern `diff_XXX` where XXX is a positive integer. 
         """
-            + DiffEntry.get_output_instructions()
-        )
 
     return agent

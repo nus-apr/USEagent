@@ -321,7 +321,7 @@ async def edit_code(
         instruction (str): Instruction for the code edit. The instrution should be very specific, typically should include where in the codebase to edit (files, lines, etc.), what to change, and how to change it.
 
     Returns:
-        DiffEntry: A unified diff of the changes that can be applied to the codebase.
+        DiffEntryKey: A pointer into your TaskState's diff_store that contains a unified diff of the changes that can be applied to the codebase.
     """
     logger.info(f"[MetaAgent] Invoked edit_code with instruction: {instruction}")
     edit_code_agent = init_edit_code_agent()
