@@ -112,6 +112,7 @@ class SWEbenchTask(Task):
             - Patch refers to a `git patch`. You have tools that generate and manage git patches for you.
             - Assume the project must be executable and testable, and that you are capable of installing all necessary dependencies if you use the right commands. Think about where you could find dependencies that appear as missing in error messages. 
             - You can (and should) use your tools to verify the validity of the patch-format
+            - Patches must target the projects source, and not target derivatives such as python files in virtual environments
 
             REMEMBER: Running tests for the projects is crucial, and you must bring the project into an executable state to retrieve test results. NEVER suggest a patch that was not evaluated against the test-suite. 
             """
