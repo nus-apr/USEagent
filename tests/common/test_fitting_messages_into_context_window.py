@@ -6,13 +6,19 @@ from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
     TextPart,
+    ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
 )
 
-from useagent.common.context_window import MARKER_TEXT
+from useagent.common.context_window import (
+    MARKER_TEXT,
+)
 from useagent.common.context_window import count_tokens as real_count_tokens
-from useagent.common.context_window import fit_messages_into_context_window
+from useagent.common.context_window import (
+    fit_messages_into_context_window,
+    remove_orphaned_tool_responses,
+)
 from useagent.config import ConfigSingleton
 
 
@@ -760,3 +766,581 @@ async def test_orphan_only_input_results_in_placeholder_or_cleaned_not_salvage_n
         isinstance(p, ToolReturnPart) for p in getattr(out[0], "parts", []) or []
     )
     assert no_tool_returns
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "messages,limit",
+    [
+        (["x" * 500], 200),
+        ([make_text_resp("a" * 400), make_text_resp("b" * 400)], 500),
+        ([make_tool_return("t1", "r" * 300), make_text_resp("keep" * 80)], 120),
+        ([make_text_resp("keep" * 80), make_tool_return("t2", "r" * 400)], 120),
+        ([make_tool_return("t3", "r" * 400)], 80),
+        (["", "tiny", ""], 10),
+    ],
+)
+async def test_nonempty_input_should_not_return_empty(
+    messages: list[Any], limit: int, patch_count_tokens
+) -> None:
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = limit
+    out = await fit_messages_into_context_window(
+        messages, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+    assert out
+    total = await patch_count_tokens(out)
+    assert total <= ConfigSingleton.config.lookup_model_context_window()
+
+
+@pytest.mark.asyncio
+async def test_survivor_order_should_be_preserved(patch_count_tokens) -> None:
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 150
+    ids = [f"id_{i}" for i in range(6)]
+    # Long fillers to force drops; short tagged survivors interleaved
+    msgs = [
+        make_text_resp("X" * 200),
+        make_text_resp(ids[0]),
+        make_text_resp("Y" * 180),
+        make_text_resp(ids[1]),
+        make_text_resp(ids[2]),
+        make_text_resp("Z" * 300),
+        make_text_resp(ids[3]),
+        make_text_resp("W" * 300),
+        make_text_resp(ids[4]),
+        make_text_resp(ids[5]),
+    ]
+    out = await fit_messages_into_context_window(
+        msgs, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+
+    # Extract survivor id-tag contents (exact match on our tags)
+    def content_str(m: Any) -> str:
+        return getattr(getattr(m, "parts", [TextPart(content="")])[0], "content", "")
+
+    survivors = [c for c in map(content_str, out) if c in ids]
+    # survivors must appear in the same relative order as original ids
+    assert survivors == [i for i in ids if i in survivors]
+
+
+@pytest.mark.asyncio
+async def test_multiple_runs_should_be_idempotent_over_5_calls(
+    patch_count_tokens,
+) -> None:
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 300
+    msgs = [
+        make_text_resp("A" * 250),
+        make_text_resp("B" * 250),
+        make_tool_return("t", "C" * 200),
+    ]
+    # First normalization
+    baseline = await fit_messages_into_context_window(
+        msgs, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+    prev = baseline
+    for _ in range(4):
+        prev = await fit_messages_into_context_window(
+            prev, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+        )
+        assert prev == baseline
+    total = await patch_count_tokens(prev)
+    assert total <= ConfigSingleton.config.lookup_model_context_window()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "placement",
+    ["head", "mid", "tail"],
+)
+async def test_no_toolreturnpart_anywhere_after_processing_when_over_budget(
+    placement: str, patch_count_tokens
+) -> None:
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 100
+    orphan = make_tool_return("call_orphan", "r" * 120)
+    a = make_text_resp("a" * 90)
+    b = make_text_resp("b" * 90)
+    if placement == "head":
+        msgs = [orphan, a, b]
+    elif placement == "mid":
+        msgs = [a, orphan, b]
+    else:
+        msgs = [a, b, orphan]
+    out = await fit_messages_into_context_window(
+        msgs, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+    assert out
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in out
+    )
+    total = await patch_count_tokens(out)
+    assert total <= ConfigSingleton.config.lookup_model_context_window()
+
+
+@pytest.mark.asyncio
+async def test_trimming_changes_newest_and_never_expands_others(
+    patch_count_tokens,
+) -> None:
+    budget = 200
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = budget
+    newest_cap = int(budget * 0.60)  # 120
+    second_cap = int(budget * 0.30)  # 60
+
+    # Use raw lengths to match the patched counter semantics
+    second_txt = "s" * second_cap
+    newest_big = "n" * (newest_cap + 80)
+
+    msgs = [
+        make_model_repsonse_message(second_txt),  # second-newest (<= cap)
+        make_model_repsonse_message(newest_big),  # newest (> cap)
+    ]
+
+    first = await fit_messages_into_context_window(
+        msgs, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+
+    newest_content = getattr(first[-1].parts[0], "content", "")
+    assert _has_marker(first[-1]) or len(newest_content) < len(newest_big)
+
+    second_content = getattr(first[-2].parts[0], "content", "")
+    assert len(second_content) <= len(second_txt)
+
+    total = await patch_count_tokens(first)
+    assert total <= ConfigSingleton.config.lookup_model_context_window()
+
+    second = await fit_messages_into_context_window(
+        first, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+    assert second == first
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("limit", [50, 100, 200, 500])
+async def test_nonempty_input_never_returns_empty_variant_2(
+    limit: int, patch_count_tokens
+) -> None:
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = limit
+    cases = [
+        [make_text_resp("a" * (limit * 2))],
+        [make_text_resp("a" * (limit // 2)), make_text_resp("b" * (limit * 2))],
+        [make_tool_return("t", "x" * (limit * 3))],
+        [
+            make_text_resp("u" * (limit)),
+            make_tool_return("t2", "y" * (limit * 2)),
+            make_text_resp("z"),
+        ],
+    ]
+    for msgs in cases:
+        out = await fit_messages_into_context_window(
+            msgs, safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+        )
+        assert out  # non-empty
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_instructions_are_trimmed_when_over_budget() -> None:
+    # Uses real tokenizer; requires code change above.
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 200
+    # Large instructions, tiny part
+    req = ModelRequest(
+        parts=[UserPromptPart(content="hi")],
+        instructions="I" * 2000,  # big
+    )
+    out = await fit_messages_into_context_window(
+        [req], safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+    assert out and isinstance(out[0], ModelRequest)
+    # Either instructions got reduced or converted into truncated text content
+    instr = getattr(out[0], "instructions", "")
+    all_text = "".join(
+        getattr(p, "content", "") or "" for p in getattr(out[0], "parts", []) or []
+    )
+    assert (instr and len(instr) < 2000) or MARKER_TEXT in all_text
+    total = await real_count_tokens(out)
+    assert total <= ConfigSingleton.config.lookup_model_context_window()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_real_count_tokens_should_include_modelrequest_instructions() -> None:
+    """
+    If a ModelRequest has only `instructions`, token counting must reflect them.
+    """
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 1000
+
+    req = ModelRequest(parts=[], instructions="I" * 1000)  # only instructions
+    total = await real_count_tokens([req])
+    assert isinstance(total, int)
+    # Expect non-zero once instructions are included in counting
+    assert total > 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_fit_two_messages_large_instructions_on_newest_should_reduce_and_fit() -> (
+    None
+):
+    """
+    Per-turn caps should apply to newest message even if the excess comes from instructions.
+    """
+    budget = 200
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = budget
+
+    older = ModelResponse(parts=[TextPart(content="small")])
+    newest = ModelRequest(
+        parts=[UserPromptPart(content="tiny")], instructions="N" * 1000
+    )
+
+    out = await fit_messages_into_context_window(
+        [older, newest], safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+    assert len(out) == 2
+
+    # Newest must be changed (marked in parts or instructions shortened/cleared)
+    out_newest = out[-1]
+    assert isinstance(out_newest, ModelRequest)
+    instr_after = getattr(out_newest, "instructions", "") or ""
+    parts_text = "".join(
+        getattr(p, "content", "") or "" for p in getattr(out_newest, "parts", []) or []
+    )
+    assert MARKER_TEXT in parts_text or len(instr_after) < 1000 or instr_after == ""
+
+    total = await real_count_tokens(out)
+    assert total <= ConfigSingleton.config.lookup_model_context_window()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_fit_single_request_with_only_instructions_should_truncate_or_mark() -> (
+    None
+):
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = 200
+    # Make instructions that are definitely > budget tokens
+    big_instr = await _text_with_min_tokens(600)  # comfortably above 200
+
+    req = ModelRequest(parts=[], instructions=big_instr)
+
+    out = await fit_messages_into_context_window(
+        [req], safety_buffer=1.0, delay_between_model_calls_in_seconds=0.0
+    )
+
+    assert out and isinstance(out[0], ModelRequest)
+    m: ModelRequest = out[0]
+
+    instr_after = getattr(m, "instructions", "") or ""
+    parts_text = "".join(
+        getattr(p, "content", "") or "" for p in getattr(m, "parts", []) or []
+    )
+    # Must have changed: either instructions shrunk, moved into parts w/ marker, or cleared
+    assert (
+        len(instr_after) < len(big_instr)
+        or MARKER_TEXT in parts_text
+        or instr_after == ""
+    )
+
+    total = await real_count_tokens(out)
+    assert total <= ConfigSingleton.config.lookup_model_context_window()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_per_turn_caps_apply_to_instructions_exact_boundary_is_stable() -> None:
+    budget = 200
+    newest_cap = int(budget * 0.60)  # 120
+    second_cap = int(budget * 0.30)  # 60
+    ConfigSingleton.config.context_window_limits["openai:gpt-5-mini"] = budget
+
+    # Build second-newest to be ~exactly at its cap in tokens
+    second_exact_txt = await _text_with_min_tokens(second_cap)
+    # Newest blows its per-turn cap via instructions
+    newest_instr = await _text_with_min_tokens(newest_cap + 150)
+
+    second_msg = ModelResponse(parts=[TextPart(content=second_exact_txt)])
+    newest_msg = ModelRequest(
+        parts=[UserPromptPart(content="ok")], instructions=newest_instr
+    )
+
+    out = await fit_messages_into_context_window(
+        [second_msg, newest_msg],
+        safety_buffer=1.0,
+        delay_between_model_calls_in_seconds=0.0,
+    )
+    assert len(out) == 2
+
+    # Second-newest should not grow; it can remain unchanged
+    out_second = out[-2]
+    assert isinstance(out_second, ModelResponse)
+    second_after = getattr(out_second.parts[0], "content", "")
+    assert len(second_after) <= len(second_exact_txt)
+
+    # Newest should be changed (marker in parts OR shorter instructions OR cleared)
+    out_newest = out[-1]
+    assert isinstance(out_newest, ModelRequest)
+    instr_after = getattr(out_newest, "instructions", "") or ""
+    parts_text = "".join(
+        getattr(p, "content", "") or "" for p in getattr(out_newest, "parts", []) or []
+    )
+    assert (
+        MARKER_TEXT in parts_text
+        or len(instr_after) < len(newest_instr)
+        or instr_after == ""
+    )
+
+    total = await real_count_tokens(out)
+    assert total <= ConfigSingleton.config.lookup_model_context_window()
+
+
+### Regression on Orphaned Messages
+
+
+def _tool_call_msg(call_id: str) -> ModelResponse:
+    return ModelResponse(
+        parts=[ToolCallPart(tool_name="dummy", args={}, tool_call_id=call_id)]
+    )
+
+
+def _tool_return_msg(call_id: str, content: str = "ok") -> ModelRequest:
+    return ModelRequest(
+        parts=[ToolReturnPart(tool_name="dummy", tool_call_id=call_id, content=content)]
+    )
+
+
+def _text_resp(s: str) -> ModelResponse:
+    return ModelResponse(parts=[TextPart(content=s)])
+
+
+# --- New behavior: orphan returns are replaced in-place with a small user message ---
+
+
+@pytest.mark.asyncio
+async def test_orphan_leading_and_middle_are_replaced_with_placeholders() -> None:
+    orphan1 = _tool_return_msg("call_a")
+    mid_text = _text_resp("hello")
+    orphan2 = _tool_return_msg("call_b")
+    tail_call = _tool_call_msg("call_c")  # no return present, fine
+    msgs = [orphan1, mid_text, orphan2, tail_call]
+
+    out = remove_orphaned_tool_responses(msgs)
+
+    assert len(out) == 4  # positions preserved via placeholders
+    # pos 0 placeholder
+    assert isinstance(out[0], ModelRequest)
+    assert len(out[0].parts) == 1 and isinstance(out[0].parts[0], UserPromptPart)
+    assert "removed" in (out[0].parts[0].content or "").lower()
+    # pos 1 unchanged
+    assert out[1] == mid_text
+    # pos 2 placeholder
+    assert isinstance(out[2], ModelRequest)
+    assert len(out[2].parts) == 1 and isinstance(out[2].parts[0], UserPromptPart)
+    assert "removed" in (out[2].parts[0].content or "").lower()
+    # pos 3 unchanged tool call
+    assert out[3] == tail_call
+    # no tool returns remain
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in out
+    )
+
+
+@pytest.mark.asyncio
+async def test_trailing_orphan_is_replaced_with_placeholder() -> None:
+    call = _tool_call_msg("call_a")
+    kept_ret = _tool_return_msg("call_a", "ok")
+    orphan_trailer = _tool_return_msg("no_match", "drop")
+    msgs = [call, kept_ret, orphan_trailer]
+
+    out = remove_orphaned_tool_responses(msgs)
+
+    assert len(out) == 3
+    # last is placeholder
+    assert isinstance(out[-1], ModelRequest)
+    assert len(out[-1].parts) == 1 and isinstance(out[-1].parts[0], UserPromptPart)
+    assert "removed" in (out[-1].parts[0].content or "").lower()
+    # first two unchanged and still paired
+    assert out[0] == call
+    assert out[1] == kept_ret
+    # no orphan returns remain
+    assert all(
+        not any(
+            isinstance(p, ToolReturnPart) and p.tool_call_id == "no_match"
+            for p in getattr(m, "parts", []) or []
+        )
+        for m in out
+    )
+
+
+@pytest.mark.asyncio
+async def test_request_with_only_orphan_returns_becomes_placeholder() -> None:
+    # Single message composed only of orphan returns -> replaced by placeholder
+    only_orphans = ModelRequest(
+        parts=[
+            ToolReturnPart(tool_name="dummy", tool_call_id="x1", content="r1"),
+            ToolReturnPart(tool_name="dummy", tool_call_id="x2", content="r2"),
+        ]
+    )
+
+    out = remove_orphaned_tool_responses([only_orphans])
+
+    assert len(out) == 1
+    assert isinstance(out[0], ModelRequest)
+    assert len(out[0].parts) == 1 and isinstance(out[0].parts[0], UserPromptPart)
+    assert "removed" in (out[0].parts[0].content or "").lower()
+    # ensure no ToolReturnPart survives
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in out
+    )
+
+
+@pytest.mark.asyncio
+async def test_mixed_text_and_orphan_keeps_text_without_placeholder() -> None:
+    # Mixed request with user text + orphan return: drop return, keep text, no placeholder
+    mixed = ModelRequest(
+        parts=[
+            TextPart(content="keep me"),
+            ToolReturnPart(tool_name="dummy", tool_call_id="ghost", content="drop"),
+        ]
+    )
+
+    out = remove_orphaned_tool_responses([mixed])
+
+    assert len(out) == 1
+    kept = out[0]
+    assert isinstance(kept, ModelRequest)
+    # only the text remains
+    assert any(isinstance(p, TextPart) and p.content == "keep me" for p in kept.parts)
+    assert all(not isinstance(p, ToolReturnPart) for p in kept.parts)
+    # no placeholder added since message still has content
+    assert not any(isinstance(p, UserPromptPart) for p in kept.parts)
+
+
+@pytest.mark.asyncio
+async def test_return_before_call_is_kept_and_not_flagged_as_orphan() -> None:
+    # Two-pass: return may appear before matching call; it must be kept
+    ret = _tool_return_msg("call_rev", "val")
+    mid = _text_resp("middle")
+    call = _tool_call_msg("call_rev")
+    msgs = [ret, mid, call]
+
+    out = remove_orphaned_tool_responses(msgs)
+
+    assert out == msgs
+    # return preserved (not replaced with placeholder)
+    assert isinstance(out[0], ModelRequest)
+    assert any(isinstance(p, ToolReturnPart) for p in out[0].parts)
+    assert not any(isinstance(p, UserPromptPart) for p in out[0].parts)
+
+
+@pytest.mark.asyncio
+async def test_duplicate_returns_for_same_call_are_all_kept_with_call_anywhere() -> (
+    None
+):
+    call = _tool_call_msg("dup_call")
+    ret1 = _tool_return_msg("dup_call", "r1")
+    ret2 = _tool_return_msg("dup_call", "r2")
+    # Place the call at the end to ensure order independence
+    msgs = [ret1, ret2, _text_resp("padding"), call]
+
+    out = remove_orphaned_tool_responses(msgs)
+
+    assert len(out) == 4
+    # both returns still present (no placeholders)
+    assert all(
+        isinstance(out[i], ModelRequest)
+        and any(isinstance(p, ToolReturnPart) for p in out[i].parts)
+        for i in (0, 1)
+    )
+    assert not any(
+        any(isinstance(p, UserPromptPart) for p in getattr(m, "parts", []) or [])
+        for m in out[:2]
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.asyncio
+async def test_initial_system_and_user_messages_are_preserved() -> None:
+    from pydantic_ai.messages import SystemPromptPart, UserPromptPart
+
+    system_init = ModelRequest(
+        parts=[SystemPromptPart(content="You are a helpful assistant.")]
+    )
+    system_instr = ModelRequest(
+        parts=[SystemPromptPart(content="Follow the guidelines strictly.")]
+    )
+    first_user = ModelRequest(parts=[UserPromptPart(content="Hello, can you help me?")])
+
+    msgs = [system_init, system_instr, first_user]
+
+    out = remove_orphaned_tool_responses(msgs)
+
+    # No changes expected; nothing is a ToolReturnPart and nothing should be dropped.
+    assert out == msgs
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in out
+    )
+
+
+@pytest.mark.asyncio
+async def test_empty_list_returns_empty() -> None:
+    out = remove_orphaned_tool_responses([])
+    assert out == []
+
+
+@pytest.mark.asyncio
+async def test_large_list_without_any_tool_pairs_preserves_calls_and_text_replaces_returns() -> (
+    None
+):
+    """
+    Build a larger interleaved history:
+      - 30 plain text assistant messages
+      - 30 tool CALLs with ids c0..c29
+      - 30 tool RETURNs with ids r0..r29 (no matching calls)
+    Expect:
+      - Text and calls are preserved in-place
+      - Every return is replaced by an in-place placeholder user message
+      - No ToolReturnPart remains anywhere
+    """
+    # 30 texts, 30 calls, 30 unmatched returns
+    texts = [_text_resp(f"txt-{i}") for i in range(30)]
+    calls = [_tool_call_msg(f"c{i}") for i in range(30)]
+    returns = [_tool_return_msg(f"r{i}", "payload") for i in range(30)]
+
+    # Interleave to mix ordering and positions: [text0, call0, ret0, text1, call1, ret1, ...]
+    msgs: list[ModelRequest | ModelResponse] = []
+    for i in range(30):
+        msgs.append(texts[i])
+        msgs.append(calls[i])
+        msgs.append(returns[i])
+
+    out = remove_orphaned_tool_responses(msgs)
+
+    # Length and positional preservation via placeholders
+    assert len(out) == len(msgs)
+
+    # All ToolCallPart messages remain intact and count matches
+    num_calls_out = sum(
+        1
+        for m in out
+        if isinstance(m, ModelResponse)
+        and any(isinstance(p, ToolCallPart) for p in (getattr(m, "parts", []) or []))
+    )
+    assert num_calls_out == len(calls)
+
+    # No ToolReturnPart should survive
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in (getattr(m, "parts", []) or []))
+        for m in out
+    )
+
+    # Every previous return position should now be a placeholder ModelRequest with a UserPromptPart
+    for i in range(30):
+        placeholder = out[3 * i + 2]  # positions where returns were placed
+        assert isinstance(placeholder, ModelRequest)
+        parts = getattr(placeholder, "parts", []) or []
+        assert len(parts) == 1 and isinstance(parts[0], UserPromptPart)
+        assert "removed" in (parts[0].content or "").lower()
+
+    # Spot-check that a couple of texts stayed verbatim in-place
+    assert out[0] == texts[0]
+    assert out[3 * 10] == texts[10]

@@ -313,6 +313,8 @@ async def _extract_diff(
                     ArgumentEntry("project_dir", str(project_dir)),
                 ],
             )
+        elif stderr:
+            logger.warning(f"[Tool] _extract_diff had a stderr: {stderr[:250]}")
 
         if not stdout or not stdout.strip():
             logger.debug("[Tool] edit_tool `extract_diff`: Received empty Diff")

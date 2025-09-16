@@ -121,6 +121,15 @@ async def fit_messages_into_context_window(
     return out
 
 
+def _clone_request(parts: list, instr: str | None) -> ModelRequest:
+    # helper: only set instructions if it was present originally
+    return (
+        ModelRequest(parts=parts)
+        if instr is None
+        else ModelRequest(parts=parts, instructions=instr)
+    )
+
+
 def remove_orphaned_tool_responses(messages: list[ModelMessage]) -> list[ModelMessage]:
     # First pass: collect all tool call IDs present in any ModelResponse
     call_ids: set[str] = set()
@@ -130,50 +139,70 @@ def remove_orphaned_tool_responses(messages: list[ModelMessage]) -> list[ModelMe
                 if isinstance(part, BaseToolCallPart):
                     call_ids.add(part.tool_call_id)
 
-    # Second pass: remove orphaned tool returns and handle placeholders
-    filtered_messages: list[ModelMessage] = []
+    # Second pass
+    filtered: list[ModelMessage] = []
     for msg in messages:
         if isinstance(msg, ModelResponse):
-            # Assistant messages (ModelResponse) are kept as-is (we don't remove tool calls)
-            filtered_messages.append(msg)
+            filtered.append(msg)
             continue
 
         if isinstance(msg, ModelRequest):
-            new_parts = []
-            has_tool_return = False
-            kept_any_return = False
+            instr: str | None = getattr(msg, "instructions", None)
+            parts = getattr(msg, "parts", []) or []
 
-            for part in getattr(msg, "parts", []) or []:
+            has_ret = False
+            kept_any = False
+            dropped_any = False
+            new_parts: list = []
+
+            for part in parts:
                 if isinstance(part, ToolReturnPart):
-                    has_tool_return = True
+                    has_ret = True
                     if part.tool_call_id in call_ids:
-                        # Matched return, keep it
-                        new_parts.append(part)
-                        kept_any_return = True
-                    # Else: unmatched return is dropped (orphan)
+                        new_parts.append(part)  # keep same object
+                        kept_any = True
+                    else:
+                        dropped_any = True  # orphan -> drop
                 else:
-                    # Keep all non-tool-return parts (user or system content)
                     new_parts.append(part)
 
-            if has_tool_return and not kept_any_return:
-                # Message had only tool returns and all were orphaned (dropped)
-                if new_parts:
-                    # If some non-return parts remain (edge case), keep the message with them
-                    filtered_messages.append(ModelRequest(parts=new_parts))
-                else:
-                    # Entire message would be empty – replace with a placeholder user message
-                    placeholder = UserPromptPart(content="Tool output removed.")
-                    filtered_messages.append(ModelRequest(parts=[placeholder]))
-                continue  # skip default append
+            # If there are no ToolReturnPart(s), leave message untouched
+            if not has_ret:
+                filtered.append(msg)
+                continue
 
-            # Otherwise, keep the message (with any orphan returns removed)
-            filtered_messages.append(ModelRequest(parts=new_parts))
+            # If message had only returns and all were orphaned
+            if has_ret and not kept_any:
+                # Keep any non-return parts if they exist (edge case)
+                non_return_parts = [
+                    p for p in parts if not isinstance(p, ToolReturnPart)
+                ]
+                if non_return_parts:
+                    filtered.append(_clone_request(non_return_parts, instr))
+                else:
+                    placeholder = ModelRequest(
+                        parts=[UserPromptPart(content="Tool output removed.")]
+                    )
+                    if instr is not None:
+                        # preserve presence/absence of instructions
+                        placeholder = ModelRequest(
+                            parts=placeholder.parts, instructions=instr
+                        )
+                    filtered.append(placeholder)
+                continue
+
+            # At least one return kept
+            if not dropped_any and len(new_parts) == len(parts):
+                # Nothing changed: preserve original object/fields
+                filtered.append(msg)
+            else:
+                filtered.append(_clone_request(new_parts, instr))
             continue
 
-        # For any other message types (SystemPromptPart, UserPromptPart messages), keep unchanged
-        filtered_messages.append(msg)
+        # Any other message types: keep unchanged
+        filtered.append(msg)
 
-    return filtered_messages
+    return filtered
 
 
 def _is_tool_return_message(m: ModelMessage) -> bool:
@@ -191,10 +220,15 @@ def _is_tool_return_message(m: ModelMessage) -> bool:
 async def _force_fit_single(msg: ModelMessage, cap: int) -> list[ModelMessage]:
     if isinstance(msg, ModelRequest):
         parts = getattr(msg, "parts", []) or []
+        instr: str | None = getattr(msg, "instructions", None)
         if any(isinstance(p, ToolReturnPart) for p in parts):
             kept = [p for p in parts if not isinstance(p, ToolReturnPart)]
-            if kept:
-                msg = ModelRequest(parts=kept)
+            if kept or instr is not None:
+                msg = (
+                    ModelRequest(parts=kept)
+                    if instr is None
+                    else ModelRequest(parts=kept, instructions=instr)
+                )
             else:
                 # lone orphan: keep a placeholder request so we don't re-orphan and drop it
                 return [ModelRequest(parts=[])]
@@ -374,11 +408,16 @@ def _part_to_text(part: object) -> str:
 
 def _iter_parts(messages: Iterable[ModelMessage]) -> Iterable[str]:
     for m in messages:
-        if isinstance(m, (ModelRequest, ModelResponse)):
+        if isinstance(m, ModelRequest):
+            instr: str | None = getattr(m, "instructions", None)
+            if isinstance(instr, str) and instr:
+                yield instr
+            for p in m.parts:
+                yield _part_to_text(p)
+        elif isinstance(m, ModelResponse):
             for p in m.parts:
                 yield _part_to_text(p)
         else:
-            # Defensive: try generic access
             for p in getattr(m, "parts", []) or []:
                 yield _part_to_text(p)
 
@@ -407,15 +446,13 @@ def _tool_return_text(p: ToolReturnPart) -> str:
 async def _truncate_tool_return_message(
     m: ModelMessage, token_cap: int
 ) -> ModelMessage:
-    """
-    Shrink *only* ToolReturnPart contents inside a ModelRequest ('tool' message),
-    keeping role and tool_call_id intact.
-    """
     if not isinstance(m, ModelRequest):
         return m
 
-    # Collect tool-return parts
     parts = list(getattr(m, "parts", []) or [])
+    orig_instr: str | None = getattr(m, "instructions", None)
+    instr_txt = orig_instr or ""
+
     ret_idx: list[int] = []
     ret_texts: list[str] = []
     for i, p in enumerate(parts):
@@ -423,48 +460,75 @@ async def _truncate_tool_return_message(
             ret_idx.append(i)
             ret_texts.append(_tool_return_text(p))
 
-    if not ret_idx:
-        # Nothing tool-return-like to shrink
+    if not ret_idx and not instr_txt:
         return m
 
     if token_cap <= 0:
-        # Keep structure, empty the return contents
         new_parts = parts[:]
         for pos in ret_idx:
             new_parts[pos] = _with_tool_return_text(new_parts[pos], "")
-        return ModelRequest(parts=new_parts)
+        return (
+            ModelRequest(parts=new_parts)
+            if orig_instr is None
+            else ModelRequest(parts=new_parts, instructions="")
+        )
 
-    # Fast path: already within cap
     if await count_tokens([m]) <= token_cap:
         return m
-
-    # Try with markers using a shared head/tail crop across all return parts
-    lo, hi = 0, max((len(t) for t in ret_texts), default=0) // 2
-    best_parts: list | None = None
 
     def crop(s: str, k: int) -> str:
         return f"{s[:k]}{MARKER_TEXT}{s[-k:]}" if k > 0 else MARKER_TEXT
 
+    lo, hi = 0, max([len(instr_txt)] + [len(t) for t in ret_texts] or [0]) // 2
+    best_parts: list | None = None
+    best_instr: str | None = None
+
     while lo <= hi:
         k = (lo + hi) // 2
-        trial = parts[:]
+        trial_parts = parts[:]
         for pos, txt in zip(ret_idx, ret_texts):
-            trial[pos] = _with_tool_return_text(trial[pos], crop(txt, k))
-        trial_msg = ModelRequest(parts=trial)
+            trial_parts[pos] = _with_tool_return_text(trial_parts[pos], crop(txt, k))
+        trial_instr = crop(instr_txt, k) if instr_txt else instr_txt
+        trial_msg = (
+            ModelRequest(parts=trial_parts)
+            if orig_instr is None
+            else ModelRequest(parts=trial_parts, instructions=trial_instr)
+        )
         t = await count_tokens([trial_msg])
         if t <= token_cap:
-            best_parts = trial
+            best_parts, best_instr = trial_parts, (
+                trial_instr if orig_instr is not None else None
+            )
             lo = k + 1
         else:
             hi = k - 1
 
     if best_parts is None:
-        # If even pure markers don't fit, empty contents
-        best_parts = parts[:]
+        # Try pure markers; if still too big, empty everything.
+        trial_parts = parts[:]
         for pos in ret_idx:
-            best_parts[pos] = _with_tool_return_text(best_parts[pos], "")
+            trial_parts[pos] = _with_tool_return_text(trial_parts[pos], MARKER_TEXT)
+        if orig_instr is None:
+            trial_msg = ModelRequest(parts=trial_parts)
+        else:
+            trial_msg = ModelRequest(parts=trial_parts, instructions=MARKER_TEXT)
+        if await count_tokens([trial_msg]) <= token_cap:
+            return trial_msg
 
-    return ModelRequest(parts=best_parts)
+        for pos in ret_idx:
+            trial_parts[pos] = _with_tool_return_text(trial_parts[pos], "")
+        return (
+            ModelRequest(parts=trial_parts)
+            if orig_instr is None
+            else ModelRequest(parts=trial_parts, instructions="")
+        )
+
+    # Preserve None vs non-None semantics
+    return (
+        ModelRequest(parts=best_parts)
+        if best_instr is None
+        else ModelRequest(parts=best_parts, instructions=best_instr)
+    )
 
 
 def _count_openai_tokens(
