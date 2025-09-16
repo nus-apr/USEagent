@@ -242,7 +242,7 @@ async def extract_diff(
                 extract_result.diff_content
             ]
             return ToolErrorInfo(
-                message=f" `extract_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. It was not added to the diff-store. Reuse {existing_diff_id} or make further changes to create another diff. Never rerun this tool without changes. The corresponding diff was: \n{extract_result}",
+                message=f" `extract_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. It was not added to the diff-store. Reuse {existing_diff_id} or make further changes to create another diff. Never rerun this tool without changes. The corresponding diff was: \n{_preview_patch(extract_result.diff_content)}",
                 supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
             )
         else:
@@ -339,6 +339,17 @@ async def _extract_diff(
 
         parsed = DiffEntry(output)
         return parsed
+
+
+def _preview_patch(patch: str) -> str:
+    NUMBER_OF_PREVIEW_LINES: int = 10
+    if not patch or not patch.strip():
+        return "<< received empty patch >>"
+    if len(patch.splitlines()) <= NUMBER_OF_PREVIEW_LINES:
+        return patch
+
+    POSTFIX: str = " [[ End of Preview - Patch is longer ]]"
+    return "\n".join(patch.splitlines()[:10] + [POSTFIX])
 
 
 # DevNote:
