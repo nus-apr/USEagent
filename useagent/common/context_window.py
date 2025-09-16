@@ -131,78 +131,150 @@ def _clone_request(parts: list, instr: str | None) -> ModelRequest:
 
 
 def remove_orphaned_tool_responses(messages: list[ModelMessage]) -> list[ModelMessage]:
-    # First pass: collect all tool call IDs present in any ModelResponse
-    call_ids: set[str] = set()
-    for msg in messages:
-        if isinstance(msg, ModelResponse):
-            for part in getattr(msg, "parts", []) or []:
-                if isinstance(part, BaseToolCallPart):
-                    call_ids.add(part.tool_call_id)
+    if not messages:
+        return []
 
-    # Second pass
-    filtered: list[ModelMessage] = []
-    for msg in messages:
+    # 1) Discover all assistant tool-call ids and their positions
+    call_positions: list[tuple[int, set[str]]] = []
+    all_call_ids: set[str] = set()
+    for i, msg in enumerate(messages):
         if isinstance(msg, ModelResponse):
-            filtered.append(msg)
-            continue
+            ids = {
+                p.tool_call_id
+                for p in (getattr(msg, "parts", []) or [])
+                if isinstance(p, BaseToolCallPart)
+            }
+            if ids:
+                call_positions.append((i, ids))
+                all_call_ids |= ids
 
-        if isinstance(msg, ModelRequest):
-            instr: str | None = getattr(msg, "instructions", None)
+    n = len(messages)
+    call_indices = [i for i, _ in call_positions] + [n]
+
+    # Returns collected for each call (by call message index)
+    collected: dict[int, list[ToolReturnPart]] = {i: [] for i, _ in call_positions}
+    # Track message indexes from which we consumed returns (True => return-only after removal)
+    consumed_return_indices: dict[int, bool] = {}
+
+    # 2) Collect returns that appear AFTER their call (up to the next call)
+    for idx, (call_i, ids) in enumerate(call_positions):
+        horizon_end = call_indices[idx + 1]
+        for j in range(call_i + 1, horizon_end):
+            msg = messages[j]
+            if not isinstance(msg, ModelRequest):
+                continue
             parts = getattr(msg, "parts", []) or []
-
-            has_ret = False
-            kept_any = False
-            dropped_any = False
+            had_any = False
+            kept_other = False
             new_parts: list = []
-
             for part in parts:
-                if isinstance(part, ToolReturnPart):
-                    has_ret = True
-                    if part.tool_call_id in call_ids:
-                        new_parts.append(part)  # keep same object
-                        kept_any = True
-                    else:
-                        dropped_any = True  # orphan -> drop
+                if isinstance(part, ToolReturnPart) and part.tool_call_id in ids:
+                    collected[call_i].append(part)
+                    had_any = True
                 else:
                     new_parts.append(part)
+                    if not isinstance(part, ToolReturnPart):
+                        kept_other = True
+            if had_any:
+                consumed_return_indices[j] = (
+                    not kept_other
+                )  # True -> return-only after removal
 
-            # If there are no ToolReturnPart(s), leave message untouched
-            if not has_ret:
-                filtered.append(msg)
-                continue
+    out: list[ModelMessage] = []
+    i = 0
+    while i < n:
+        msg = messages[i]
 
-            # If message had only returns and all were orphaned
-            if has_ret and not kept_any:
-                # Keep any non-return parts if they exist (edge case)
-                non_return_parts = [
-                    p for p in parts if not isinstance(p, ToolReturnPart)
-                ]
-                if non_return_parts:
-                    filtered.append(_clone_request(non_return_parts, instr))
-                else:
-                    placeholder = ModelRequest(
-                        parts=[UserPromptPart(content="Tool output removed.")]
+        # 3) Drop/clean request messages that contain ToolReturnPart(s)
+        if isinstance(msg, ModelRequest):
+            parts = getattr(msg, "parts", []) or []
+            if any(isinstance(p, ToolReturnPart) for p in parts):
+                returns = [p for p in parts if isinstance(p, ToolReturnPart)]
+                non_returns = [p for p in parts if not isinstance(p, ToolReturnPart)]
+
+                # (a) Drop returns whose id is not present in ANY call
+                returns = [r for r in returns if r.tool_call_id in all_call_ids]
+
+                # (b) Drop returns that are BEFORE their call (early returns)
+                # If there exists a matching call at a later position (> i), it's early → drop.
+                filtered_returns: list[ToolReturnPart] = []
+                for r in returns:
+                    is_early = any(
+                        i < call_i and (r.tool_call_id in ids)
+                        for call_i, ids in call_positions
                     )
-                    if instr is not None:
-                        # preserve presence/absence of instructions
-                        placeholder = ModelRequest(
-                            parts=placeholder.parts, instructions=instr
-                        )
-                    filtered.append(placeholder)
+                    if not is_early:
+                        # If not early, it either was collected (step 2) or has no later matching call.
+                        # If it had no matching call anywhere, it was removed by (a).
+                        filtered_returns.append(r)
+
+                # We never keep ToolReturnPart(s) here; they are either collected (if valid) or dropped.
+                if non_returns:
+                    instr = getattr(msg, "instructions", None)
+                    out.append(
+                        ModelRequest(parts=non_returns)
+                        if instr is None
+                        else ModelRequest(parts=non_returns, instructions=instr)
+                    )
+                # If no non-returns, we drop this message entirely.
+                i += 1
                 continue
 
-            # At least one return kept
-            if not dropped_any and len(new_parts) == len(parts):
-                # Nothing changed: preserve original object/fields
-                filtered.append(msg)
-            else:
-                filtered.append(_clone_request(new_parts, instr))
+        # 4) Emit assistant tool-call and immediately follow it by a synthesized tool message (if any)
+        if isinstance(msg, ModelResponse) and any(
+            isinstance(p, BaseToolCallPart) for p in (getattr(msg, "parts", []) or [])
+        ):
+            out.append(msg)
+            rets = collected.get(i, [])
+            if rets:
+                out.append(ModelRequest(parts=rets[:]))  # type: ignore
+            i += 1
             continue
 
-        # Any other message types: keep unchanged
-        filtered.append(msg)
+        # 5) Messages from which we consumed returns after a call
+        if i in consumed_return_indices:
+            # If it became return-only, drop; if mixed, it was already appended in step 3.
+            if consumed_return_indices[i]:
+                i += 1
+                continue
 
-    return filtered
+        # 6) Pass-through (plain assistant/user/system/etc.)
+        out.append(msg)
+        i += 1
+
+    # 7) Final integrity sweep: no stray returns unless directly after a call
+    cleaned: list[ModelMessage] = []
+    for k, m in enumerate(out):
+        if isinstance(m, ModelRequest) and any(
+            isinstance(p, ToolReturnPart) for p in (getattr(m, "parts", []) or [])
+        ):
+            prev = out[k - 1] if k > 0 else None
+            ok = isinstance(prev, ModelResponse) and any(
+                isinstance(p, BaseToolCallPart)
+                for p in (getattr(prev, "parts", []) or [])
+            )
+            if not ok:
+                instr = getattr(m, "instructions", None)
+                nonret = [
+                    p
+                    for p in (getattr(m, "parts", []) or [])
+                    if not isinstance(p, ToolReturnPart)
+                ]
+                if nonret:
+                    cleaned.append(
+                        ModelRequest(parts=nonret)
+                        if instr is None
+                        else ModelRequest(parts=nonret, instructions=instr)
+                    )
+                # else: return-only -> drop
+                continue
+        cleaned.append(m)
+
+    # 8) Non-empty guarantee: if everything was dropped, return a minimal empty request.
+    if not cleaned and messages:
+        return [_make_context_pruned_notice()]
+
+    return cleaned
 
 
 def _is_tool_return_message(m: ModelMessage) -> bool:

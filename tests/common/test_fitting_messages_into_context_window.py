@@ -1109,33 +1109,18 @@ def _text_resp(s: str) -> ModelResponse:
     return ModelResponse(parts=[TextPart(content=s)])
 
 
-# --- New behavior: orphan returns are replaced in-place with a small user message ---
-
-
 @pytest.mark.asyncio
-async def test_orphan_leading_and_middle_are_replaced_with_placeholders() -> None:
+async def test_orphan_leading_and_middle_are_dropped() -> None:
     orphan1 = _tool_return_msg("call_a")
     mid_text = _text_resp("hello")
     orphan2 = _tool_return_msg("call_b")
-    tail_call = _tool_call_msg("call_c")  # no return present, fine
+    tail_call = _tool_call_msg("call_c")  # no return present
     msgs = [orphan1, mid_text, orphan2, tail_call]
 
     out = remove_orphaned_tool_responses(msgs)
 
-    assert len(out) == 4  # positions preserved via placeholders
-    # pos 0 placeholder
-    assert isinstance(out[0], ModelRequest)
-    assert len(out[0].parts) == 1 and isinstance(out[0].parts[0], UserPromptPart)
-    assert "removed" in (out[0].parts[0].content or "").lower()
-    # pos 1 unchanged
-    assert out[1] == mid_text
-    # pos 2 placeholder
-    assert isinstance(out[2], ModelRequest)
-    assert len(out[2].parts) == 1 and isinstance(out[2].parts[0], UserPromptPart)
-    assert "removed" in (out[2].parts[0].content or "").lower()
-    # pos 3 unchanged tool call
-    assert out[3] == tail_call
-    # no tool returns remain
+    # orphans dropped, others preserved
+    assert out == [mid_text, tail_call]
     assert all(
         not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
         for m in out
@@ -1143,7 +1128,7 @@ async def test_orphan_leading_and_middle_are_replaced_with_placeholders() -> Non
 
 
 @pytest.mark.asyncio
-async def test_trailing_orphan_is_replaced_with_placeholder() -> None:
+async def test_trailing_orphan_is_dropped() -> None:
     call = _tool_call_msg("call_a")
     kept_ret = _tool_return_msg("call_a", "ok")
     orphan_trailer = _tool_return_msg("no_match", "drop")
@@ -1151,15 +1136,8 @@ async def test_trailing_orphan_is_replaced_with_placeholder() -> None:
 
     out = remove_orphaned_tool_responses(msgs)
 
-    assert len(out) == 3
-    # last is placeholder
-    assert isinstance(out[-1], ModelRequest)
-    assert len(out[-1].parts) == 1 and isinstance(out[-1].parts[0], UserPromptPart)
-    assert "removed" in (out[-1].parts[0].content or "").lower()
-    # first two unchanged and still paired
-    assert out[0] == call
-    assert out[1] == kept_ret
-    # no orphan returns remain
+    # adjacent pair kept, trailing orphan dropped
+    assert out == [call, kept_ret]
     assert all(
         not any(
             isinstance(p, ToolReturnPart) and p.tool_call_id == "no_match"
@@ -1170,8 +1148,7 @@ async def test_trailing_orphan_is_replaced_with_placeholder() -> None:
 
 
 @pytest.mark.asyncio
-async def test_request_with_only_orphan_returns_becomes_placeholder() -> None:
-    # Single message composed only of orphan returns -> replaced by placeholder
+async def test_request_with_only_orphan_returns_is_dropped() -> None:
     only_orphans = ModelRequest(
         parts=[
             ToolReturnPart(tool_name="dummy", tool_call_id="x1", content="r1"),
@@ -1181,11 +1158,14 @@ async def test_request_with_only_orphan_returns_becomes_placeholder() -> None:
 
     out = remove_orphaned_tool_responses([only_orphans])
 
+    # Non-empty guarantee: a single assistant notice explaining pruning.
     assert len(out) == 1
-    assert isinstance(out[0], ModelRequest)
-    assert len(out[0].parts) == 1 and isinstance(out[0].parts[0], UserPromptPart)
-    assert "removed" in (out[0].parts[0].content or "").lower()
-    # ensure no ToolReturnPart survives
+    assert isinstance(out[0], ModelResponse)
+    text = "".join(
+        getattr(p, "content", "") or "" for p in getattr(out[0], "parts", []) or []
+    )
+    assert "pruned" in text.lower() or "context window" in text.lower()
+    # No ToolReturnPart remains
     assert all(
         not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
         for m in out
@@ -1235,25 +1215,19 @@ async def test_return_before_call_is_kept_and_not_flagged_as_orphan() -> None:
 async def test_duplicate_returns_for_same_call_are_all_kept_with_call_anywhere() -> (
     None
 ):
+    # New behavior: early returns are dropped; only padding + call remain.
     call = _tool_call_msg("dup_call")
-    ret1 = _tool_return_msg("dup_call", "r1")
-    ret2 = _tool_return_msg("dup_call", "r2")
-    # Place the call at the end to ensure order independence
-    msgs = [ret1, ret2, _text_resp("padding"), call]
+    ret1 = _tool_return_msg("dup_call", "r1")  # early -> drop
+    ret2 = _tool_return_msg("dup_call", "r2")  # early -> drop
+    pad = _text_resp("padding")
+    msgs = [ret1, ret2, pad, call]
 
     out = remove_orphaned_tool_responses(msgs)
 
-    assert len(out) == 4
-    # both returns still present (no placeholders)
-    assert all(
-        isinstance(out[i], ModelRequest)
-        and any(isinstance(p, ToolReturnPart) for p in out[i].parts)
-        for i in (0, 1)
-    )
-    assert not any(
-        any(isinstance(p, UserPromptPart) for p in getattr(m, "parts", []) or [])
-        for m in out[:2]
-    )
+    assert len(out) == 2
+    assert isinstance(out[0], ModelResponse)
+    assert getattr(out[0].parts[0], "content", "") == "padding"
+    assert out[1] == call
 
 
 @pytest.mark.regression
@@ -1288,25 +1262,47 @@ async def test_empty_list_returns_empty() -> None:
 
 
 @pytest.mark.asyncio
-async def test_large_list_without_any_tool_pairs_preserves_calls_and_text_replaces_returns() -> (
+async def test_mixed_text_and_orphan_keeps_text_drops_return() -> None:
+    mixed = ModelRequest(
+        parts=[
+            TextPart(content="keep me"),
+            ToolReturnPart(tool_name="dummy", tool_call_id="ghost", content="drop"),
+        ]
+    )
+
+    out = remove_orphaned_tool_responses([mixed])
+
+    assert len(out) == 1
+    kept = out[0]
+    assert isinstance(kept, ModelRequest)
+    assert any(isinstance(p, TextPart) and p.content == "keep me" for p in kept.parts)
+    assert all(not isinstance(p, ToolReturnPart) for p in kept.parts)
+
+
+@pytest.mark.asyncio
+async def test_duplicate_returns_before_call_are_dropped() -> None:
+    call = _tool_call_msg("dup_call")
+    ret1 = _tool_return_msg("dup_call", "r1")  # early -> drop
+    ret2 = _tool_return_msg("dup_call", "r2")  # early -> drop
+    pad = _text_resp("padding")
+    msgs = [ret1, ret2, pad, call]
+
+    out = remove_orphaned_tool_responses(msgs)
+
+    assert len(out) == 2
+    assert isinstance(out[0], ModelResponse)
+    assert getattr(out[0].parts[0], "content", "") == "padding"
+    assert out[1] == call
+
+
+@pytest.mark.asyncio
+async def test_large_list_without_any_tool_pairs_drops_all_returns_preserves_calls_and_text() -> (
     None
 ):
-    """
-    Build a larger interleaved history:
-      - 30 plain text assistant messages
-      - 30 tool CALLs with ids c0..c29
-      - 30 tool RETURNs with ids r0..r29 (no matching calls)
-    Expect:
-      - Text and calls are preserved in-place
-      - Every return is replaced by an in-place placeholder user message
-      - No ToolReturnPart remains anywhere
-    """
-    # 30 texts, 30 calls, 30 unmatched returns
     texts = [_text_resp(f"txt-{i}") for i in range(30)]
     calls = [_tool_call_msg(f"c{i}") for i in range(30)]
     returns = [_tool_return_msg(f"r{i}", "payload") for i in range(30)]
 
-    # Interleave to mix ordering and positions: [text0, call0, ret0, text1, call1, ret1, ...]
     msgs: list[ModelRequest | ModelResponse] = []
     for i in range(30):
         msgs.append(texts[i])
@@ -1315,10 +1311,8 @@ async def test_large_list_without_any_tool_pairs_preserves_calls_and_text_replac
 
     out = remove_orphaned_tool_responses(msgs)
 
-    # Length and positional preservation via placeholders
-    assert len(out) == len(msgs)
-
-    # All ToolCallPart messages remain intact and count matches
+    # All unmatched returns dropped; texts and calls preserved 1:1
+    assert len(out) == len(texts) + len(calls)
     num_calls_out = sum(
         1
         for m in out
@@ -1326,21 +1320,114 @@ async def test_large_list_without_any_tool_pairs_preserves_calls_and_text_replac
         and any(isinstance(p, ToolCallPart) for p in (getattr(m, "parts", []) or []))
     )
     assert num_calls_out == len(calls)
-
-    # No ToolReturnPart should survive
     assert all(
         not any(isinstance(p, ToolReturnPart) for p in (getattr(m, "parts", []) or []))
         for m in out
     )
-
-    # Every previous return position should now be a placeholder ModelRequest with a UserPromptPart
-    for i in range(30):
-        placeholder = out[3 * i + 2]  # positions where returns were placed
-        assert isinstance(placeholder, ModelRequest)
-        parts = getattr(placeholder, "parts", []) or []
-        assert len(parts) == 1 and isinstance(parts[0], UserPromptPart)
-        assert "removed" in (parts[0].content or "").lower()
-
-    # Spot-check that a couple of texts stayed verbatim in-place
+    # spot-check ordering of some texts unchanged
     assert out[0] == texts[0]
-    assert out[3 * 10] == texts[10]
+    assert (
+        out[20] == texts[10]
+    )  # texts and calls interleave; adjust index accordingly? no—just verify presence
+    assert texts[10] in out
+
+
+@pytest.mark.asyncio
+async def test_return_before_call_is_dropped_no_adjacent_tool_synthesized() -> None:
+    ret = _tool_return_msg("c1", "early")
+    mid = _text_resp("hello")
+    call = _tool_call_msg("c1")
+    msgs = [ret, mid, call]
+
+    out = remove_orphaned_tool_responses(msgs)
+
+    assert out == [mid, call]
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in out
+    )
+
+
+@pytest.mark.asyncio
+async def test_returns_after_call_nonadjacent_are_collapsed_into_single_followup_tool_message() -> (
+    None
+):
+    call = _tool_call_msg("c1")
+    pad1 = _text_resp("pad1")
+    r1 = _tool_return_msg("c1", "r1")
+    pad2 = _text_resp("pad2")
+    r2 = _tool_return_msg("c1", "r2")
+    msgs = [call, pad1, r1, pad2, r2]
+
+    out = remove_orphaned_tool_responses(msgs)
+
+    # Adjacent tool synthesized immediately after call with both returns; original return messages dropped
+    assert isinstance(out[0], ModelResponse) and out[0] == call
+    assert isinstance(out[1], ModelRequest)
+    returns = [p for p in out[1].parts if isinstance(p, ToolReturnPart)]
+    assert {p.tool_call_id for p in returns} == {"c1"}
+    assert [p.content for p in returns] == ["r1", "r2"]
+    # pads follow; no placeholders
+    assert out[2] == pad1
+    assert out[3] == pad2
+    assert len(out) == 4
+
+
+@pytest.mark.asyncio
+async def test_mixed_text_and_return_keeps_text_drops_return_new_adjacent_tool_is_built() -> (
+    None
+):
+    call = _tool_call_msg("job")
+    mixed = ModelRequest(
+        parts=[
+            TextPart(content="keep me"),
+            ToolReturnPart(tool_name="dummy", tool_call_id="job", content="drop me"),
+        ]
+    )
+    pad = _text_resp("pad")
+    msgs = [call, pad, mixed]
+
+    out = remove_orphaned_tool_responses(msgs)
+
+    # new adjacent tool after call
+    assert isinstance(out[1], ModelRequest)
+    assert any(
+        isinstance(p, ToolReturnPart) and p.tool_call_id == "job" for p in out[1].parts
+    )
+    # pad then the mixed-without-returns
+    assert out[2] == pad
+    m = out[3]
+    assert isinstance(m, ModelRequest)
+    assert any(isinstance(p, TextPart) and p.content == "keep me" for p in m.parts)
+    assert all(not isinstance(p, ToolReturnPart) for p in m.parts)
+
+
+@pytest.mark.asyncio
+async def test_multiple_calls_interleaved_returns_normalize_to_pairs_and_drop_others() -> (
+    None
+):
+    c1 = _tool_call_msg("a")
+    c2 = _tool_call_msg("b")
+    r1a = _tool_return_msg("a", "r1a")  # early -> drop
+    r2b = _tool_return_msg("b", "r2b")  # early -> drop (before c2)
+    r3a = _tool_return_msg("a", "r3a")  # after c2 but not after c1 -> drop
+    msgs = [_text_resp("head"), r1a, c1, _text_resp("mid"), r2b, c2, r3a]
+
+    out = remove_orphaned_tool_responses(msgs)
+
+    # Expected: head, c1, mid, c2  (no synthesized tool messages)
+    assert [type(m) for m in out] == [
+        ModelResponse,
+        ModelResponse,
+        ModelResponse,
+        ModelResponse,
+    ]
+    assert out[0].parts[0].content == "head"
+    assert out[1] == c1
+    assert out[2].parts[0].content == "mid"
+    assert out[3] == c2
+    # Sanity: no ToolReturnPart anywhere
+    assert all(
+        not any(isinstance(p, ToolReturnPart) for p in getattr(m, "parts", []) or [])
+        for m in out
+    )
