@@ -10,6 +10,8 @@ import pytest
 from useagent.config import ConfigSingleton
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
+from useagent.tasks.local_task import LocalTask
+from useagent.tasks.swebench_task import SWEbenchTask
 from useagent.tools.bash import (
     __reset_bash_tool,
     bash_tool,
@@ -1283,3 +1285,84 @@ async def test_issue_42_nonzero_exit_wrapped_in_bash_should_surface_then_recover
     # So we get immediate results, and no need to restart anything.
     res2 = await tool("echo hello")
     assert isinstance(res2, CLIResult)
+
+
+@pytest.mark.online
+@pytest.mark.parametrize(
+    "url",
+    [
+        "git@github.com:octocat/Hello-World.git",
+        "https://github.com/octocat/Hello-World.git",
+    ],
+)
+@pytest.mark.asyncio
+async def test_git_clone_blocked_when_swebench_toggle_on(url: str, tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+
+    ConfigSingleton.config.optimization_toggles["swe-bench-block-git-clones"] = True
+    ConfigSingleton.config.task_type = SWEbenchTask
+
+    dest = tmp_path / "repo"
+    cmd = f"git clone {url} {dest}"
+    tool = make_bash_tool_for_agent("AGENT")
+    res = await tool(cmd)
+
+    assert isinstance(res, ToolErrorInfo)
+    assert "clone" in res.message.lower() or "blocked" in res.message.lower()
+
+
+@pytest.mark.online
+@pytest.mark.parametrize(
+    "url",
+    [
+        "git@github.com:octocat/Hello-World.git",
+        "https://github.com/octocat/Hello-World.git",
+    ],
+)
+@pytest.mark.asyncio
+async def test_git_clone_allowed_when_toggle_off_even_for_swebench(
+    url: str, tmp_path: Path
+):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["swe-bench-block-git-clones"] = False
+    ConfigSingleton.config.task_type = SWEbenchTask
+
+    dest = tmp_path / "repo"
+    cmd = f"git clone {url} {dest}"
+    tool = make_bash_tool_for_agent("AGENT")
+    res = await tool(cmd)
+
+    assert not isinstance(res, ToolErrorInfo)
+    # repo should exist if cloning actually ran
+    assert dest.exists() and any(dest.iterdir())
+
+
+@pytest.mark.online
+@pytest.mark.parametrize(
+    "url",
+    [
+        "git@github.com:octocat/Hello-World.git",
+        "https://github.com/octocat/Hello-World.git",
+    ],
+)
+@pytest.mark.asyncio
+async def test_git_clone_allowed_when_local_task_even_if_toggle_on(
+    url: str, tmp_path: Path
+):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["swe-bench-block-git-clones"] = True
+    # Local (non-SWEbench) task
+    ConfigSingleton.config.task_type = LocalTask
+
+    tool = make_bash_tool_for_agent("AGENT")
+
+    dest = tmp_path / "repo"
+    cmd = f"git clone {url} {dest}"
+    res = await tool(cmd)
+
+    assert not isinstance(res, ToolErrorInfo)
+    assert dest.exists() and any(dest.iterdir())

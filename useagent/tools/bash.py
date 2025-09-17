@@ -376,7 +376,7 @@ class BashTool:
             logger.warning(
                 "[Tool] Bash Tool was called to make a git download in SWE Task! Not Executing and returning specialised ToolErrorInfo about it."
             )
-            return __make_git_clone_warning_errorinfo()
+            return make_git_clone_warning_errorinfo()
 
         transformed_command = self.command_transformer(command)
         return await self._session.run(transformed_command)
@@ -562,7 +562,7 @@ async def _restart_bash_session_using_config_directory():
     )
 
 
-def __make_git_clone_warning_errorinfo() -> ToolErrorInfo:
+def make_git_clone_warning_errorinfo() -> ToolErrorInfo:
     message: str = """
     You were trying to clone a git repository, which is a invalid and deactivated option. 
     This is intentionally invalidated by the responsible developers and you should never try to bypass this. 
