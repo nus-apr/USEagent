@@ -19,6 +19,7 @@ from useagent.config import ConfigSingleton
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
+from useagent.tasks.swebench_task import SWEbenchTask
 
 
 class _BashSession:
@@ -363,6 +364,20 @@ class BashTool:
             )
             command = 'find . -type d -name ".*" -prune -o ' + command[6:]
 
+        # SWE Tasks might want to pull their patch from github. See Issue #46. Not always, but they might want to.
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles[
+                "swe-bench-block-git-clones"
+            ]
+            and ConfigSingleton.config.task_type == SWEbenchTask
+            and "git clone" in command.lower()
+        ):
+            logger.warning(
+                "[Tool] Bash Tool was called to make a git download in SWE Task! Not Executing and returning specialised ToolErrorInfo about it."
+            )
+            return __make_git_clone_warning_errorinfo()
+
         transformed_command = self.command_transformer(command)
         return await self._session.run(transformed_command)
 
@@ -545,6 +560,17 @@ async def _restart_bash_session_using_config_directory():
         f"[Tool] Successfully restarted Bash Tool. New session starts in "
         f"{str(bash_tool_init_dir) if bash_tool_init_dir else '<<UNKNOWN>>'}"
     )
+
+
+def __make_git_clone_warning_errorinfo() -> ToolErrorInfo:
+    message: str = """
+    You were trying to clone a git repository, which is a invalid and deactivated option. 
+    This is intentionally invalidated by the responsible developers and you should never try to bypass this. 
+
+    If you are in need of a dependency, try different channels (such as package managers) to install them. 
+    If you were trying to access newer files of the same repository, you must instead try to operate only on the files you are given. 
+    """
+    return ToolErrorInfo(message=message)
 
 
 def get_bash_history() -> (
