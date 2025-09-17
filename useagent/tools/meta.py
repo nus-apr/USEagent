@@ -297,7 +297,10 @@ async def search_code(ctx: RunContext[TaskState], instruction: str) -> list[Loca
         usage_limits=UsageLimits(request_limit=constants.SEARCH_AGENT_REQUEST_LIMIT),
     )
     locations = search_code_agent_result.output
-    logger.info(f"[MetaAgent] search_code result: {locations}")
+    logger.info(
+        f"[MetaAgent] search_code result found: {len(locations)} locations (see TRACE for detail)"
+    )
+    logger.trace(f"Locations were: {locations}")
 
     # update task state with the found code locations
     ctx.deps.code_locations.extend(locations)
@@ -313,9 +316,8 @@ async def edit_code(
 
     To invoke the EditCode tool, think step by step:
         1. What kind of new edit is needed?
-        2. Are you going to make new edit to fix previous wrong/incomplete edits? If yes, you should supply the diff_id of these previous edits in the `pre_patches` argument.
-        Note that you should include a diff_id even if it contains error, because it can be useful to use it as a reference.
-        3. After deciding on what should be supplied as `pre_patches`, think about what kind of changes should be made on top of them and describe that in the `instructions` argument.
+        2. Are there already existing, promising partial changes? If so, point them out, relative to the patches you have seen so far
+        3. Are there any bad or distracting elements in existing changes? If so, point out to correct noisy and poor elements
 
     Args:
         instruction (str): Instruction for the code edit. The instrution should be very specific, typically should include where in the codebase to edit (files, lines, etc.), what to change, and how to change it.

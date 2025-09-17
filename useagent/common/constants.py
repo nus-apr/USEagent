@@ -99,4 +99,4 @@ DEFAULT_GIT_EMAIL: Final[str] = "useagent@useagent.com"
 #                 Logging & Display
 # =============================================================
 
-COMMAND_OUTPUT_MAX_PRINT_CUT_OFF: Final[int] = 100
+COMMAND_OUTPUT_MAX_PRINT_CUT_OFF: Final[int] = 60
