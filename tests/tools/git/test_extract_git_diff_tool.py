@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from useagent.config import ConfigSingleton
 from useagent.pydantic_models.artifacts.git.diff import DiffEntry
 from useagent.pydantic_models.task_state import TaskState
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
@@ -15,6 +16,22 @@ from useagent.tools.git import _extract_diff, extract_diff
 # DevNote:
 # These tests will require that Git is installed and working.
 # But given that you are using a git repository right now, that should be fine.
+
+
+@pytest.fixture(autouse=True)
+def reset_config():
+    ConfigSingleton.reset()
+    yield
+    ConfigSingleton.reset()
+
+
+@pytest.fixture(autouse=True)
+def _reset_extract_counter():
+    import useagent.tools.git as g
+
+    g._EXTRACT_GIT_COUNTER = 0
+    yield
+    g._EXTRACT_GIT_COUNTER = 0
 
 
 def _setup_git_repo_with_change(repo_path: Path):
@@ -715,6 +732,14 @@ class _StubRunCtx:
         self.deps = deps
 
 
+def _mk_ctx(tmp_path: Path) -> "_StubRunCtx":
+    state = TaskState(
+        task=TestTask(root=".", issue_statement="x"),
+        git_repo=GitRepository(local_path=tmp_path),
+    )
+    return _StubRunCtx(state)
+
+
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_extract_diff_success_should_return_id_and_store_grows(tmp_path: Path):
@@ -805,3 +830,157 @@ async def test_extract_diff_store_is_updated_proxies_reflect_change(tmp_path: Pa
 
     stored_entry = state.diff_store.id_to_diff[diff_id]
     assert dto[stored_entry.diff_content] == diff_id
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_threshold_should_return_stuck_error_at_third_call(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["block-repeated-git-extracts"] = True
+    ctx = _mk_ctx(tmp_path)
+
+    # prior success
+    (tmp_path / "tracked.txt").write_text("t2\n")
+    ok = await extract_diff(ctx, project_dir=tmp_path)
+    assert isinstance(ok, str) and ok.startswith("diff_")
+
+    # clean by restoring content to HEAD
+    # (tmp_path / "tracked.txt").write_text("t3\n")
+
+    r1 = await extract_diff(ctx, project_dir=tmp_path)
+    r2 = await extract_diff(ctx, project_dir=tmp_path)
+    await extract_diff(ctx, project_dir=tmp_path)
+
+    assert isinstance(r1, ToolErrorInfo)
+    assert "stuck" not in r1.message.lower()
+    assert isinstance(r2, ToolErrorInfo)
+    assert "stuck" in r2.message.lower()
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_threshold_persists_should_keep_stuck_on_next_call(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["block-repeated-git-extracts"] = True
+    ctx = _mk_ctx(tmp_path)
+
+    (tmp_path / "tracked.txt").write_text("t2\n")
+    ok = await extract_diff(ctx, project_dir=tmp_path)
+    assert isinstance(ok, str)
+
+    (tmp_path / "tracked.txt").write_text("t3\n")
+
+    await extract_diff(ctx, project_dir=tmp_path)
+    await extract_diff(ctx, project_dir=tmp_path)
+    await extract_diff(ctx, project_dir=tmp_path)
+    r4 = await extract_diff(ctx, project_dir=tmp_path)
+
+    assert isinstance(r4, ToolErrorInfo)
+    assert "stuck" in r4.message.lower()
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_threshold_resets_on_edit_should_clear_stuck(tmp_path: Path):
+    _init_repo_with_tracked(tmp_path)
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["block-repeated-git-extracts"] = True
+    ctx = _mk_ctx(tmp_path)
+
+    (tmp_path / "tracked.txt").write_text("t2\n")
+    ok = await extract_diff(ctx, project_dir=tmp_path)
+    assert isinstance(ok, str)
+
+    (tmp_path / "tracked.txt").write_text("t\n")
+    await extract_diff(ctx, project_dir=tmp_path)
+    await extract_diff(ctx, project_dir=tmp_path)
+    await extract_diff(ctx, project_dir=tmp_path)
+
+    # edit clears stuck
+    (tmp_path / "tracked.txt").write_text("t3\n")
+    r = await extract_diff(ctx, project_dir=tmp_path)
+    assert isinstance(r, str) and r.startswith("diff_")
+    assert isinstance(ctx.deps.diff_store.id_to_diff[r], DiffEntry)
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_after_reset_should_not_immediately_return_stuck(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["block-repeated-git-extracts"] = True
+    ctx = _mk_ctx(tmp_path)
+
+    (tmp_path / "tracked.txt").write_text("t2\n")
+    ok = await extract_diff(ctx, project_dir=tmp_path)
+    assert isinstance(ok, str)
+
+    (tmp_path / "tracked.txt").write_text("t\n")
+    await extract_diff(ctx, project_dir=tmp_path)
+    await extract_diff(ctx, project_dir=tmp_path)
+    await extract_diff(ctx, project_dir=tmp_path)
+
+    # reset via edit
+    (tmp_path / "tracked.txt").write_text("t3\n")
+    ok2 = await extract_diff(ctx, project_dir=tmp_path)
+    assert isinstance(ok2, str)
+
+    # back to clean again
+    (tmp_path / "tracked.txt").write_text("t\n")
+    r_next = await extract_diff(ctx, project_dir=tmp_path)
+    assert isinstance(r_next, ToolErrorInfo)
+    assert "stuck" not in r_next.message.lower()
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_threshold_toggle_off_should_not_trigger_stuck(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["block-repeated-git-extracts"] = False
+    ctx = _mk_ctx(tmp_path)
+
+    (tmp_path / "tracked.txt").write_text("t2\n")
+    ok = await extract_diff(ctx, project_dir=tmp_path)
+    assert isinstance(ok, str)
+
+    (tmp_path / "tracked.txt").write_text("t\n")
+    r1 = await extract_diff(ctx, project_dir=tmp_path)
+    r2 = await extract_diff(ctx, project_dir=tmp_path)
+    r3 = await extract_diff(ctx, project_dir=tmp_path)
+    r4 = await extract_diff(ctx, project_dir=tmp_path)
+
+    for r in (r1, r2, r3, r4):
+        assert isinstance(r, ToolErrorInfo)
+        assert "stuck" not in r.message.lower()
+
+
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test_extract_diff_no_changes_four_times_should_never_trigger_stuck(
+    tmp_path: Path,
+):
+    _init_repo_with_tracked(tmp_path)
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["block-repeated-git-extracts"] = True
+    ctx = _mk_ctx(tmp_path)
+
+    # repo clean since last commit in helper
+    r1 = await extract_diff(ctx, project_dir=tmp_path)
+    r2 = await extract_diff(ctx, project_dir=tmp_path)
+    r3 = await extract_diff(ctx, project_dir=tmp_path)
+    r4 = await extract_diff(ctx, project_dir=tmp_path)
+
+    for r in (r1, r2, r3, r4):
+        assert isinstance(r, ToolErrorInfo)
+        assert "stuck" not in r.message.lower()

@@ -32,6 +32,8 @@ def _default_optimization_toggles() -> dict[str, bool]:
             "reiterate-on-doubts": True,
             "block-long-multiline-commands": True,
             "swe-bench-additional-repair-instructions": True,
+            "swe-bench-block-git-clones": True,
+            "block-repeated-git-extracts": True,
         },
     )
 

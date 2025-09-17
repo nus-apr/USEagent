@@ -7,6 +7,7 @@ from pydantic_ai import RunContext
 
 from useagent.common.encoding import is_utf_8_encoded
 from useagent.common.guardrails import useagent_guard_rail
+from useagent.config import ConfigSingleton
 from useagent.pydantic_models.artifacts.git.diff import DiffEntry
 from useagent.pydantic_models.artifacts.git.diff_store import DiffEntryKey
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
@@ -14,6 +15,8 @@ from useagent.pydantic_models.task_state import TaskState
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
 from useagent.tools.run import run
 from useagent.utils import cd
+
+_EXTRACT_GIT_COUNTER: int = 0
 
 
 def check_for_merge_conflict_markers(
@@ -224,18 +227,30 @@ async def extract_diff(
     logger.debug(
         f"[Tool] Successfully extracted a DiffEntry (with {len(extract_result.diff_content)} lines) from {str(project_dir) if project_dir else '(default workdir)'}"
     )
+    global _EXTRACT_GIT_COUNTER
     try:
         logger.debug("[Tool] Trying to add DiffEntry to DiffStore")
         diff_id: DiffEntryKey = ctx.deps.diff_store._add_entry(extract_result)
         logger.info(
             f"[Tool] Added diff entry with ID: {diff_id} to `ctx.deps.diff_store`."
         )
+        _EXTRACT_GIT_COUNTER = 0  # Reset to 0, things were fine.
         return diff_id
     except ValueError as verr:
         if "diff already exists" in str(verr):
             logger.warning(
                 "[Tool] `extract_diff` returned a (already known) diff towards the `ctx.deps.diff_store`"
             )
+            _EXTRACT_GIT_COUNTER += 1
+            if (
+                ConfigSingleton.is_initialized()
+                and ConfigSingleton.config.optimization_toggles[
+                    "block-repeated-git-extracts"
+                ]
+                and _EXTRACT_GIT_COUNTER >= 2
+            ):
+                return _make_repeated_extract_diff_tool_error()
+
             logger.debug(f"DiffStore was:{ctx.deps.diff_store}")
             reversed_key_lookup = ctx.deps.diff_store.diff_to_id
             existing_diff_id: DiffEntryKey = reversed_key_lookup[  # type: ignore
@@ -255,6 +270,20 @@ async def extract_diff(
             message=f"An unhandled exception occurred during diff-extraction ({ex}), please reconsider what you were trying to do.",
             supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
         )
+
+
+def _make_repeated_extract_diff_tool_error() -> ToolErrorInfo:
+    message: str = """
+    You are asking repeatedly for `extract_diff` while seeing the same results. 
+    You are likely stuck. The `extract_diff` will not give you any new results unless you make further changes to the files. 
+
+    Consider: Have you made all the changes requested from you? 
+    If yes, return an existing diff_id. 
+    If no, make further changes, and only then call `extract_diff` again. 
+
+    Remember: The changes will be validated upstream - you don't have to completely verify their correctness. 
+    """
+    return ToolErrorInfo(message=message)
 
 
 async def _extract_diff(
