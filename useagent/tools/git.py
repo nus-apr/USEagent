@@ -249,6 +249,9 @@ async def extract_diff(
                 ]
                 and _EXTRACT_GIT_COUNTER >= 2
             ):
+                logger.warning(
+                    "[Tool] Returning special Repetition `extract_diff` ToolErrorInfo"
+                )
                 return _make_repeated_extract_diff_tool_error()
 
             logger.debug(f"DiffStore was:{ctx.deps.diff_store}")
