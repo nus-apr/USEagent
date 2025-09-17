@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from loguru import logger
 from pydantic_ai import Agent
 from pydantic_ai.tools import Tool
 
@@ -25,11 +26,17 @@ from useagent.tools.git import extract_diff
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
 
+def debug_history_processor(messages):
+    logger.info("Last three messages were:")
+    logger.info("\n".join(str(m) for m in messages[-5:]))
+    return messages
+
+
 @conditional_microagents_triggers(load_microagents_from_project_dir())
 @alias_for_microagents("EDIT")
 def init_agent(
     config: AppConfig | None = None,
-) -> Agent[TaskState, DiffEntryKey]:  # type: ignore
+):
     if config is None:
         config = ConfigSingleton.config
     assert config is not None
@@ -51,7 +58,10 @@ def init_agent(
             # Tool(read_file_as_diff, takes_ctx=True),
             Tool(replace_file),
         ],
-        history_processors=[fit_messages_into_context_window],
+        history_processors=[
+            fit_messages_into_context_window,
+            # debug_history_processor
+        ],
     )
 
     @agent.instructions
@@ -73,7 +83,7 @@ def init_agent(
         Output:
         Your expected output is a `DiffEntryKey`. 
         After you called a method that extracts git diffs, a successful extraction will store the DiffEntry in your TaskState and return you a diff_entry. 
-        A diffentry must match the pattern `diff_XXX` where XXX is a positive integer. 
+        A diffentry must match the pattern `diff_X` where X is a integer bigger or equal 0.
         """
 
     return agent

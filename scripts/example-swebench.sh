@@ -10,8 +10,8 @@ set +a
 #TASK_ID=sphinx-doc__sphinx-8265
 #TASK_ID=matplotlib__matplotlib-26466
 #TASK_ID=sympy__sympy-16766
-TASK_ID=sympy__sympy-21596
-#TASK_ID=django__django-11099
+#TASK_ID=sympy__sympy-21596
+TASK_ID=django__django-11099
 #MODEL_NAME=google-gla:gemini-2.5-flash
 MODEL_NAME=openai:gpt-5-mini
 

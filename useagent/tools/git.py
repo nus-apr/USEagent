@@ -242,6 +242,10 @@ async def extract_diff(
                 "[Tool] `extract_diff` returned a (already known) diff towards the `ctx.deps.diff_store`"
             )
             _EXTRACT_GIT_COUNTER += 1
+            reversed_key_lookup = ctx.deps.diff_store.diff_to_id
+            existing_diff_id: DiffEntryKey = reversed_key_lookup[  # type: ignore
+                extract_result.diff_content
+            ]
             if (
                 ConfigSingleton.is_initialized()
                 and ConfigSingleton.config.optimization_toggles[
@@ -252,13 +256,10 @@ async def extract_diff(
                 logger.warning(
                     "[Tool] Returning special Repetition `extract_diff` ToolErrorInfo"
                 )
-                return _make_repeated_extract_diff_tool_error()
+                return _make_repeated_extract_diff_tool_error(
+                    existing_diff_id, extract_result.diff_content
+                )
 
-            logger.debug(f"DiffStore was:{ctx.deps.diff_store}")
-            reversed_key_lookup = ctx.deps.diff_store.diff_to_id
-            existing_diff_id: DiffEntryKey = reversed_key_lookup[  # type: ignore
-                extract_result.diff_content
-            ]
             return ToolErrorInfo(
                 message=f" `extract_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. It was not added to the diff-store. Reuse {existing_diff_id} or make further changes to create another diff. Never rerun this tool without changes. The corresponding diff was: \n{_preview_patch(extract_result.diff_content)}",
                 supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
@@ -275,8 +276,10 @@ async def extract_diff(
         )
 
 
-def _make_repeated_extract_diff_tool_error() -> ToolErrorInfo:
-    message: str = """
+def _make_repeated_extract_diff_tool_error(
+    diff_id: str, diff_content: str
+) -> ToolErrorInfo:
+    message: str = f"""
     You are asking repeatedly for `extract_diff` while seeing the same results. 
     You are likely stuck. The `extract_diff` will not give you any new results unless you make further changes to the files. 
 
@@ -285,6 +288,11 @@ def _make_repeated_extract_diff_tool_error() -> ToolErrorInfo:
     If no, make further changes, and only then call `extract_diff` again. 
 
     Remember: The changes will be validated upstream - you don't have to completely verify their correctness. 
+    
+    You keep on receiving this diff_id: {diff_id}
+
+    Which represents this patch:\n
+    {diff_content}
     """
     return ToolErrorInfo(message=message)
 
