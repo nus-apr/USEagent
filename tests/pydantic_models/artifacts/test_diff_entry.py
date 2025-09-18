@@ -804,3 +804,403 @@ diff --git a/sklearn/linear_model/least_angle.py b/sklearn/linear_model/least_an
 def test_valid_format_but_poor_line_numbers_should_raise_variant_3():
     with pytest.raises(ValueError):
         DiffEntry(diff_content=SWE_LARGE_SCIKIT_LEARN_EXAMPLE_WITH_POOR_HUNKS)
+
+
+MULTIFILE_TRAILING_ADDED_BLANKS = """\
+diff --git a/a.txt b/a.txt
+index 1111111..2222222 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1,3 +1,5 @@
+ line1
+ line2
+ line3
++
++
+diff --git a/b.txt b/b.txt
+index 3333333..4444444 100644
+--- a/b.txt
++++ b/b.txt
+@@ -1,1 +1,1 @@
+-old
++new
+"""
+
+# Valid: added line at EOF without newline, using the proper sentinel.
+MULTIFILE_TRAILING_ADDED_NO_EOFNL = """\
+diff --git a/a.txt b/a.txt
+index 1111111..2222222 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1,3 +1,5 @@
+ line1
+ line2
+ line3
++
++lastline
+\\ No newline at end of file
+diff --git a/b.txt b/b.txt
+index 3333333..4444444 100644
+--- a/b.txt
++++ b/b.txt
+@@ -1,1 +1,1 @@
+-old
++new
+"""
+
+
+@pytest.mark.pydantic_model
+def test_multifile_trailing_added_line_without_final_newline_should_validate():
+    assert _is_valid_patch(MULTIFILE_TRAILING_ADDED_NO_EOFNL) is True
+
+
+# Valid: body contains text that looks like a header, encoded as context (leading space).
+CONTEXT_LINE_THAT_LOOKS_LIKE_HEADER_TEXT = """\
+diff --git a/x b/x
+index abcd123..abcd124 100644
+--- a/x
++++ b/x
+@@ -1,3 +1,3 @@
+ +++ this is real file content, not a header
+-old
++new
+ end
+"""
+
+
+@pytest.mark.pydantic_model
+def test_context_line_that_looks_like_header_text_should_validate():
+    assert _is_valid_patch(CONTEXT_LINE_THAT_LOOKS_LIKE_HEADER_TEXT) is True
+
+
+# --- CRLF-focused cases -------------------------------------------------------
+
+CRLF_NEW_FILE = (
+    "diff --git a/crlf.txt b/crlf.txt\r\n"
+    "new file mode 100644\r\n"
+    "index 0000000..e69de29\r\n"
+    "--- /dev/null\r\n"
+    "+++ b/crlf.txt\r\n"
+    "@@ -0,0 +1,3 @@\r\n"
+    "+line1\r\n"
+    "+line2\r\n"
+    "+line3\r\n"
+)
+
+
+@pytest.mark.pydantic_model
+def test_crlf_new_file_should_validate():
+    assert _is_valid_patch(CRLF_NEW_FILE) is True
+
+
+CRLF_MULTIFILE = (
+    "diff --git a/a.txt b/a.txt\r\n"
+    "index 1111111..2222222 100644\r\n"
+    "--- a/a.txt\r\n"
+    "+++ b/a.txt\r\n"
+    "@@ -1,2 +1,3 @@\r\n"
+    " line1\r\n"
+    "-old\r\n"
+    "+new\r\n"
+    "+added\r\n"
+    "diff --git a/b.txt b/b.txt\r\n"
+    "index 3333333..4444444 100644\r\n"
+    "--- a/b.txt\r\n"
+    "+++ b/b.txt\r\n"
+    "@@ -1,1 +1,1 @@\r\n"
+    "-foo\r\n"
+    "+bar\r\n"
+)
+
+
+@pytest.mark.pydantic_model
+def test_crlf_multifile_should_validate():
+    assert _is_valid_patch(CRLF_MULTIFILE) is True
+
+
+# EOF without final newline; sentinel line uses CRLF
+CRLF_NO_EOF_NL = (
+    "diff --git a/eof.txt b/eof.txt\r\n"
+    "index aaabbbb..ccccddd 100644\r\n"
+    "--- a/eof.txt\r\n"
+    "+++ b/eof.txt\r\n"
+    "@@ -1,2 +1,3 @@\r\n"
+    " stay\r\n"
+    "-remove\r\n"
+    "+keep\r\n"
+    "+lastline\r\n"
+    "\\ No newline at end of file\r\n"
+)
+
+
+@pytest.mark.pydantic_model
+def test_crlf_no_final_newline_should_validate():
+    assert _is_valid_patch(CRLF_NO_EOF_NL) is True
+
+
+# Mixed endings: one stray '\r' remains in content while lines are '\n' separated.
+MIXED_CRLF_WITH_STRAY_CR = (
+    "diff --git a/mixed.txt b/mixed.txt\n"
+    "index 9999999..aaaaaaa 100644\n"
+    "--- a/mixed.txt\n"
+    "+++ b/mixed.txt\n"
+    "@@ -1,2 +1,2 @@\n"
+    " line1\r\n"  # simulate CR kept on line
+    "-old\n"
+    "+new\n"
+)
+
+
+@pytest.mark.pydantic_model
+def test_mixed_crlf_with_stray_carriage_returns_should_validate():
+    assert _is_valid_patch(MIXED_CRLF_WITH_STRAY_CR) is True
+
+
+# --- Section-boundary clipping on '+++ ' at column 0 --------------------------
+# This reproduces a realistic file where an ADDED line literally starts with '+++'
+# (it is content, not a header). According to unified-diff rules, this is valid.
+ADDED_LINE_LOOKS_LIKE_HEADER = """\
+diff --git a/h.txt b/h.txt
+index 1111111..2222222 100644
+--- a/h.txt
++++ b/h.txt
+@@ -1,3 +1,4 @@
+ line1
+-old
++new
++++ not a header
+ end
+"""
+
+
+@pytest.mark.pydantic_model
+@pytest.mark.regression
+def test_added_line_looks_like_header_should_validate():
+    assert _is_valid_patch(ADDED_LINE_LOOKS_LIKE_HEADER) is True
+
+
+# Variant with CRLF to ensure the same edge with Windows line endings.
+ADDED_LINE_LOOKS_LIKE_HEADER_CRLF = (
+    "diff --git a/h2.txt b/h2.txt\r\n"
+    "index 1111111..2222222 100644\r\n"
+    "--- a/h2.txt\r\n"
+    "+++ b/h2.txt\r\n"
+    "@@ -1,3 +1,4 @@\r\n"
+    " line1\r\n"
+    "-old\r\n"
+    "+new\r\n"
+    "+++ not a header\r\n"
+    " end\r\n"
+)
+
+
+@pytest.mark.pydantic_model
+@pytest.mark.regression
+def test_added_line_looks_like_header_crlf_should_validate():
+    assert _is_valid_patch(ADDED_LINE_LOOKS_LIKE_HEADER_CRLF) is True
+
+
+# --- Trailing blank context at hunk end (boundary next file) ------------------
+# Ensures a final context line that is visually blank (' ') is retained even at the boundary.
+TRAILING_BLANK_CONTEXT_BEFORE_NEXT_FILE = """\
+diff --git a/a.txt b/a.txt
+index 1010101..2020202 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1,3 +1,3 @@
+ line1
+-foo
++bar
+     
+diff --git a/b.txt b/b.txt
+index 3030303..4040404 100644
+--- a/b.txt
++++ b/b.txt
+@@ -1,1 +1,1 @@
+-x
++y
+"""
+
+
+@pytest.mark.pydantic_model
+def test_trailing_blank_context_before_next_file_should_validate():
+    assert _is_valid_patch(TRAILING_BLANK_CONTEXT_BEFORE_NEXT_FILE) is True
+
+
+# Added/Context lines that look like headers or git markers --------------------
+
+ADDED_LINE_STARTS_WITH_DIFF_GIT = """\
+diff --git a/f.txt b/f.txt
+index 1111111..2222222 100644
+--- a/f.txt
++++ b/f.txt
+@@ -1,2 +1,3 @@
+ line1
++diff --git not a header
+ line3
+"""
+
+
+def test_added_line_starts_with_diff_git_should_validate():
+    assert _is_valid_patch(ADDED_LINE_STARTS_WITH_DIFF_GIT) is True
+
+
+CONTEXT_LINE_STARTS_WITH_DIFF_GIT = """\
+diff --git a/g.txt b/g.txt
+index 1111111..2222222 100644
+--- a/g.txt
++++ b/g.txt
+@@ -1,3 +1,3 @@
+ diff --git appears here but is context
+-old
++new
+ end
+"""
+
+
+def test_context_line_starts_with_diff_git_should_validate():
+    assert _is_valid_patch(CONTEXT_LINE_STARTS_WITH_DIFF_GIT) is True
+
+
+ADDED_LINE_PLUS_DASHES = """\
+diff --git a/h3.txt b/h3.txt
+index 1111111..2222222 100644
+--- a/h3.txt
++++ b/h3.txt
+@@ -1,3 +1,4 @@
+ first
+-old
++new
++--- definitely not a header
+ end
+"""
+
+
+def test_added_line_that_looks_like_minus_header_should_validate():
+    assert _is_valid_patch(ADDED_LINE_PLUS_DASHES) is True
+
+
+CONTEXT_LINE_SPACE_THEN_PLUSSES = """\
+diff --git a/h4.txt b/h4.txt
+index 1111111..2222222 100644
+--- a/h4.txt
++++ b/h4.txt
+@@ -1,3 +1,3 @@
+ +++ appears but as context
+-old
++new
+ end
+"""
+
+
+def test_context_line_with_three_pluses_should_validate():
+    assert _is_valid_patch(CONTEXT_LINE_SPACE_THEN_PLUSSES) is True
+
+
+# Multi-hunk with '+++ ' inside first hunk body --------------------------------
+MULTIHUNK_WITH_TRICKY_ADDED_LINE = """\
+diff --git a/multi.txt b/multi.txt
+index aaaaaaaa..bbbbbbbb 100644
+--- a/multi.txt
++++ b/multi.txt
+@@ -1,3 +1,4 @@
+ line1
+-old
++new
++++ not a header
+ end
+@@ -10,2 +11,2 @@
+ keep
+-foo
++bar
+"""
+
+
+def test_multihunk_with_added_line_looks_like_header_should_validate():
+    assert _is_valid_patch(MULTIHUNK_WITH_TRICKY_ADDED_LINE) is True
+
+
+# CRLF variant of the above -----------------------------------------------------
+
+MULTIHUNK_WITH_TRICKY_ADDED_LINE_CRLF = (
+    "diff --git a/multicr.txt b/multicr.txt\r\n"
+    "index aaaaaaaa..bbbbbbbb 100644\r\n"
+    "--- a/multicr.txt\r\n"
+    "+++ b/multicr.txt\r\n"
+    "@@ -1,3 +1,4 @@\r\n"
+    " line1\r\n"
+    "-old\r\n"
+    "+new\r\n"
+    "+++ not a header\r\n"
+    " end\r\n"
+    "@@ -10,2 +11,2 @@\r\n"
+    " keep\r\n"
+    "-foo\r\n"
+    "+bar\r\n"
+)
+
+
+def test_multihunk_with_tricky_added_line_crlf_should_validate():
+    assert _is_valid_patch(MULTIHUNK_WITH_TRICKY_ADDED_LINE_CRLF) is True
+
+
+# Trailing blank context line exactly at hunk end (LF + CRLF) ------------------
+
+TRAILING_SINGLE_SPACE_CONTEXT_END = """\
+diff --git a/tailctx.txt b/tailctx.txt
+index 1010101..2020202 100644
+--- a/tailctx.txt
++++ b/tailctx.txt
+@@ -1,3 +1,3 @@
+ head
+-old
++new
+     
+"""
+
+
+def test_trailing_single_space_context_line_should_validate():
+    assert _is_valid_patch(TRAILING_SINGLE_SPACE_CONTEXT_END) is True
+
+
+TRAILING_SINGLE_SPACE_CONTEXT_END_CRLF = (
+    "diff --git a/tailctx2.txt b/tailctx2.txt\r\n"
+    "index 1010101..2020202 100644\r\n"
+    "--- a/tailctx2.txt\r\n"
+    "+++ b/tailctx2.txt\r\n"
+    "@@ -1,3 +1,3 @@\r\n"
+    " head\r\n"
+    "-old\r\n"
+    "+new\r\n"
+    "     \r\n"
+)
+
+
+def test_trailing_single_space_context_line_crlf_should_validate():
+    assert _is_valid_patch(TRAILING_SINGLE_SPACE_CONTEXT_END_CRLF) is True
+
+
+# Counter-example that must continue to pass after the change ------------------
+# A normal two-file patch with no tricky lines. Ensures no regression in basics.
+
+PLAIN_TWO_FILE_PATCH = """\
+diff --git a/a.txt b/a.txt
+index aaaa111..bbbb222 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1,2 +1,2 @@
+-old
++new
+ end
+diff --git a/b.txt b/b.txt
+index cccc333..dddd444 100644
+--- a/b.txt
++++ b/b.txt
+@@ -1,1 +1,1 @@
+-foo
++bar
+"""
+
+
+def test_plain_two_file_patch_should_validate():
+    assert _is_valid_patch(PLAIN_TWO_FILE_PATCH) is True

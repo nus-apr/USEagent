@@ -88,9 +88,9 @@ def _validate_hunks(block: str, base_lno: int, errors: list[str]) -> None:
             errors.append(f"Missing hunk for block starting at line {base_lno}")
         return
 
+    # Only treat the next "diff --git" as a section boundary; do NOT use ^---/^\+\+\+.
     section_bounds = [
-        m.start()
-        for m in re.finditer(r"^diff --git |^--- |^\+\+\+ ", block, re.MULTILINE)
+        m.start() for m in re.finditer(r"^diff --git ", block, re.MULTILINE)
     ]
     section_bounds.append(len(block))
 
@@ -113,9 +113,9 @@ def _validate_hunks(block: str, base_lno: int, errors: list[str]) -> None:
         )
         body = block[body_start:body_end]
 
-        lines = body.splitlines()
-        while lines and lines[-1] == "":
-            lines.pop()
+        lines = (
+            body.splitlines()
+        )  # do not trim trailing empties; valid hunk lines must start with ' ', '+', '-'
         if not lines:
             errors.append(f"Empty hunk body after header at line {h_lno}")
             continue
@@ -130,11 +130,12 @@ def _validate_hunks(block: str, base_lno: int, errors: list[str]) -> None:
             )
             continue
 
-        # count & compare
         old_len = int(h.group(2)[1:]) if h.group(2) else 1
         new_len = int(h.group(4)[1:]) if h.group(4) else 1
-        old_lines = sum(1 for ln in lines if ln.startswith(" ") or ln.startswith("-"))
-        new_lines = sum(1 for ln in lines if ln.startswith(" ") or ln.startswith("+"))
+
+        # Count using first character only; robust to stray '\r' at EOL.
+        old_lines = sum(1 for ln in lines if ln[:1] == " " or ln[:1] == "-")
+        new_lines = sum(1 for ln in lines if ln[:1] == " " or ln[:1] == "+")
 
         if old_lines != old_len or new_lines != new_len:
             errors.append(

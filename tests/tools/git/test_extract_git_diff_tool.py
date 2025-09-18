@@ -984,3 +984,65 @@ async def test_extract_diff_no_changes_four_times_should_never_trigger_stuck(
     for r in (r1, r2, r3, r4):
         assert isinstance(r, ToolErrorInfo)
         assert "stuck" not in r.message.lower()
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test__extract_diff_added_line_starting_with_pluses_should_extract(
+    tmp_path: Path,
+):
+    _init_git_repo_without_content(tmp_path)
+
+    p = tmp_path / "file.txt"
+    # Initial content creates hunk context naturally.
+    p.write_text("line1\nold\nend\n", encoding="utf-8")
+    subprocess.run(["git", "add", p.name], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
+
+    # Modify: replace 'old' with 'new', and add an added line that begins with '+++'.
+    p.write_text("line1\nnew\n+++ not a header\nend\n", encoding="utf-8")
+
+    result = await _extract_diff(project_dir=tmp_path)
+
+    assert isinstance(result, DiffEntry)
+    dc = result.diff_content
+    assert "diff --git a/file.txt b/file.txt" in dc
+    # Must not truncate at the '+++ ' body line.
+    assert "+++ not a header" in dc
+    assert "@@ " in dc  # at least one hunk present
+
+
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.asyncio
+async def test__extract_diff_multihunk_with_added_plusplusplus_and_crlf_should_extract(
+    tmp_path: Path,
+):
+    _init_git_repo_without_content(tmp_path)
+
+    p = tmp_path / "multi.txt"
+    # First block (will become hunk #1)
+    block1 = "line1\r\nold\r\nend\r\n"
+    # Big neutral gap to prevent hunk coalescing
+    gap = "".join(f"ctx{i}\r\n" for i in range(10))
+    # Second block (will become hunk #2)
+    block2 = "keep\r\nfoo\r\n"
+    p.write_bytes((block1 + gap + block2).encode("utf-8"))
+    subprocess.run(["git", "add", p.name], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, check=True)
+
+    # Edit: change 'old'→'new' and insert a line starting with '+++ ' near block1,
+    # and change 'foo'→'bar' near block2; the big gap keeps them as separate hunks.
+    block1_mod = "line1\r\nnew\r\n+++ not a header\r\nend\r\n"
+    block2_mod = "keep\r\nbar\r\n"
+    p.write_bytes((block1_mod + gap + block2_mod).encode("utf-8"))
+
+    result = await _extract_diff(project_dir=tmp_path)
+
+    assert isinstance(result, DiffEntry)
+    dc = result.diff_content
+    assert "diff --git a/multi.txt b/multi.txt" in dc
+    assert "+++ not a header" in dc
+    # Two separate hunks now
+    assert dc.count("@@ ") >= 2

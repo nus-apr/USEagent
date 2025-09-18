@@ -27,8 +27,8 @@ SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
 
 def debug_history_processor(messages):
-    logger.info("Last three messages were:")
-    logger.info("\n".join(str(m) for m in messages[-5:]))
+    logger.info(f"Last {min(7,len(messages))} messages were:")
+    logger.info("\n".join(str(m) for m in messages[-7:]))
     return messages
 
 
@@ -58,10 +58,7 @@ def init_agent(
             # Tool(read_file_as_diff, takes_ctx=True),
             Tool(replace_file),
         ],
-        history_processors=[
-            fit_messages_into_context_window,
-            # debug_history_processor
-        ],
+        history_processors=[fit_messages_into_context_window, debug_history_processor],
     )
 
     @agent.instructions
