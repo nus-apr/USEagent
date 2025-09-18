@@ -42,6 +42,7 @@ from useagent.tools.meta import (  # Agent-State Tools; Agent-Agent Tools
     probe_environment,
     search_code,
     view_command_history,
+    view_task_state,
 )
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
@@ -67,7 +68,7 @@ def init_agent(
             # Non-Agentic Tools
             # TODO: Do we want to deprecate this? Things are a bit weird after #44
             # Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
-            # Tool(view_task_state, takes_ctx=True, max_retries=0),
+            Tool(view_task_state, takes_ctx=True, max_retries=0),
             Tool(view_command_history, max_retries=2),
             Tool(
                 make_bash_tool_for_agent(
@@ -209,7 +210,8 @@ def agent_loop(
                         artifact = result.output.answer
                     case CodeChange():
                         artifact = (
-                            str(
+                            f"Chosen ID: {result.output.diff_id} , which references this patch:"
+                            + str(
                                 task_state.diff_store.id_to_diff[result.output.diff_id]  # type: ignore
                             )
                             + "\nExplanation:"

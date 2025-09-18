@@ -282,6 +282,7 @@ def _make_repeated_extract_diff_tool_error(
     message: str = f"""
     You are asking repeatedly for `extract_diff` while seeing the same results. 
     You are likely stuck. The `extract_diff` will not give you any new results unless you make further changes to the files. 
+    Check whether you have (successfully) called any tool that makes any file changes - if not, you must make changes using other tools before calling this method.
 
     Consider: Have you made all the changes requested from you? 
     If yes, return an existing diff_id. 
