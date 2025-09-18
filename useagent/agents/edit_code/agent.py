@@ -58,7 +58,10 @@ def init_agent(
             # Tool(read_file_as_diff, takes_ctx=True),
             Tool(replace_file),
         ],
-        history_processors=[fit_messages_into_context_window, debug_history_processor],
+        history_processors=[
+            fit_messages_into_context_window,
+            # debug_history_processor
+        ],
     )
 
     @agent.instructions

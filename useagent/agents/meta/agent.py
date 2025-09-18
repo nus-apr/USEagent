@@ -41,9 +41,7 @@ from useagent.tools.meta import (  # Agent-State Tools; Agent-Agent Tools
     execute_tests,
     probe_environment,
     search_code,
-    select_diff_from_diff_store,
     view_command_history,
-    view_task_state,
 )
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
@@ -67,8 +65,9 @@ def init_agent(
         output_retries=constants.META_AGENT_OUTPUT_RETRIES,
         tools=[
             # Non-Agentic Tools
-            Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
-            Tool(view_task_state, takes_ctx=True, max_retries=0),
+            # TODO: Do we want to deprecate this? Things are a bit weird after #44
+            # Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
+            # Tool(view_task_state, takes_ctx=True, max_retries=0),
             Tool(view_command_history, max_retries=2),
             Tool(
                 make_bash_tool_for_agent(
