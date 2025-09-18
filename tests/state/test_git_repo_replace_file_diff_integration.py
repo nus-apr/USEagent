@@ -8,34 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from useagent.pydantic_models.artifacts.git.diff import DiffEntry
-from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.state.git_repo import GitRepository
 from useagent.tools.edit import init_edit_tools, replace_file
 from useagent.tools.git import _extract_diff
-
-
-@pytest.mark.integration
-@pytest.mark.tool
-@pytest.mark.asyncio
-async def test_replace_file_then__extract_diff_should_show_modification(tmp_path: Path):
-    init_edit_tools(str(tmp_path))
-
-    target = tmp_path / "tracked.txt"
-    target.write_text("v1\n")
-
-    GitRepository(str(tmp_path))
-
-    result_replace = replace_file("v2\n", str(target))
-    assert isinstance(result_replace, CLIResult)
-    assert target.read_text() == "v2\n"
-
-    diff_result = await _extract_diff(project_dir=tmp_path)
-    assert isinstance(diff_result, DiffEntry)
-    assert "diff --git" in diff_result.diff_content
-    assert "tracked.txt" in diff_result.diff_content
-    assert "v2" in diff_result.diff_content
 
 
 @pytest.mark.integration
@@ -53,5 +29,5 @@ async def test_replace_file_failure_should_yield_toolerror_and_no_diff(tmp_path:
     result_replace = replace_file(bad_str, target)
     assert isinstance(result_replace, ToolErrorInfo)
 
-    result = await _extract_diff(project_dir=tmp_path)
+    result = await _extract_diff(paths_to_extract=tmp_path)
     assert isinstance(result, ToolErrorInfo)

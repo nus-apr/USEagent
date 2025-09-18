@@ -1,12 +1,13 @@
 import os
+import shlex
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 
 from loguru import logger
 from pydantic_ai import RunContext
 
 from useagent.common.encoding import is_utf_8_encoded
-from useagent.common.guardrails import useagent_guard_rail
 from useagent.config import ConfigSingleton
 from useagent.pydantic_models.artifacts.git.diff import DiffEntry
 from useagent.pydantic_models.artifacts.git.diff_store import DiffEntryKey
@@ -14,7 +15,6 @@ from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.task_state import TaskState
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
 from useagent.tools.run import run
-from useagent.utils import cd
 
 _EXTRACT_GIT_COUNTER: int = 0
 
@@ -198,20 +198,28 @@ def _commit_exists(repo: Path, commit: str) -> bool:
 
 async def extract_diff(
     ctx: RunContext[TaskState],
-    project_dir: Path | str | None = None,
+    paths_to_extract: str | Path | Sequence[str | Path] | None = None,
 ) -> DiffEntryKey | ToolErrorInfo:
     """
     Extract a git-diff of the current state of the repository.
     This is achieved using `git diff` for both cached and uncached, i.E. will show all files in the index.
     Hidden files and folders are always excluded - you are not supposed to make changes to them.
-    This will also add all files in the current repository to the index using `git add .`
+    This will also add files in the requested scope to the index using `git add`.
     This tool does NOT make a commit.
 
+    Extraction scope:
+        Limit extraction via `paths_to_extract` (dir, file, glob/pathspec, or list). If empty/None, use ".".
+        Values are passed to git as-is; absolute paths are allowed (git must resolve them inside the repo).
+
+    Post-condition:
+        After extracting the diff, all staged changes are **unstaged** (via `git reset`) before returning.
+        Working tree changes are not reverted.
+
     Args:
-        project_dir(Path|str|None, default None): Path at which to execute the extraction. If None, the current project dir will be used.
+        paths_to_extract(str|Path|Sequence|None): Single path/pattern or list. None/empty -> ["."]. Single value is wrapped.
 
     Returns:
-        DiffEntryKey: The key to find the resulting git patch in the diff_store, or a ToolErrorInfo containing information of a miss-usage or command failure.
+        DiffEntryKey or ToolErrorInfo
     """
     # TODO: The _exclude_hidden_dir is now always on - you can never use this tool here to get a .venv at the moment. If its written with _ its invisible to the agent.
     # String was:
@@ -219,34 +227,21 @@ async def extract_diff(
     _exclude_hidden_folders_and_files_from_diff: bool = True
 
     extract_result: DiffEntry | ToolErrorInfo = await _extract_diff(
-        project_dir=project_dir,
         exclude_hidden_folders_and_files_from_diff=_exclude_hidden_folders_and_files_from_diff,
+        paths_to_extract=paths_to_extract,
     )
     if isinstance(extract_result, ToolErrorInfo):
-        logger.debug(
-            f"[Tool] `extract_diff` resulted in a ToolError {extract_result.message}"
-        )
         return extract_result
-    logger.debug(
-        f"[Tool] Successfully extracted a DiffEntry (with {len(extract_result.diff_content)} lines) from {str(project_dir) if project_dir else '(default workdir)'}"
-    )
+
     global _EXTRACT_GIT_COUNTER
     try:
-        logger.debug("[Tool] Trying to add DiffEntry to DiffStore")
         diff_id: DiffEntryKey = ctx.deps.diff_store._add_entry(extract_result)
-        logger.info(
-            f"[Tool] Added diff entry with ID: {diff_id} to `ctx.deps.diff_store`."
-        )
-        _EXTRACT_GIT_COUNTER = 0  # Reset to 0, things were fine.
+        _EXTRACT_GIT_COUNTER = 0
         return diff_id
     except ValueError as verr:
         if "diff already exists" in str(verr):
-            logger.warning(
-                "[Tool] `extract_diff` returned a (already known) diff towards the `ctx.deps.diff_store`"
-            )
             _EXTRACT_GIT_COUNTER += 1
-            reversed_key_lookup = ctx.deps.diff_store.diff_to_id
-            existing_diff_id: DiffEntryKey = reversed_key_lookup[  # type: ignore
+            existing_diff_id: DiffEntryKey = ctx.deps.diff_store.diff_to_id[  # type: ignore
                 extract_result.diff_content
             ]
             if (
@@ -256,27 +251,97 @@ async def extract_diff(
                 ]
                 and _EXTRACT_GIT_COUNTER >= 2
             ):
-                logger.warning(
-                    "[Tool] Returning special Repetition `extract_diff` ToolErrorInfo"
-                )
                 return _make_repeated_extract_diff_tool_error(
                     existing_diff_id, extract_result.diff_content
                 )
-
             return ToolErrorInfo(
-                message=f" `extract_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. It was not added to the diff-store. Reuse {existing_diff_id} or make further changes to create another diff. Never rerun this tool without changes. The corresponding diff was: \n{_preview_patch(extract_result.diff_content)}",
-                supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
+                message=f"`extract_diff` returned a diff identical to {existing_diff_id}. "
+                f"Reuse that id or make further changes.\n"
+                f"Preview:\n{_preview_patch(extract_result.diff_content)}",
+                supplied_arguments=[
+                    ArgumentEntry("paths_to_extract", str(paths_to_extract))
+                ],
             )
-        else:
-            raise verr
+        raise
     except Exception as ex:
-        logger.error(
-            f"Hit an unhandled exception ({ex}) while extracting diff from {str(project_dir) if project_dir else '(default directory)'}"
-        )
         return ToolErrorInfo(
-            message=f"An unhandled exception occurred during diff-extraction ({ex}), please reconsider what you were trying to do.",
-            supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
+            message=f"Unhandled exception during diff-extraction ({ex})",
+            supplied_arguments=[
+                ArgumentEntry("paths_to_extract", str(paths_to_extract))
+            ],
         )
+
+
+async def _extract_diff(
+    exclude_hidden_folders_and_files_from_diff: bool = True,
+    paths_to_extract: str | Path | Sequence[str | Path] | None = None,
+) -> DiffEntry | ToolErrorInfo:
+    # normalize to a flat list of strings; default to ["."]
+    if paths_to_extract is None:
+        includes: list[str] = ["."]
+    elif isinstance(paths_to_extract, (str, Path)):
+        includes = [str(paths_to_extract)]
+    else:
+        includes = [str(p) for p in paths_to_extract]
+
+    include_spec = shlex.join(includes)
+
+    exclude_specs: list[str] = []
+    if exclude_hidden_folders_and_files_from_diff:
+        exclude_specs.extend(
+            [
+                "':(glob,exclude)**/.*'",
+                "':(glob,exclude)**/.*/**'",
+                "':(glob,exclude).venv/**'",
+                "':(glob,exclude)venv/**'",
+            ]
+        )
+    exclude_spec = " " + " ".join(exclude_specs) if exclude_specs else ""
+
+    try:
+        # Stage new files in scope (but not commit)
+        git_add_cmd = f"git add --intent-to-add {include_spec}{exclude_spec}"
+        await run(git_add_cmd, truncate_after=None)
+
+        # Extract diff for scope
+        diff_cmd = (
+            "git -c core.pager=cat --no-pager "
+            "diff --no-color --no-ext-diff --text --patch HEAD -- "
+            f"{include_spec}{exclude_spec}"
+        )
+        exit_code, stdout, stderr = await run(diff_cmd, truncate_after=None)
+
+        if exit_code != 0 and stderr:
+            return ToolErrorInfo(
+                message=f"Failed to extract diff: {stderr}",
+                supplied_arguments=[
+                    ArgumentEntry("paths_to_extract", str(paths_to_extract))
+                ],
+            )
+        if not stdout or not stdout.strip():
+            return ToolErrorInfo(
+                message="No changes detected. (Maybe only gitignored/hidden files changed?)",
+                supplied_arguments=[
+                    ArgumentEntry("paths_to_extract", str(paths_to_extract))
+                ],
+            )
+
+        output = stdout if stdout.endswith("\n") else stdout + "\n"
+        if len(output.splitlines()) > 2500:
+            return ToolErrorInfo(
+                message=f"Patch too large: {len(output.splitlines())} lines.",
+                supplied_arguments=[
+                    ArgumentEntry("paths_to_extract", str(paths_to_extract))
+                ],
+            )
+
+        return DiffEntry(output)
+    finally:
+        # Unstage everything; do not touch working tree
+        try:
+            await run("git reset --quiet", truncate_after=None)
+        except Exception as ex:
+            logger.warning(f"[Tool] Failed to unstage changes: {ex}")
 
 
 def _make_repeated_extract_diff_tool_error(
@@ -300,101 +365,6 @@ def _make_repeated_extract_diff_tool_error(
     {diff_content}
     """
     return ToolErrorInfo(message=message)
-
-
-async def _extract_diff(
-    project_dir: Path | str | None = None,
-    exclude_hidden_folders_and_files_from_diff: bool = True,
-) -> DiffEntry | ToolErrorInfo:
-    if project_dir and isinstance(project_dir, str):
-        project_dir = Path(project_dir)
-    project_dir = project_dir or Path(".").absolute()
-
-    logger.info(
-        f"[Tool] Invoked edit_tool `extract_diff`. Extracting a patch from {project_dir} (type: {type(project_dir)})"
-    )
-    if (
-        guard_rail_tool_error := useagent_guard_rail(
-            project_dir,
-            supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
-        )
-    ) is not None:
-        return guard_rail_tool_error
-
-    if not project_dir.exists():
-        logger.warning(
-            f"[Tool] trying to run extract-diff on non existent path: {str(project_dir)}"
-        )
-        return ToolErrorInfo(
-            message=f"Directory {project_dir} does not exist.",
-            supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
-        )
-    if not project_dir.is_dir():
-        logger.warning(
-            f"[Tool] trying to run extract-diff on a file {str(project_dir)} (folder needed)"
-        )
-        return ToolErrorInfo(
-            message=f"Filepath {project_dir} is a directory - `extract_diff` is meant for folders.",
-            supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
-        )
-
-    with cd(project_dir):
-        # Git Add -N is necessary to see changes to newly created files with the git diff
-        git_add_command = (
-            "git add --intent-to-add ':(glob,exclude)**/.*' ."
-            if exclude_hidden_folders_and_files_from_diff
-            else "git add --intent-to-add ."
-        )
-        await run(git_add_command, truncate_after=None)
-        # exclude hidden paths and virtualenvs at the DIFF level
-        # DevNote: This is a HotFix because Django would duplicate its own files and create a non-gitignored-venv :(
-        diff_cmd = (
-            "git -c core.pager=cat --no-pager "
-            "diff --no-color --no-ext-diff --text --patch HEAD -- "
-            ". "
-            "':(glob,exclude)**/.*' "  # hidden files/dirs
-            "':(glob,exclude)**/.*/**' "  # contents inside hidden dirs
-            "':(glob,exclude).venv/**' "  # .venv
-            "':(glob,exclude)venv/**'"  # venv
-        )
-        exit_code, stdout, stderr = await run(diff_cmd, truncate_after=None)
-
-        if exit_code != 0 and stderr:
-            logger.warning(
-                f"[Tool] extracting diff exited non-zero {exit_code}: {str(stderr)}"
-            )
-            return ToolErrorInfo(
-                message=f"Failed to extract diff: {stderr}",
-                supplied_arguments=[
-                    ArgumentEntry("project_dir", str(project_dir)),
-                ],
-            )
-        elif stderr:
-            logger.warning(f"[Tool] _extract_diff had a stderr: {stderr[:250]}")
-
-        if not stdout or not stdout.strip():
-            logger.debug("[Tool] edit_tool `extract_diff`: Received empty Diff")
-            return ToolErrorInfo(
-                message="No changes detected in the repository. (Maybe you have only changed gitignored or hidden files?)",
-                supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
-            )
-        logger.debug(
-            f"[Tool] edit_tool `_extract_diff`: Received {stdout[:25]} ... from {project_dir}"
-        )
-
-        output = stdout + "\n" if not stdout.endswith("\n") else stdout
-
-        if output and output.strip() and len(output.splitlines()) > 2500:
-            logger.warning(
-                f"[Tool] `extract_diff` produced a large patch with {len(output.splitlines())} lines changed - this is rejected."
-            )
-            return ToolErrorInfo(
-                message=f"The received patch was too large and is likely an error. It had {len(output.splitlines())} lines, which is too much to handle. Reconsider your scope for patch extraction, edit the .gitignore to achieve a smaller patch or restore some of the files to their unchanged state.",
-                supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
-            )
-
-        parsed = DiffEntry(output)
-        return parsed
 
 
 def _preview_patch(patch: str) -> str:
