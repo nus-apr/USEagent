@@ -351,51 +351,45 @@ async def test_issue_26__extract_diff_respects_non_utf8_filename_should_not_cras
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test_issue_26__extract_diff_large_hunks_should_not_crash(tmp_path: Path):
-    # DevNote: we changed this with #44 and currently bytes are not really allowed.
-    with pytest.raises(ValueError):
-        _init_git_repo_without_content(tmp_path)
+    _init_git_repo_without_content(tmp_path)
 
-        big = tmp_path / "big.txt"
-        big.write_bytes(b"x" * (2 * 1024 * 1024))
-        subprocess.run(["git", "add", big.name], cwd=tmp_path, check=True)
-        subprocess.run(["git", "commit", "-m", "add big"], cwd=tmp_path, check=True)
+    big = tmp_path / "big.txt"
+    big.write_bytes(b"x" * (2 * 1024 * 1024))
+    subprocess.run(["git", "add", big.name], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add big"], cwd=tmp_path, check=True)
 
-        big.write_bytes(big.read_bytes() + (b"\xa0" * (256 * 1024)) + b"\nmore\n")
+    big.write_bytes(big.read_bytes() + (b"\xa0" * (256 * 1024)) + b"\nmore\n")
 
-        result = await _extract_diff(project_dir=tmp_path)
-        assert isinstance(result, DiffEntry)
-        assert result.diff_content.strip()
-        assert big.name in result.diff_content
+    result = await _extract_diff(project_dir=tmp_path)
+    assert isinstance(result, DiffEntry)
+    assert result.diff_content.strip()
+    assert big.name in result.diff_content
 
 
 @pytest.mark.regression
 @pytest.mark.tool
 @pytest.mark.asyncio
-async def test_issue_26__extract_diff_large_hunks_from_text_should_crash_due_to_truncation(
+async def test_issue_26__extract_diff_large_hunks_from_text_should_not_crash_and_not_be_truncated(
     tmp_path: Path,
 ):
-    # Too large git diffs will get a truncation and contain a <note> etc. about it
-    # But that is not a valid git diff then.
-    with pytest.raises(ValueError):
-        _init_git_repo_without_content(tmp_path)
+    _init_git_repo_without_content(tmp_path)
 
-        big = tmp_path / "big.txt"
+    big = tmp_path / "big.txt"
 
-        initial = "".join(f"line {i}\n" for i in range(200_000))
-        big.write_text(initial, encoding="utf-8")
-        subprocess.run(["git", "add", big.name], cwd=tmp_path, check=True)
-        subprocess.run(["git", "commit", "-m", "add big"], cwd=tmp_path, check=True)
+    initial = "".join(f"line {i}\n" for i in range(200_000))
+    big.write_text(initial, encoding="utf-8")
+    subprocess.run(["git", "add", big.name], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add big"], cwd=tmp_path, check=True)
 
-        modified = (
-            "line 0 changed\n"
-            + "".join(f"line {i}\n" for i in range(1, 200_000))
-            + "".join(f"new {i}\n" for i in range(100_000))
-        )
-        big.write_text(modified, encoding="utf-8")
+    modified = (
+        "line 0 changed\n"
+        + "".join(f"line {i}\n" for i in range(1, 200_000))
+        + "".join(f"new {i}\n" for i in range(100_000))
+    )
+    big.write_text(modified, encoding="utf-8")
 
-        result = await _extract_diff(project_dir=tmp_path)
-
-        result.diff_content
+    result = await _extract_diff(project_dir=tmp_path)
+    assert isinstance(result, ToolErrorInfo)
 
 
 @pytest.mark.regression
@@ -555,6 +549,9 @@ async def test__extract_diff_whitespace_only_change_behavior_should_show_change(
     assert "ws.txt" in result.diff_content
 
 
+@pytest.mark.xfail(
+    reason="Behavior changed - all hidden files are currently always excluded."
+)
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test__extract_diff_hidden_file_in_root_should_show_when_not_ignored(
@@ -595,6 +592,9 @@ async def test__extract_diff_hidden_file_in_root_should_not_show_when_ignored(
     assert ".hidden.txt" not in result.diff_content
 
 
+@pytest.mark.xfail(
+    reason="Behavior changed - all hidden files are currently always excluded."
+)
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test__extract_diff_non_hidden_file_in_hidden_dir_should_show_when_not_ignored(
@@ -635,6 +635,9 @@ async def test__extract_diff_non_hidden_file_in_hidden_dir_should_not_show_when_
     assert ".hidden/visible.txt" not in result.diff_content
 
 
+@pytest.mark.xfail(
+    reason="Behavior changed - all hidden files are currently always excluded."
+)
 @pytest.mark.tool
 @pytest.mark.asyncio
 async def test__extract_diff_hidden_file_in_hidden_dir_should_show_when_not_ignored_and_extract_diff_wants_secret_files(

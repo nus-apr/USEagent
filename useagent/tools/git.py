@@ -199,25 +199,28 @@ def _commit_exists(repo: Path, commit: str) -> bool:
 async def extract_diff(
     ctx: RunContext[TaskState],
     project_dir: Path | str | None = None,
-    exclude_hidden_folders_and_files_from_diff: bool = True,
 ) -> DiffEntryKey | ToolErrorInfo:
     """
     Extract a git-diff of the current state of the repository.
     This is achieved using `git diff` for both cached and uncached, i.E. will show all files in the index.
+    Hidden files and folders are always excluded - you are not supposed to make changes to them.
     This will also add all files in the current repository to the index using `git add .`
-    For extracting other, existing diffs from commits consider `view_commit_as_diff`.
     This tool does NOT make a commit.
 
     Args:
         project_dir(Path|str|None, default None): Path at which to execute the extraction. If None, the current project dir will be used.
-        exclude_hidden_folders_and_files_from_diff(bool): Whether or not hidden files and folders (.venv, .gitignore) will be considered for the patch. Default: False, hidden folders are ignored.
 
     Returns:
         DiffEntryKey: The key to find the resulting git patch in the diff_store, or a ToolErrorInfo containing information of a miss-usage or command failure.
     """
+    # TODO: The _exclude_hidden_dir is now always on - you can never use this tool here to get a .venv at the moment. If its written with _ its invisible to the agent.
+    # String was:
+    # exclude_hidden_folders_and_files_from_diff(bool): Whether or not hidden files and folders (.venv, .gitignore) will be considered for the patch. Default: False, hidden folders are ignored.
+    _exclude_hidden_folders_and_files_from_diff: bool = True
+
     extract_result: DiffEntry | ToolErrorInfo = await _extract_diff(
         project_dir=project_dir,
-        exclude_hidden_folders_and_files_from_diff=exclude_hidden_folders_and_files_from_diff,
+        exclude_hidden_folders_and_files_from_diff=_exclude_hidden_folders_and_files_from_diff,
     )
     if isinstance(extract_result, ToolErrorInfo):
         logger.debug(
@@ -282,6 +285,7 @@ def _make_repeated_extract_diff_tool_error(
     message: str = f"""
     You are asking repeatedly for `extract_diff` while seeing the same results. 
     You are likely stuck. The `extract_diff` will not give you any new results unless you make further changes to the files. 
+    You maybe have only made changes to hidden files or derivate files outside of the actual project source code. 
     Check whether you have (successfully) called any tool that makes any file changes - if not, you must make changes using other tools before calling this method.
 
     Consider: Have you made all the changes requested from you? 
@@ -337,12 +341,23 @@ async def _extract_diff(
     with cd(project_dir):
         # Git Add -N is necessary to see changes to newly created files with the git diff
         git_add_command = (
-            "git add --intent-to-add . ':(glob,exclude)**/.*'"
+            "git add --intent-to-add ':(glob,exclude)**/.*' ."
             if exclude_hidden_folders_and_files_from_diff
             else "git add --intent-to-add ."
         )
-        await run(git_add_command)
-        exit_code, stdout, stderr = await run("git diff HEAD")
+        await run(git_add_command, truncate_after=None)
+        # exclude hidden paths and virtualenvs at the DIFF level
+        # DevNote: This is a HotFix because Django would duplicate its own files and create a non-gitignored-venv :(
+        diff_cmd = (
+            "git -c core.pager=cat --no-pager "
+            "diff --no-color --no-ext-diff --text --patch HEAD -- "
+            ". "
+            "':(glob,exclude)**/.*' "  # hidden files/dirs
+            "':(glob,exclude)**/.*/**' "  # contents inside hidden dirs
+            "':(glob,exclude).venv/**' "  # .venv
+            "':(glob,exclude)venv/**'"  # venv
+        )
+        exit_code, stdout, stderr = await run(diff_cmd, truncate_after=None)
 
         if exit_code != 0 and stderr:
             logger.warning(
@@ -360,7 +375,7 @@ async def _extract_diff(
         if not stdout or not stdout.strip():
             logger.debug("[Tool] edit_tool `extract_diff`: Received empty Diff")
             return ToolErrorInfo(
-                message="No changes detected in the repository.",
+                message="No changes detected in the repository. (Maybe you have only changed gitignored or hidden files?)",
                 supplied_arguments=[ArgumentEntry("project_dir", str(project_dir))],
             )
         logger.debug(
@@ -371,7 +386,7 @@ async def _extract_diff(
 
         if output and output.strip() and len(output.splitlines()) > 2500:
             logger.warning(
-                f"[Tool] `extract_diff` produced a large patch with {len(output.splitlines())} lines changed - this is rejected"
+                f"[Tool] `extract_diff` produced a large patch with {len(output.splitlines())} lines changed - this is rejected."
             )
             return ToolErrorInfo(
                 message=f"The received patch was too large and is likely an error. It had {len(output.splitlines())} lines, which is too much to handle. Reconsider your scope for patch extraction, edit the .gitignore to achieve a smaller patch or restore some of the files to their unchanged state.",
