@@ -20,8 +20,10 @@ class Action:
         - success (bool): True if you think the action was performed correctly. 
         - evidence (Non Empty String): Provide evidence and arguments for what you have done, and how you achieve your verdicts of `success`
         - execution_artifact: If possible, look for CLIResults or ToolErrorInfos from the Commands you have been executing.
-        - doubts (Non Empty String, or None): Optionally, if you think there are any counter arguments to what you have done, or necessary steps missed, or other anomalies, present them here. Keep this based on facts, and do not raise generic doubts. If there are doubts about installations and dependencies, stick to your environment and don't extrapolate to possible different environments.
-
+        - doubts (Non Empty String, or None): Optionally, if you think there are any counter arguments to what you have done, or necessary steps missed, or other anomalies, present them here. 
+                Keep this based on facts, and do not raise generic doubts. If there are doubts about installations and dependencies, stick to your environment and don't extrapolate to possible different environments.
+                When describing your doubts, do not use any references or links to previous messages - describe all elements, their locations, etc. as if to a person that sees this conversation and artifact from a blank slate. 
+                
         When constructing this object, focus on the most recent actions. 
         Especially initial steps you performed while exploring the repository, or actions that you were able to correct in later iterations, might not be relevant.
         """  # TODO: Do we want to add infos on CLI_Output + ToolErrorInfo here?

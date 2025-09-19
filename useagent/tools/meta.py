@@ -324,6 +324,9 @@ async def edit_code(
         2. Are there already existing, promising partial changes? If so, point them out, relative to the patches you have seen so far
         3. Are there any bad or distracting elements in existing changes? If so, point out to correct noisy and poor elements
 
+    In your instructions, do not reference any existing artifacts or conversations - describe the necessary changes as if you start a new conversation.
+    If there is important information, such as files, lines or snippets that you would like, re-introduce them in your instruction.
+
     Args:
         instruction (str): Instruction for the code edit. The instrution should be very specific, typically should include where in the codebase to edit (files, lines, etc.), what to change, and how to change it.
 
@@ -352,7 +355,7 @@ async def edit_code(
             f"[MetaAgent] `edit_code` failed due to number of requests {usage_exc}, returning a ToolErrorInfo about it"
         )
         return ToolErrorInfo(
-            message="There have been issue following your instructions for `edit_code`. Either they have been too complex or too vague, or they caused an issue within the pydantic_ai framework. Reconsider your instructions and consider doing `step-by-step` changes."
+            message="There have been issue following your instructions for `edit_code`. Either they have been too complex or too vague, or they caused an issue within the pydantic_ai framework. Reconsider your instructions and consider doing `step-by-step` changes. If the task is in a corrupted / poor state (e.g. a file was deleted that should not be), try to restore a good state of the project before editing again."
         )
     except (
         UnexpectedModelBehavior,
@@ -363,7 +366,7 @@ async def edit_code(
             f"[MetaAgent] `edit_code` failed due to model behavior {ai_model_behavior_exc}, returning a ToolErrorInfo about it"
         )
         return ToolErrorInfo(
-            message=f"There have been issue executing your instructions for `edit_code`. Either they have been too complex, or they caused an issue within the pydantic_ai framework. Reconsider your instructions regarding to the error {ai_model_behavior_exc} and try to avoid it."
+            message=f"There have been issue executing your instructions for `edit_code`. Either they have been too complex, or they caused an issue within the pydantic_ai framework. Reconsider your instructions regarding to the error {ai_model_behavior_exc} and try to avoid it. If the task is in a corrupted / poor state (e.g. a file was deleted that should not be), try to restore a good state of the project before editing again."
         )
     except Exception as e:
         # TODO: Do we have to look for more issues here? Do we want to?

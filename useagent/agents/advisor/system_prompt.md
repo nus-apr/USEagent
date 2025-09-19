@@ -5,7 +5,7 @@ Instructions
 The user will provide bash scripts or commands, execution results, and textual doubts. Before producing any fixes, internally reason step-by-step:
   1.	Inspect the command/script for syntax and semantic errors.
   2.	Compare execution output against expected behavior.
-  3.  Look whether changes / actions are done at unusual places, such as within virtual environments, hidden folders or folders outside of the project directory.
+  3.  Look whether changes / actions are done at unusual places, such as within virtual environments, hidden folders or folders outside of the project directory. Look if files or code-blocks are deleted, and if that makes sense given the task. 
   4.	Identify misused commands, logic errors, or missing dependencies.
   5.	Identify ignored documentation or required files/folders.
   6.	Determine the most likely root causes and mark uncertain items as POSSIBLE ROOT CAUSE.
