@@ -4,6 +4,7 @@ Bash tool.
 
 import asyncio
 import os
+import re
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
@@ -20,6 +21,32 @@ from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
 from useagent.tasks.swebench_task import SWEbenchTask
+
+
+def strip_downloading_lines(log_text: str) -> str:
+    """
+    Remove progress-style downloading / fetching lines
+    from logs of pip, apt-get, maven, npm, etc.
+    """
+    patterns = [
+        r"^\s*Downloading.*",  # pip, maven
+        r"^\s*Downloaded.*",  # pip, maven
+        r"^\s*Collecting.*",  # pip
+        r"^\s*Fetching.*",  # npm, yarn
+        r"^\s*Get:.*",  # apt-get
+        r"^\s*Hit:.*",  # apt-get
+        r"^\s*Ign:.*",  # apt-get
+        r"^\s*Reading package lists.*",  # apt-get
+        r"^\s*Resolving.*",  # curl/wget style
+        r"^\s*Receiving objects.*",  # git clone
+    ]
+    combined = re.compile("|".join(patterns), re.IGNORECASE)
+
+    filtered_lines = []
+    for line in log_text.splitlines():
+        if not combined.match(line):
+            filtered_lines.append(line)
+    return "\n".join(filtered_lines)
 
 
 class _BashSession:
@@ -203,7 +230,9 @@ class _BashSession:
                     output = stdout_buf.decode(errors="replace").replace(
                         self._sentinel, ""
                     )
+                    output = strip_downloading_lines(output)
                     stderr_content = stderr_buf.decode(errors="replace")
+                    stderr_content = strip_downloading_lines(stderr_content)
 
                     if len(output) > constants.BASH_TOOL_OUTPUT_MAX_LENGTH:
                         # DevNote: See Issue #31, we move this from a ValueError to a ToolOutPutError
