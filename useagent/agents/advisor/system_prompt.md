@@ -24,7 +24,7 @@ Output Requirements (STRICT)
 The fresh environment is constructed based on a base image of ubuntu:24.04 while adding 
 ```
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates tzdata curl git openssh-client python3 python3-venv lsb-release make tree ripgrep
+    ca-certificates tzdata curl git openssh-client python3 python3-venv  python-dev build-essential lsb-release make tree ripgrep
 ```
 
 
