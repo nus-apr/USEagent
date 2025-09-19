@@ -1204,3 +1204,102 @@ index cccc333..dddd444 100644
 
 def test_plain_two_file_patch_should_validate():
     assert _is_valid_patch(PLAIN_TWO_FILE_PATCH) is True
+
+
+# --- Additional coverage for header-like text inside hunk bodies --------------
+
+CONTEXT_LINE_THAT_LOOKS_LIKE_MINUS_HEADER_TEXT = """\
+diff --git a/y.txt b/y.txt
+index 1111111..2222222 100644
+--- a/y.txt
++++ b/y.txt
+@@ -1,3 +1,3 @@
+ --- this is real file content, not a header
+-old
++new
+ end
+"""
+
+
+@pytest.mark.pydantic_model
+def test_context_line_that_looks_like_minus_header_text_should_validate():
+    assert _is_valid_patch(CONTEXT_LINE_THAT_LOOKS_LIKE_MINUS_HEADER_TEXT) is True
+
+
+CONTEXT_LINE_SPACE_THEN_PLUSSES_WITH_PATH = """\
+diff --git a/z.txt b/z.txt
+index 1111111..2222222 100644
+--- a/z.txt
++++ b/z.txt
+@@ -1,3 +1,3 @@
+ +++ b/looks_like_header.txt
+-old
++new
+ end
+"""
+
+
+@pytest.mark.pydantic_model
+def test_context_line_with_three_pluses_and_path_should_validate():
+    assert _is_valid_patch(CONTEXT_LINE_SPACE_THEN_PLUSSES_WITH_PATH) is True
+
+
+# Ensure we don't clip the last added line that looks like a header
+# when the next line is the next file's "diff --git" header.
+
+ADDED_LINE_THAT_LOOKS_LIKE_HEADER_AT_HUNK_END_BEFORE_NEXT_FILE = """\
+diff --git a/a.txt b/a.txt
+index 1010101..2020202 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1,2 +1,3 @@
+ line1
+-old
++new
++++ b/definitely_not_a_header.txt
+diff --git a/b.txt b/b.txt
+index 3030303..4040404 100644
+--- a/b.txt
++++ b/b.txt
+@@ -1,1 +1,1 @@
+-x
++y
+"""
+
+
+@pytest.mark.pydantic_model
+@pytest.mark.regression
+def test_added_line_looks_like_header_at_hunk_end_before_next_file_should_validate():
+    assert (
+        _is_valid_patch(ADDED_LINE_THAT_LOOKS_LIKE_HEADER_AT_HUNK_END_BEFORE_NEXT_FILE)
+        is True
+    )
+
+
+ADDED_LINE_THAT_LOOKS_LIKE_HEADER_AT_HUNK_END_BEFORE_NEXT_FILE = """\
+diff --git a/a.txt b/a.txt
+index 1010101..2020202 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1,2 +1,3 @@
+ line1
+-old
++new
++++ b/definitely_not_a_header.txt
+diff --git a/b.txt b/b.txt
+index 3030303..4040404 100644
+--- a/b.txt
++++ b/b.txt
+@@ -1,1 +1,1 @@
+-x
++y
+"""
+
+
+@pytest.mark.pydantic_model
+@pytest.mark.regression
+def test_added_line_looks_like_header_at_hunk_end_before_next_file_should_validate_edge_case():
+    assert (
+        _is_valid_patch(ADDED_LINE_THAT_LOOKS_LIKE_HEADER_AT_HUNK_END_BEFORE_NEXT_FILE)
+        is True
+    )

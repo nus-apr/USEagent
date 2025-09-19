@@ -1,5 +1,6 @@
 import re
 
+from loguru import logger
 from pydantic import computed_field, field_validator
 from pydantic.dataclasses import dataclass
 
@@ -60,5 +61,6 @@ class DiffEntry:
     def validate_git_patch(cls, v: str) -> str:
         patch: str = v
         if not _is_valid_patch(patch):
+            logger.debug("Patch validation failed for:\n{}", patch)
             raise ValueError("Invalid git patch format")
         return v

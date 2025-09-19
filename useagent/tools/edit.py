@@ -323,7 +323,9 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
     success_msg = f"The file {path} has been edited. "
     success_msg += _make_output(snippet, f"a snippet of {path}", start_line + 1)
     success_msg += "Review the changes and make sure they are as expected. Edit the file again if necessary."
-
+    logger.debug(
+        "[Tool] `str_replace` has successfully executed and returns a successful CLIResult"
+    )
     return CLIResult(output=success_msg)
 
 
@@ -533,6 +535,9 @@ async def insert(
         max(1, insert_line - SNIPPET_LINES + 1),
     )
     success_msg += "Review the changes and make sure they are as expected (correct indentation, no duplicate lines, etc). Edit the file again if necessary."
+    logger.debug(
+        "[Tool] `insert` has successfully inserted and returns a successful CLIResult"
+    )
     return CLIResult(output=success_msg)
 
 
