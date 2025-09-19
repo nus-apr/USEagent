@@ -3,6 +3,11 @@ from pathlib import Path
 
 from loguru import logger
 from pydantic_ai import RunContext
+from pydantic_ai.exceptions import (
+    ToolRetryError,
+    UnexpectedModelBehavior,
+    UsageLimitExceeded,
+)
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.usage import Usage, UsageLimits
 
@@ -311,7 +316,7 @@ async def search_code(ctx: RunContext[TaskState], instruction: str) -> list[Loca
 
 async def edit_code(
     ctx: RunContext[TaskState], instruction: str
-) -> DiffEntryKey | None:
+) -> DiffEntryKey | ToolErrorInfo | None:
     """Edit the codebase based on the provided instruction.
 
     To invoke the EditCode tool, think step by step:
@@ -326,18 +331,44 @@ async def edit_code(
         DiffEntryKey: A pointer into your TaskState's diff_store that contains a unified diff of the changes that can be applied to the codebase.
     """
     logger.info(f"[MetaAgent] Invoked edit_code with instruction: {instruction}")
-    edit_code_agent = init_edit_code_agent()
+    try:
+        edit_code_agent = init_edit_code_agent()
 
-    edit_result = await edit_code_agent.run(
-        instruction,
-        deps=ctx.deps,
-        usage_limits=UsageLimits(request_limit=constants.EDIT_CODE_AGENT_REQUEST_LIMIT),
-    )
-    diff_key: DiffEntryKey = edit_result.output
-    logger.info(f"[MetaAgent] edit_code result: {diff_key}")
-    # DevNote: Since #44 adding diffs to diffstore is done at `extract_diff`
-    USAGE_TRACKER.add(edit_code_agent.name, edit_result.usage())
-    return diff_key
+        edit_result = await edit_code_agent.run(
+            instruction,
+            deps=ctx.deps,
+            usage_limits=UsageLimits(
+                request_limit=constants.EDIT_CODE_AGENT_REQUEST_LIMIT
+            ),
+        )
+        diff_key: DiffEntryKey = edit_result.output
+        logger.info(f"[MetaAgent] edit_code result: {diff_key}")
+        # DevNote: Since #44 adding diffs to diffstore is done at `extract_diff`
+        USAGE_TRACKER.add(edit_code_agent.name, edit_result.usage())
+        return diff_key
+
+    except UsageLimitExceeded as usage_exc:
+        logger.error(
+            f"[MetaAgent] `edit_code` failed due to number of requests {usage_exc}, returning a ToolErrorInfo about it"
+        )
+        return ToolErrorInfo(
+            message="There have been issue following your instructions for `edit_code`. Either they have been too complex or too vague, or they caused an issue within the pydantic_ai framework. Reconsider your instructions and consider doing `step-by-step` changes."
+        )
+    except (
+        UnexpectedModelBehavior,
+        ToolRetryError,
+    ) as ai_model_behavior_exc:
+        # DevNote: UnexpectedModelBehavior is for output retries, ToolRetryError is for tool retries.
+        logger.error(
+            f"[MetaAgent] `edit_code` failed due to model behavior {ai_model_behavior_exc}, returning a ToolErrorInfo about it"
+        )
+        return ToolErrorInfo(
+            message=f"There have been issue executing your instructions for `edit_code`. Either they have been too complex, or they caused an issue within the pydantic_ai framework. Reconsider your instructions regarding to the error {ai_model_behavior_exc} and try to avoid it."
+        )
+    except Exception as e:
+        # TODO: Do we have to look for more issues here? Do we want to?
+        # There are at least ModelHTTP Errors but I think those are valid to end the run.
+        raise e
 
 
 async def vcs(ctx: RunContext[TaskState], instruction: str) -> DiffEntry | str | None:
