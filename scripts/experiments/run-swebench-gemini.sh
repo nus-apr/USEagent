@@ -10,9 +10,9 @@ MODEL_NAME=openai:gpt-5-mini
 INPUT_FILE="./resources/swe_verified_ids_shuffled.txt"
 
 # Config
-MAX=250              # 0 = all
-SKIP_DATAPOINTS=20     # skip first X datapoints (0 = none)
-MAX_THREADS=15
+MAX=20              # 0 = all
+SKIP_DATAPOINTS=0     # skip first X datapoints (0 = none)
+MAX_THREADS=1
 TIMEOUT_SECS=10800     # 0 = no timeout
 
 [[ -f "$INPUT_FILE" ]] || { echo "Input file not found: $INPUT_FILE"; exit 1; }
