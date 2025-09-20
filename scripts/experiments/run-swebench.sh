@@ -10,8 +10,8 @@ MODEL_NAME=openai:gpt-5-mini
 INPUT_FILE="./resources/swe_verified_ids_shuffled.txt"
 
 # Config
-MAX=250              # 0 = all
-SKIP_DATAPOINTS=20     # skip first X datapoints (0 = none)
+MAX=230              # 0 = all
+SKIP_DATAPOINTS=270     # skip first X datapoints (0 = none)
 MAX_THREADS=15
 TIMEOUT_SECS=10800     # 0 = no timeout
 
