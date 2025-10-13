@@ -1,8 +1,12 @@
 ARG BASE_IMAGE=ubuntu:24.04
+ARG USEBENCH_ENABLED=true
 
 # ---- builder ----
 FROM ${BASE_IMAGE} AS builder
 LABEL stage=builder
+
+ARG USEBENCH_ENABLED
+ENV USEBENCH_ENABLED=${USEBENCH_ENABLED}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates tzdata curl git openssh-client python3 python3-venv lsb-release && \
@@ -21,7 +25,13 @@ RUN ssh-keyscan -p 443 ssh.github.com >> /root/.ssh/known_hosts
 # First: Copy in dependencies & install them, to have them cached even if project src changes
 WORKDIR /src
 COPY pyproject.toml uv.lock* README.md /src/
-RUN --mount=type=ssh uv sync --all-extras --dev --no-install-project
+# conditionally install usebench based on build arg
+RUN --mount=type=ssh \
+  if [ "$USEBENCH_ENABLED" = "true" ]; then \
+    uv sync --extra usebench --extra dev --no-install-project; \
+  else \
+    uv sync --extra dev --no-install-project; \
+  fi
 # Now: Copy in Project source and build
 COPY . /src/
 RUN --mount=type=ssh uv build
@@ -32,13 +42,19 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 RUN uv pip install /src/dist/*.whl
 
-# run usebench migration and put it in a nearby folder to copy
-RUN mkdir -p /artifact/data && /opt/venv/bin/usebench-migration /artifact/data
+# always create the directory, run migration only if enabled
+RUN mkdir -p /artifact/data && \
+    if [ "$USEBENCH_ENABLED" = "true" ]; then \
+      /opt/venv/bin/usebench-migration /artifact/data; \
+    fi
 
 # ---- runtime ----
 FROM ${BASE_IMAGE}
 LABEL maintainer.Yuntong="Yuntong Zhang <ang.unong@gmail.com>"
 LABEL maintainer.Leonhard="Leonhard Applis <leonhard.applis@protonmail.com>"
+
+ARG USEBENCH_ENABLED
+ENV USEBENCH_ENABLED=${USEBENCH_ENABLED}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates tzdata curl git openssh-client python3 python3-venv lsb-release make tree ripgrep && \

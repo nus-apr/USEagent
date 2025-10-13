@@ -2,15 +2,25 @@
 
 [Install UV](https://docs.astral.sh/uv/getting-started/installation/)
 
+### Without USEBench (Default)
 ```shell
-# install dependencies, including usebench
+# install base dependencies
 uv sync
+```
+
+### With USEBench Enabled
+```shell
+# install dependencies including usebench
+uv sync --extra usebench
+
+# set environment variable to enable USEBench
+export USEBENCH_ENABLED=true
 
 # usebench migration (you can specify a place to store the dataset)
 uv run usebench-migration ./data
 ```
 
-*Note*: USEBench is used to provide docker-images and texts - its docker-using APIs are not used.
+*Note*: USEBench is optional and disabled by default. When running in Docker, USEBench is enabled by default but can be disabled with `--build-arg USEBENCH_ENABLED=false`. USEBench is used to provide docker-images and texts - its docker-using APIs are not used.
 The full work will be done on-top of the buggy usebench image.
 
 ## Docker
@@ -22,7 +32,11 @@ Build image with just the agent:
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_ed25519
 
+# with USEBench enabled (default)
 DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
+
+# without USEBench
+DOCKER_BUILDKIT=1 docker build --build-arg USEBENCH_ENABLED=false -t useagent-turbo:dev .
 ```
 
 Build image on top of existing image (useful when running on benchmarks):
@@ -70,6 +84,8 @@ uv run pre-commit run --all-files
 Start a container:
 
 ### USEBENCH
+
+*Note*: The `usebench` subcommand requires USEBench to be enabled. If disabled, it will provide instructions on how to enable it.
 
 ```shell
 docker run -it --name useagent-turbo-test useagent-turbo:dev
