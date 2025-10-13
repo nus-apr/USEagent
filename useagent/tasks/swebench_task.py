@@ -136,7 +136,7 @@ class SWEbenchTask(Task):
             raise ValueError(
                 f"[Setup] Instance {instance_id} not found in {dataset}/{split}"
             )
-        return self._hf_row_to_meta(dict(row))
+        return self._hf_row_to_meta(row)  # type: ignore[arg-type]
 
     def _materialize_repo(self) -> None:
         if self._working_dir.exists():

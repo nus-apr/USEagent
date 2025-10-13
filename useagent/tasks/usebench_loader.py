@@ -10,7 +10,10 @@ else:
 UseBenchTask = None
 if USEBENCH_ENABLED:
     try:
-        from useagent.tasks.usebench_task import UseBenchTask as _UseBenchTask  # type: ignore[assignment]
+        from useagent.tasks.usebench_task import (
+            UseBenchTask as _UseBenchTask,  # type: ignore[assignment]
+        )
+
         UseBenchTask = _UseBenchTask
     except ImportError:
         # keep None; runtime guards will produce a friendly error

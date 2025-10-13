@@ -9,10 +9,10 @@ from loguru import logger
 
 from useagent import task_runner
 from useagent.config import AppConfig, ConfigSingleton
+from useagent.flags import USEBENCH_ENABLED
 from useagent.pydantic_models.output.action import Action
 from useagent.pydantic_models.output.answer import Answer
 from useagent.pydantic_models.output.code_change import CodeChange
-from useagent.flags import USEBENCH_ENABLED
 from useagent.tasks.github_task import GithubTask
 from useagent.tasks.local_task import LocalTask
 from useagent.tasks.swebench_task import SWEbenchTask

@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false
 import subprocess
 from pathlib import Path
 
