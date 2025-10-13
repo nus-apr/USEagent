@@ -54,8 +54,6 @@ def init_agent(
             Tool(str_replace),
             Tool(insert),
             Tool(extract_diff, takes_ctx=True),
-            # TODO: Figure out how to make this work with SWE - we often see a patch as a full file rather than a delta.
-            # Tool(read_file_as_diff, takes_ctx=True),
             Tool(replace_file),
         ],
         history_processors=[

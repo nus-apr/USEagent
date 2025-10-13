@@ -26,4 +26,4 @@ class Action:
                 
         When constructing this object, focus on the most recent actions. 
         Especially initial steps you performed while exploring the repository, or actions that you were able to correct in later iterations, might not be relevant.
-        """  # TODO: Do we want to add infos on CLI_Output + ToolErrorInfo here?
+        """

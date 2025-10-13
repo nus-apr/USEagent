@@ -66,9 +66,6 @@ def init_agent(
         output_retries=constants.META_AGENT_OUTPUT_RETRIES,
         tools=[
             # Non-Agentic Tools
-            # TODO: Do we want to deprecate this? Things are a bit weird after #44
-            # Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
-            # Tool(view_task_state, takes_ctx=True, max_retries=0),
             Tool(view_command_history, max_retries=2),
             Tool(
                 make_bash_tool_for_agent(
@@ -77,8 +74,6 @@ def init_agent(
                 ),
                 max_retries=4,
             ),
-            # TODO: Figure out how to make this work with SWE - we often see a patch as a full file rather than a delta.
-            # Tool(read_file_as_diff),
             # Agent-Agent Tools
             Tool(edit_code, takes_ctx=True, max_retries=constants.EDIT_CODE_RETRIES),
             Tool(
@@ -241,7 +236,6 @@ def agent_loop(
                     ),
                     message_history=last_iteration_messages,
                 )
-                # TODO: Do we want to earmark this as 'META-reiteration'? At the moment it will just be 2nd Meta Agent Cost
                 USAGE_TRACKER.add(meta_agent.name, result.usage())
                 last_iteration_messages = result.all_messages()
             except Exception as exc:

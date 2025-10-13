@@ -280,7 +280,6 @@ async def execute_tests(ctx: RunContext[TaskState], instruction: str) -> TestRes
     logger.info(f"[Test Execution Agent] Tests resulted in {test_result}")
 
     USAGE_TRACKER.add(test_agent.name, test_agent_output.usage())
-    # TODO: Also add a test-result lookup and storage? It should be relative to environment / git commit to be useful
 
     return test_result
 

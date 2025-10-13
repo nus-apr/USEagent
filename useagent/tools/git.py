@@ -221,9 +221,7 @@ async def extract_diff(
     Returns:
         DiffEntryKey or ToolErrorInfo
     """
-    # TODO: The _exclude_hidden_dir is now always on - you can never use this tool here to get a .venv at the moment. If its written with _ its invisible to the agent.
-    # String was:
-    # exclude_hidden_folders_and_files_from_diff(bool): Whether or not hidden files and folders (.venv, .gitignore) will be considered for the patch. Default: False, hidden folders are ignored.
+    # DevNote:  The _exclude_hidden_dir is now always on - you can never use this tool here to get a .venv at the moment.
     _exclude_hidden_folders_and_files_from_diff: bool = True
 
     extract_result: DiffEntry | ToolErrorInfo = await _extract_diff(
