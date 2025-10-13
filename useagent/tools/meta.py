@@ -374,14 +374,16 @@ async def edit_code(
         raise e
 
 
-async def vcs(ctx: RunContext[TaskState], instruction: str) -> DiffEntry | str | None:
+async def vcs(
+    ctx: RunContext[TaskState], instruction: str
+) -> DiffEntryKey | str | None:
     """Perform tasks related to version-management given the provided instruction.
 
     Args:
-        instruction (str): Instruction for the version management. The instruction should be very specific, typically should include the expected outcome and whether or not a action should be performed. Pay special attention to describe the expected start and end state, if a change in the VCS is required.
+        instruction (str): Instruction for the version management. The instruction should be specific, typically should include the expected outcome and whether or not a action should be performed. Pay special attention to describe the expected start and end state, if a change in the VCS is required.
 
     Returns:
-        DiffEntry | str | None: A git-diff of the requested entry, a string answering a question or retrieving other information, or None in case the performed action did not need any return value.
+        DiffEntryKey | str | None: A pointer to a git-diff in the diffstore of the relevant entry, a string answering a question or retrieving other information, or None in case the performed action did not need any return value.
     """
     logger.info(f"[MetaAgent] Invoked vcs_agent with instruction: {instruction}")
     vcs_agent = init_vcs_agent()
@@ -393,22 +395,13 @@ async def vcs(ctx: RunContext[TaskState], instruction: str) -> DiffEntry | str |
     )
 
     match vcs_result.output:
-        # TODO: Revamp this too for #44
-        case DiffEntry():
-            diff: DiffEntry = vcs_result.output
-            logger.info(f"[MetaAgent] vcs_agent diff result: {diff}")
-            # update task state with the diff
-            try:
-                diff_id: str = ctx.deps.diff_store._add_entry(diff)
-                logger.debug(f"[MetaAgent] Added diff entry with ID: {diff_id}")
-            except ValueError as verr:
-                if "diff already exists" in str(verr):
-                    logger.warning(
-                        "[MetaAgent] VCS Agent returned a (already known) diff towards the meta-agent"
-                    )
-                # TODO: Do we want to add something more here than logging?
+        case vcs_result.output.startswith("diff_"):
+            diff_key: DiffEntryKey = vcs_result.output
+            logger.info(f"[MetaAgent] vcs_agent diff-key result: {diff_key}")
         case str():
-            logger.info(f"[MetaAgent] VCS-agent returned a string: {vcs_result.output}")
+            logger.info(
+                f"[MetaAgent] VCS-agent returned a string-response: {vcs_result.output}"
+            )
         case None:
             logger.info("[MetaAgent] VCS-agent returned `None`")
     USAGE_TRACKER.add(vcs_agent.name, vcs_result.usage())
