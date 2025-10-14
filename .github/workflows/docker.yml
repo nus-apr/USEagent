@@ -7,13 +7,11 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  build-with-usebench:
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
       id-token: write
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,12 +19,36 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Start SSH agent and build docker image
+      - name: Start SSH agent and build docker image (usebench enabled)
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.GH_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           eval "$(ssh-agent -s)"
           ssh-add ~/.ssh/id_ed25519
-          DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
+          DOCKER_BUILDKIT=1 docker build \
+            --ssh default \
+            --build-arg USEBENCH_ENABLED=true \
+            --build-arg COMMIT_SHA="${{ github.sha }}" \
+            -t useagent-turbo:dev .
+        shell: bash
+
+  build-no-usebench:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build docker image (usebench disabled)
+        run: |
+          DOCKER_BUILDKIT=1 docker build \
+            --build-arg USEBENCH_ENABLED=false \
+            --build-arg COMMIT_SHA="${{ github.sha }}" \
+            -t useagent-turbo:dev-nousebench .
         shell: bash

@@ -46,7 +46,7 @@ RUN uv pip install /src/dist/*.whl
 # always create the directory, run migration only if enabled
 RUN mkdir -p /artifact/data && \
     if [ "$USEBENCH_ENABLED" = "true" ]; then \
-      /opt/venv/bin/usebench-migration /artifact/data; \
+      /opt/.venv/bin/usebench-migration /artifact/data; \
     fi
 
 # ---- runtime ----
