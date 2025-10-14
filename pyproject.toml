@@ -9,7 +9,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-  "usebench @ git+ssh://git@github.com/nus-apr/use-bench.git@0a985ae",
   "loguru>=0.7.3",
   "pydantic-ai>=1.0.0b1",
   "tiktoken>=0.9.0",
@@ -27,6 +26,7 @@ dev = [
   "pytest",
   "pytest-asyncio",
   "pytest-random-order",
+  "pytest-timeout",
   "pytest-cov",
   "black==25.1.0",
   "isort==6.0.1",
@@ -34,6 +34,10 @@ dev = [
   "ruff==0.12.3",
   "pyright==1.1.404",
   "pre-commit==4.2.0",
+]
+
+usebench = [
+  "usebench @ git+ssh://git@github.com/nus-apr/use-bench.git@0a985ae"
 ]
 
 [tool.setuptools]

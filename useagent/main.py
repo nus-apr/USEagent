@@ -9,13 +9,15 @@ from loguru import logger
 
 from useagent import task_runner
 from useagent.config import AppConfig, ConfigSingleton
+from useagent.flags import USEBENCH_ENABLED
 from useagent.pydantic_models.output.action import Action
 from useagent.pydantic_models.output.answer import Answer
 from useagent.pydantic_models.output.code_change import CodeChange
 from useagent.tasks.github_task import GithubTask
 from useagent.tasks.local_task import LocalTask
 from useagent.tasks.swebench_task import SWEbenchTask
-from useagent.tasks.usebench_task import UseBenchTask
+from useagent.tasks.task import Task
+from useagent.tasks.usebench_loader import UseBenchTask
 
 
 def add_common_args(parser: ArgumentParser) -> None:
@@ -202,6 +204,10 @@ def parse_args():
 def handle_command(args: Namespace, subparser_dest_attr_name: str) -> None:
     subcommand = getattr(args, subparser_dest_attr_name, None)
     if subcommand == "usebench":
+        if not USEBENCH_ENABLED or UseBenchTask is None:
+            raise ValueError(
+                "USEBench is not enabled. Set USEBENCH_ENABLED=true and install extras: uv sync --extra usebench"
+            )
         uid = args.task_id
         local_path = mkdtemp(prefix=f"acr_usebench_{uid}")
         usebench_task = UseBenchTask(
@@ -259,13 +265,17 @@ def build_and_register_config(args: Namespace) -> AppConfig:
 
 def _subcommand_to_task_type(
     subcommand: str,
-) -> Literal[GithubTask, LocalTask, UseBenchTask, SWEbenchTask]:
+) -> type[Task]:
     match subcommand.strip().lower():
         case "github":
             return GithubTask
         case "local":
             return LocalTask
         case "usebench":
+            if not USEBENCH_ENABLED or UseBenchTask is None:
+                raise ArgumentTypeError(
+                    "USEBench is not enabled. Set USEBENCH_ENABLED=true and install extras: uv sync --extra usebench"
+                )
             return UseBenchTask
         case "swebench":
             return SWEbenchTask

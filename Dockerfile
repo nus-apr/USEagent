@@ -1,9 +1,13 @@
 ARG BASE_IMAGE=ubuntu:24.04
+ARG USEBENCH_ENABLED=true
 ARG COMMIT_SHA=""
 
 # ---- builder ----
 FROM ${BASE_IMAGE} AS builder
 LABEL stage=builder
+
+ARG USEBENCH_ENABLED
+ENV USEBENCH_ENABLED=${USEBENCH_ENABLED}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates tzdata curl git openssh-client python3 python3-venv lsb-release && \
@@ -22,8 +26,15 @@ RUN ssh-keyscan -p 443 ssh.github.com >> /root/.ssh/known_hosts
 # First: Copy in dependencies & install them, to have them cached even if project src changes
 WORKDIR /src
 COPY pyproject.toml uv.lock* README.md /src/
-RUN --mount=type=ssh uv sync --all-extras --dev --no-install-project
-# Now: Copy in Project source and build
+# conditionally install usebench based on build arg (creates /src/.venv)
+RUN --mount=type=ssh \
+  if [ "$USEBENCH_ENABLED" = "true" ]; then \
+    uv sync --extra usebench --extra dev --no-install-project; \
+  else \
+    uv sync --extra dev --no-install-project; \
+  fi
+
+# Now: Copy in Project source and build wheel
 COPY . /src/
 RUN --mount=type=ssh uv build
 
@@ -33,8 +44,12 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 RUN uv pip install /src/dist/*.whl
 
-# run usebench migration and put it in a nearby folder to copy
-RUN mkdir -p /artifact/data && /opt/venv/bin/usebench-migration /artifact/data
+# always create the directory, run migration only if enabled
+# run from the uv project venv created by `uv sync`
+RUN mkdir -p /artifact/data && \
+    if [ "$USEBENCH_ENABLED" = "true" ]; then \
+      /src/.venv/bin/usebench-migration /artifact/data; \
+    fi
 
 # ---- runtime ----
 FROM ${BASE_IMAGE}
@@ -42,12 +57,16 @@ ARG COMMIT_SHA
 LABEL maintainer.Yuntong="Yuntong Zhang <ang.unong@gmail.com>"
 LABEL maintainer.Leonhard="Leonhard Applis <leonhard.applis@protonmail.com>"
 
+ARG USEBENCH_ENABLED
+ENV USEBENCH_ENABLED=${USEBENCH_ENABLED}
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates tzdata curl wget git openssh-client python3 python3-venv python3-dev build-essential lsb-release make tree ripgrep && \
     rm -rf /var/lib/apt/lists/*
 
 RUN wget -O /etc/apt/sources.list.d/gitlab-ci-local.sources https://gitlab-ci-local-ppa.firecow.dk/gitlab-ci-local.sources
 RUN apt-get update -y && apt-get install gitlab-ci-local -y
+
 # bring only the ready venv and migrated data
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /artifact/data /app/data
@@ -56,8 +75,8 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 ENV TZ=Asia/Singapore
 
-# We saw that the agent sometimes re-iterated needlessly - given the experiment nature we can just install system packages. These are not production machines but throw-away containers. 
-ENV PIP_BREAK_SYSTEM_PACKAGES=1 
+# These are throw-away containers; allow system package installs
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 RUN [ -n "$COMMIT_SHA" ] && mkdir -p /output && printf "%s\n" "$COMMIT_SHA" > /commit.sha || true
 
 RUN apt-get update && apt-get install -y --no-install-recommends sudo && rm -rf /var/lib/apt/lists/*

@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false
 import subprocess
 from pathlib import Path
 
@@ -77,3 +78,8 @@ class UseBenchTask(Task):
 
     def get_working_directory(self) -> Path:
         return Path(self.project_path)
+
+    @classmethod
+    def get_default_working_dir(cls) -> Path:
+        """return default working directory for usebench tasks"""
+        return Path(cls.project_path)
