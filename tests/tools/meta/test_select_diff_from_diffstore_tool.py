@@ -1,7 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from useagent.pydantic_models.artifacts.git import DiffEntry, DiffStore
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff_store import DiffStore
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.meta import _select_diff_from_diff_store
 
@@ -11,10 +12,9 @@ new file mode 100644
 index 0000000..e69de29
 --- /dev/null
 +++ b/newfile.txt
-@@
+@@ -0,0 +1 @@
 +Hello world
 """
-
 
 EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE_VARIATION = """\
 diff --git a/newfile.txt b/newfile.txt
@@ -22,7 +22,7 @@ new file mode 100644
 index 0000000..e69de29
 --- /dev/null
 +++ b/newfile.txt
-@@
+@@ -0,0 +1 @@
 +Goodbye world
 """
 
@@ -39,7 +39,7 @@ def test_empty_store_returns_error():
 @pytest.mark.tool
 def test_missing_key_returns_error():
     store = DiffStore()
-    store.add_entry(DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE))
+    store._add_entry(DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE))
     result = _select_diff_from_diff_store(store, "diff_1")
 
     assert isinstance(result, ToolErrorInfo)
@@ -50,25 +50,25 @@ def test_missing_key_returns_error():
 @pytest.mark.tool
 def test_single_entry_selection():
     store = DiffStore()
-    key = store.add_entry(DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE))
+    key = store._add_entry(DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE))
     result = _select_diff_from_diff_store(store, key)
     assert result.strip() == EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE.strip()
 
 
 @pytest.mark.regression
 @pytest.mark.tool
-def test_single_entry_selection_not_string_equal_due_to_stripping_whitespace():
+def test_single_entry_selection_are_string_equal():
     store = DiffStore()
-    key = store.add_entry(DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE))
+    key = store._add_entry(DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE))
     result = _select_diff_from_diff_store(store, key)
-    assert not result == EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE
+    assert result == EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE
 
 
 @pytest.mark.tool
 def test_two_entries_selection():
     store = DiffStore()
-    k1 = store.add_entry(DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE))
-    k2 = store.add_entry(
+    k1 = store._add_entry(DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE))
+    k2 = store._add_entry(
         DiffEntry(diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE_VARIATION)
     )
     assert (
@@ -87,5 +87,5 @@ def test_empty_diff_content_we_can_never_have_empty_diff_entries():
     with pytest.raises(ValidationError):
         # DevNote: We introduced constrained strings (constrs) to disallow any empty DiffEntry.
         store = DiffStore()
-        key = store.add_entry(DiffEntry(diff_content=""))
+        key = store._add_entry(DiffEntry(diff_content=""))
         _select_diff_from_diff_store(store, key)

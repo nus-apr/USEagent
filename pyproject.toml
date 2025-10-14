@@ -14,7 +14,8 @@ dependencies = [
   "pydantic-ai>=1.0.0b1",
   "tiktoken>=0.9.0",
   "sentencepiece>=0.2.1",
-  "datasets>=3.1.0"
+  "datasets>=3.1.0",
+  "unidiff>=0.7.5",
 ]
 
 # Optional: define a CLI so you don't need python -m ...

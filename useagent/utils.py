@@ -1,6 +1,7 @@
 import contextlib
 import os
 import subprocess
+from pathlib import Path
 
 from loguru import logger
 
@@ -32,3 +33,12 @@ def cd(newdir):
         yield
     finally:
         os.chdir(prevdir)
+
+
+def log_commit_sha(path: str = "/commit.sha") -> None:
+    commit_file = Path(path)
+    if commit_file.exists():
+        sha = commit_file.read_text().strip()
+        logger.info(f"[Setup] Commit SHA: {sha}")
+    else:
+        logger.debug(f"[Setup] Commit file {commit_file} not found")

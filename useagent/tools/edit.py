@@ -1,14 +1,19 @@
 import os
+from collections.abc import Mapping
 from pathlib import Path
+from uuid import uuid4
 
 from loguru import logger
+from pydantic_ai import RunContext
 
 from useagent.common.context_window import fit_message_into_context_window
+from useagent.common.guardrails import useagent_guard_rail
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff_store import DiffEntryKey
+from useagent.pydantic_models.task_state import TaskState
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
-from useagent.tools.common import useagent_guard_rail
 from useagent.tools.run import maybe_truncate, run
-from useagent.utils import cd
 
 SNIPPET_LINES: int = 4
 
@@ -188,7 +193,7 @@ async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
         CLIResult: The result of the create operation, indicating success or failure.
     """
     logger.info(
-        f"[Tool] Invoked edit_tool `create`. Creating {file_path}, content preview: {file_text[:15]} ..."
+        f"[Tool] Invoked edit_tool `create`. Creating {file_path}, content preview: {file_text[:55]} ..."
     )
 
     try:
@@ -223,6 +228,13 @@ async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
         )
 
     _write_file(path, file_text)
+    if not path.exists():
+        logger.error(f"[Tool] Creating File at {path} failed")
+    else:
+        logger.debug(
+            f"[Tool] Successfully wrote {len(file_text)} lines of content to {path}"
+        )
+
     return CLIResult(output=f"File created successfully at: {file_path}")
 
 
@@ -311,8 +323,133 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
     success_msg = f"The file {path} has been edited. "
     success_msg += _make_output(snippet, f"a snippet of {path}", start_line + 1)
     success_msg += "Review the changes and make sure they are as expected. Edit the file again if necessary."
-
+    logger.debug(
+        "[Tool] `str_replace` has successfully executed and returns a successful CLIResult"
+    )
     return CLIResult(output=success_msg)
+
+
+def replace_file(file_content: str, file_path: str | Path) -> CLIResult | ToolErrorInfo:
+    """
+    Fully replaces a given file with a completely new string.
+    The old file content is completely discarded in favour of the new file_content.
+    If there are any errors appearing, the file will remain unchanged.
+
+    Args:
+        file_path (str | pathlib.Path): The path to the file where the replacement will occur.
+        file_content (str): The string that will contain.
+
+    Returns:
+        CLIResult: The result of the replacement operation, containing a confirmation or error.
+    """
+    logger.info(
+        f"[Tool] Invoked edit_tool `replace_file`. Replacing contents at {file_path}, content preview: {file_content[:15]} ..."
+    )
+
+    try:
+        supplied_arguments = [
+            ArgumentEntry("file_path", str(file_path)),
+            ArgumentEntry(
+                "file_content",
+                str(file_content[:50] + ("..." if len(file_content) > 50 else "")),
+            ),
+        ]
+    except ValueError:
+        supplied_arguments = []
+
+    if not file_content or not str(file_content).strip():
+        return ToolErrorInfo(
+            message="Received an empty or None file_content argument.",
+            supplied_arguments=supplied_arguments,
+        )
+
+    # Normalize path
+    if isinstance(file_path, str):
+        path = _make_path_absolute(file_path)
+    else:
+        path = (
+            file_path
+            if file_path.is_absolute()
+            else _make_path_absolute(str(file_path))
+        )
+
+    if (
+        guard_rail_tool_error := useagent_guard_rail(
+            str(file_path), supplied_arguments=supplied_arguments
+        )
+    ) is not None:
+        return guard_rail_tool_error
+
+    if not path.exists():
+        return ToolErrorInfo(
+            message=f"Filepath {file_path} does not exist. `replace_file` only works for existing files.",
+            supplied_arguments=supplied_arguments,
+        )
+    if path.is_dir():
+        return ToolErrorInfo(
+            message=f"Filepath {file_path} is a directory - `replace_file` can only be applied to files.",
+            supplied_arguments=supplied_arguments,
+        )
+
+    n_lines: int = file_content.count("\n") + 1
+    if n_lines > 50:
+        logger.warning(
+            f"[Tool] edit_tool `replace_file`: Large content detected ({n_lines} lines) for {file_path}"
+        )
+
+    # Write to a temp file first, then atomically replace
+    # DevNote: We had an issue otherwise that a file was deleted, then the write failed, and then we had a corrupted system state.
+    try:
+
+        tmp_path = path.with_name(f".{path.name}.replace.{uuid4().hex}.tmp")
+        _write_err = _write_file(tmp_path, file_content)
+        if isinstance(_write_err, ToolErrorInfo):
+            logger.warning(
+                f"[Tool] edit_tool `replace_file`: Failed to write temp file {tmp_path}: {_write_err.message}"
+            )
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return ToolErrorInfo(
+                message=_write_err.message,
+                supplied_arguments=supplied_arguments,
+            )
+
+        # Atomic replace
+        try:
+            os.replace(str(tmp_path), str(path))
+        except Exception as e:
+            logger.error(
+                f"[Tool] edit_tool `replace_file`: Failed to atomically replace {path} with {tmp_path}: {e}"
+            )
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return ToolErrorInfo(
+                message=f"Failed to replace file atomically: {e}",
+                supplied_arguments=supplied_arguments,
+            )
+
+    except Exception as e:
+        logger.warning(f"[Tool] edit_tool `replace_file`: Unexpected failure: {e}")
+        return ToolErrorInfo(
+            message=f"Failed to replace file: {e}",
+            supplied_arguments=supplied_arguments,
+        )
+
+    if not path.exists():
+        logger.error(
+            f"[Tool] Replacing File at {path} failed - currently no file at this path"
+        )
+    else:
+        logger.debug(
+            f"[Tool] Successfully wrote {len(file_content)} lines of content to {path}"
+        )
+    return CLIResult(output=f"File replaced successfully at: {file_path}")
 
 
 async def insert(
@@ -398,72 +535,70 @@ async def insert(
         max(1, insert_line - SNIPPET_LINES + 1),
     )
     success_msg += "Review the changes and make sure they are as expected (correct indentation, no duplicate lines, etc). Edit the file again if necessary."
+    logger.debug(
+        "[Tool] `insert` has successfully inserted and returns a successful CLIResult"
+    )
     return CLIResult(output=success_msg)
 
 
-async def extract_diff(
-    project_dir: Path | str | None = None,
-) -> CLIResult | ToolErrorInfo:
-    """
-    Extract the diff of the current state of the repository.
-
-    Returns:
-        CLIResult: The result of the diff extraction, containing the output or error.
-    """
-    assert _project_dir is not None, "Project directory must be initialized first."
-    project_dir = project_dir or _project_dir
-
-    logger.info(
-        f"[Tool] Invoked edit_tool `extract_diff`. Extracting a patch from {project_dir} (type: {type(project_dir)})"
-    )
-
-    if (
-        guard_rail_tool_error := useagent_guard_rail(
-            project_dir,
-            supplied_arguments=[
-                ArgumentEntry("project_dir", str(project_dir)),
-            ],
-        )
-    ) is not None:
-        return guard_rail_tool_error
-
-    with cd(project_dir):
-        # Git Add is necessary to see changes to newly created files with the git diff
-        await run("git add .")
-        _, cached_out, stderr_1 = await run("git diff --cached")
-        _, working_out, stderr_2 = await run("git diff")
-        stdout = cached_out + working_out
-
-        if stderr_1 or stderr_2:
-            return ToolErrorInfo(
-                message=f"Failed to extract diff: {stderr_1 + stderr_2}",
-                supplied_arguments=[
-                    ArgumentEntry("project_dir", str(project_dir)),
-                ],
-            )
-
-        if not stdout or not stdout.strip():
-            logger.debug("[Tool] edit_tool `extract_diff`: Received empty Diff")
-            return CLIResult(output="No changes detected in the repository.")
-        logger.debug(
-            f"[Tool] edit_tool `extract_diff`: Received {stdout[:25]} ... from {project_dir}"
-        )
-        return CLIResult(output=f"Here's the diff of the current state:\n{stdout}")
-
-
-async def read_file_as_diff(path_to_file: Path | str) -> CLIResult | ToolErrorInfo:
+async def read_file_as_diff(
+    ctx: RunContext[TaskState], path_to_file: Path | str
+) -> DiffEntryKey | ToolErrorInfo:
     """
     Reports a file at a given `path_to_file` as a git diff that would create this file (if it was absent).
     Does not take any git history of the file into account, just it's current state.
-
+    If successful, the diff will be stored in the DiffStore.
 
     Args:
         path_to_file (Path | str): The path to the file.
 
     Returns:
-        CLIResult: The git diff that would create the file.
+        DiffEntryKey: The key that points to the resulting diff in the RunContexts DiffStore.
     """
+    extract_result: DiffEntry | ToolErrorInfo = await _read_file_as_diff(path_to_file)
+    if isinstance(extract_result, ToolErrorInfo):
+        logger.debug(
+            f"[Tool] `read_file_as_diff` resulted in a ToolError {extract_result.message}"
+        )
+        return extract_result
+    logger.debug(
+        f"[Tool] Successfully extracted a DiffEntry (with {len(extract_result.diff_content)} lines) from {str(path_to_file)}"
+    )
+    try:
+        logger.debug("[Tool] `read_file_as_diff` trying to add DiffEntry to DiffStore")
+        diff_id: DiffEntryKey = ctx.deps.diff_store._add_entry(extract_result)
+        logger.info(
+            f"[Tool] `read_file_as_diff` added diff entry with ID: {diff_id} to `ctx.deps.diff_store`."
+        )
+        return diff_id
+    except ValueError as verr:
+        if "diff already exists" in str(verr):
+            logger.warning(
+                "[Tool] `read_file_as_diff` returned a (already known) diff towards the `ctx.deps.diff_store`"
+            )
+            logger.debug(f"DiffStore was:{ctx.deps.diff_store}")
+            reversed_key_lookup: Mapping[DiffEntry, DiffEntryKey] = (  # type: ignore
+                ctx.deps.diff_store.diff_to_id
+            )
+            existing_diff_id: DiffEntryKey = reversed_key_lookup[  # type: ignore
+                extract_result.diff_content
+            ]
+            return ToolErrorInfo(
+                message=f" `read_file_as_diff`-tool returned a diff identical to an existing diff_id {existing_diff_id}. Not returning / storing a new diff. Reuse {existing_diff_id} or reconsider what you want to achieve.",
+                supplied_arguments=[ArgumentEntry("project_dir", str(path_to_file))],
+            )
+        else:
+            raise verr
+    except Exception as ex:
+        return ToolErrorInfo(
+            message=f"An unhandled exception occurred during diff-extraction ({ex}), please reconsider what you were trying to do.",
+            supplied_arguments=[ArgumentEntry("project_dir", str(path_to_file))],
+        )
 
+    pass
+
+
+async def _read_file_as_diff(path_to_file: Path | str) -> DiffEntry | ToolErrorInfo:
     logger.info(
         f"[Tool] Invoked edit_tool `read_file_as_diff`. Extracting a file as patch from {path_to_file} (type: {type(path_to_file)})"
     )
@@ -495,9 +630,24 @@ async def read_file_as_diff(path_to_file: Path | str) -> CLIResult | ToolErrorIn
             supplied_arguments=supplied_arguments,
         )
 
-    return CLIResult(
-        output=f"This is a patch would newly create the file at {str(path)}:\n{stdout}"
-    )
+    if stdout and stdout.strip() and len(stdout.splitlines()) > 1000:
+        logger.warning(
+            f"[Tool] `read_file_as_diff` hit a huge file with {len(stdout.splitlines())} lines - aborting, not making a patch"
+        )
+        return ToolErrorInfo(
+            message=f"Received a (too) large file when using `read_file_as_diff` - patch with {len(stdout.splitlines())} lines.",
+            supplied_arguments=supplied_arguments,
+        )
+
+    try:
+        parsed_diff_entry: DiffEntry = DiffEntry(stdout)
+        return parsed_diff_entry
+    except Exception as ex:
+        logger.warning(f"Unhandled Exception during parsing diff_entry: {ex}")
+        return ToolErrorInfo(
+            message=f"Unhandled Exception while trying to form a DiffEntry from {stdout}, exception was: {ex}",
+            supplied_arguments=supplied_arguments,
+        )
 
 
 def __reset_project_dir():

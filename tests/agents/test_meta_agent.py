@@ -5,7 +5,7 @@ from pydantic_ai.models.test import TestModel
 
 from useagent.agents.meta.agent import init_agent
 from useagent.config import AppConfig
-from useagent.pydantic_models.artifacts.git import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
 from useagent.pydantic_models.output.action import Action
 from useagent.pydantic_models.output.answer import Answer
 from useagent.pydantic_models.output.code_change import CodeChange

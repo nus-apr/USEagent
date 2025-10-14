@@ -11,45 +11,57 @@ if [[ "$1" == "--build" ]]; then
     #This will delete the image, but you will loose caching.
     docker image rm -f useagent-turbo:dev 2>/dev/null
   fi
-  DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
+  DOCKER_BUILDKIT=1 docker build --build-arg COMMIT_SHA="$(git rev-parse HEAD)" --ssh default -t useagent-turbo:dev .
 fi
 
-
-REPO_URL=https://github.com/google/guava.git
+REPO_URL=https://github.com/langchain-ai/langchain.git
+#REPO_URL=https://github.com/google/guava.git
 #REPO_URL=https://github.com/ansible/ansible.git
 #REPO_URL=https://github.com/ccache/ccache.git
 #REPO_URL=https://github.com/json-c/json-c.git
-MODEL_NAME=google-gla:gemini-2.5-flash
+
+#MODEL_NAME=google-gla:gemini-2.5-flash
+MODEL_NAME=openai:gpt-5-mini
 
 mkdir ./tmp
 cat > ./tmp/task.md <<'EOF'
 You are a DevOps software engineering and now there is an project under current working directory. Your task is to produce a bash script named `run_test.sh` that can build the project and run the tests for this project.
 
 # Default Environment You have
-You are working on a ubuntu 24.04 platform (using a default Docker image) on a CPU sever (No any GPUs available). It also means there are limited software/libraries installed. 
-Since this is an isolated docker container, so you have the root level permission to run any commands.
+You are working on a ubuntu 24.04 platform (using a default Docker image) on a CPU sever (No any GPUs available). It also means there are limited software/libraries installed.
+Since this is an isolated docker container, you have the root level permission to run any commands.
+This task is absent of any human-in-the-loop, you must perform this task on your own. 
+Do not prompt any recommendations or questions, but address all issues and questions by yourself. 
 
 # Your Output
-You need to produce a test script (bash script) named `run_test.sh`. 
+You need to produce a test script (bash script) named `run_test.sh`.
 
 # What does your script do
-- Your script should run all the test suites. If tests are not applicable the base environment, you can choose to skip some.
-- Your script should be self-contained and install all necessary dependencies. 
-- If there are dependencies that are crucial to the project, and you see them in your existing environment, please still list them amongst the to-install-dependencies in your script. 
+- Your script should run the unit-test suites. If tests are not applicable the base environment, you can choose to skip some.
+- System-level tests are a nice to have, but the primary focus are unit-tests. 
+- Your script should be self-contained and install all necessary dependencies including both OS-level dependencies and project/language specific dependencies.
+- If there are dependencies that are crucial to the project, and you see them in your existing environment, please still list them amongst the to-install-dependencies in your script.
 - We will run this script in fresh environment.
 
 # DO & DO NOT
 - Do verify commands you use in the script, e.g. by executing them before producing your final bash script. You should execute your bash script to observe the results. If you think the output shows tests passed, you can terminate the workflow.
+- Never ignore missing dependencies, commands or libraries you see in warnings.
 - You can install necessary dependencies in this environment but include them into your final bash script.
+- Do consider transitive requirements and dependencies.
 - Do not hallucinate any commands or actions
 - YOU MUST use non-interactive commands.
 - Do add set -vxE at the top of your script, for easier debugging and proofreading the script execution
+- Do not make a 'build-any-project' script - the script you write should be specific to the given environment, project, its dependencies and frameworks.
+- Do make the file as simple as possible. Limit it to necessary commands and comments. Avoid conditionals in the final script by verifying correct commands and variables earlier.
+
+IMPORTANT! You need to produce a test script (bash script) named `run_test.sh` as the final outcome.
 EOF
 
 
 docker run --rm \
   --name useagent-turbo-test \
   -e GEMINI_API_KEY="$GEMINI_API_KEY" \
+  -e OPENAI_API_KEY="${OPENAI_API_KEY:-}" \
   -v ./tmp:/task:rw \
   -v ./useagent-turbo-tmp-out:/output:rw \
   useagent-turbo:dev \

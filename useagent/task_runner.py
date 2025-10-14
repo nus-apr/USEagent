@@ -9,14 +9,17 @@ from pathlib import Path
 from typing import Literal, cast
 
 from loguru import logger
+from pydantic_core import to_jsonable_python
 
 from useagent.agents.meta.agent import agent_loop
 from useagent.pydantic_models.output.action import Action
 from useagent.pydantic_models.output.answer import Answer
 from useagent.pydantic_models.output.code_change import CodeChange
 from useagent.pydantic_models.task_state import TaskState
+from useagent.tasks.swebench_task import SWEbenchTask
 from useagent.tasks.task import Task
 from useagent.tools.meta import get_bash_history
+from useagent.utils import log_commit_sha
 
 
 def run(
@@ -24,9 +27,12 @@ def run(
     output_dir: str,
     output_type: Literal[CodeChange, Answer, Action] = CodeChange,
 ):
-    start_time_s = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    task_output_dir = Path(output_dir) / f"{task.uid}_{start_time_s}"
+    start_time = datetime.now()
+
+    task_output_dir = (
+        Path(output_dir) / f"{task.uid}_{start_time.strftime("%Y-%m-%d_%H-%M-%S")}"
+    )
     task_output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -34,7 +40,16 @@ def run(
     except Exception as e:
         tb = traceback.format_exc()
         logger.error(f"Error running task {task.uid}: {e} \n{tb}")
+        if isinstance(task, SWEbenchTask):
+            logger.warning(f"Writing non-patch swe entry to {task_output_dir}")
+            task.postprocess_swebench_task(result=None, output_dir=task_output_dir)
     finally:
+        end_time = datetime.now()
+        duration = end_time - start_time
+        logger.info(
+            f"Task {task.uid} ended after {(duration.total_seconds()):.2f} seconds"
+        )
+
         bash_history_file: Path = task_output_dir / "bash_commands.jsonl.log"
         logger.debug(f"Dumping Bash History to {bash_history_file}")
         with open(bash_history_file, "w") as f:
@@ -66,7 +81,10 @@ def _run(
 
     # start main agent loop
     logger.info("Starting main agent loop")
-    result, usage_tracker = agent_loop(task_state, output_type=output_type)
+    log_commit_sha()
+    result, usage_tracker, messages = agent_loop(
+        task_state, output_type=output_type, output_dir=task_output_dir
+    )
     match result:
         case Action():
             cast_result: Action = cast(Action, result)
@@ -86,3 +104,11 @@ def _run(
     logger.debug(f"Storing Usage Information to {usage_info_file}")
     with open(usage_info_file, "w") as f:
         json.dump(usage_tracker.to_json(), f)
+
+    if messages:
+        message_file: Path = task_output_dir / "messages.jsonl.log"
+        logger.debug(f"Storing {len(messages)} ModelMessages into {message_file}")
+        with open(message_file, "w", encoding="utf-8") as f:
+            for msg in messages:
+                obj = to_jsonable_python(msg)
+                f.write(json.dumps(obj) + "\n")

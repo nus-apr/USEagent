@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from useagent.pydantic_models.artifacts.git import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
 from useagent.tools.git import _commit_exists, _view_commit_as_diff
 

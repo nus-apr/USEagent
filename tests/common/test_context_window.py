@@ -260,6 +260,7 @@ def test_tk_max_tokens_zero_should_leave_message_unfiltered(tk_encoding: Encodin
     assert res == msg
 
 
+@pytest.mark.slow
 def test_from_config_using_gemini_should_be_shortened(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "dummy")
     ConfigSingleton.init("google-gla:gemini-2.5-flash")
@@ -269,6 +270,7 @@ def test_from_config_using_gemini_should_be_shortened(monkeypatch):
     assert "[[ ... Cut to fit Context Window ... ]]" in res
 
 
+@pytest.mark.slow
 def test_from_config_using_gpt_should_be_shortened(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "dummy")
     ConfigSingleton.init("openai:gpt-5-mini")
