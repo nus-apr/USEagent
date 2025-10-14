@@ -26,14 +26,15 @@ RUN ssh-keyscan -p 443 ssh.github.com >> /root/.ssh/known_hosts
 # First: Copy in dependencies & install them, to have them cached even if project src changes
 WORKDIR /src
 COPY pyproject.toml uv.lock* README.md /src/
-# conditionally install usebench based on build arg
+# conditionally install usebench based on build arg (creates /src/.venv)
 RUN --mount=type=ssh \
   if [ "$USEBENCH_ENABLED" = "true" ]; then \
     uv sync --extra usebench --extra dev --no-install-project; \
   else \
     uv sync --extra dev --no-install-project; \
   fi
-# Now: Copy in Project source and build
+
+# Now: Copy in Project source and build wheel
 COPY . /src/
 RUN --mount=type=ssh uv build
 
@@ -44,9 +45,10 @@ ENV PATH="/opt/venv/bin:${PATH}"
 RUN uv pip install /src/dist/*.whl
 
 # always create the directory, run migration only if enabled
+# run from the uv project venv created by `uv sync`
 RUN mkdir -p /artifact/data && \
     if [ "$USEBENCH_ENABLED" = "true" ]; then \
-      /opt/.venv/bin/usebench-migration /artifact/data; \
+      /src/.venv/bin/usebench-migration /artifact/data; \
     fi
 
 # ---- runtime ----
@@ -64,6 +66,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN wget -O /etc/apt/sources.list.d/gitlab-ci-local.sources https://gitlab-ci-local-ppa.firecow.dk/gitlab-ci-local.sources
 RUN apt-get update -y && apt-get install gitlab-ci-local -y
+
 # bring only the ready venv and migrated data
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /artifact/data /app/data
@@ -72,8 +75,8 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 ENV TZ=Asia/Singapore
 
-# We saw that the agent sometimes re-iterated needlessly - given the experiment nature we can just install system packages. These are not production machines but throw-away containers. 
-ENV PIP_BREAK_SYSTEM_PACKAGES=1 
+# These are throw-away containers; allow system package installs
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 RUN [ -n "$COMMIT_SHA" ] && mkdir -p /output && printf "%s\n" "$COMMIT_SHA" > /commit.sha || true
 
 RUN apt-get update && apt-get install -y --no-install-recommends sudo && rm -rf /var/lib/apt/lists/*
