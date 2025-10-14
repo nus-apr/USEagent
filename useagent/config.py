@@ -2,6 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Literal
 
+from loguru import logger
 from pydantic_ai.models import Model, infer_model
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -23,12 +24,16 @@ def _default_optimization_toggles() -> dict[str, bool]:
             "check-grep-command-arguments": True,
             "loosen-probing-agent-strictness": True,
             "bash-tool-speed-bumper": True,
-            "useagent-stopper-file": False,
             "hide-hidden-folders-from-greps": True,
             "hide-hidden-folders-from-finds": True,
             "useagent-file-path-guard": True,
             "shorten-log-output": True,
             "vcs-agent-answer-instructions": True,
+            "reiterate-on-doubts": True,
+            "block-long-multiline-commands": True,
+            "swe-bench-additional-repair-instructions": True,
+            "swe-bench-block-git-clones": True,
+            "block-repeated-git-extracts": True,
         },
     )
 
@@ -110,9 +115,16 @@ class ConfigSingleton:
                         base_url=provider_url, api_key="ollama-dummy"
                     ),
                 )
+                logger.info(
+                    f"[Setup] Initialized an Ollama Model (Self-Hosted) from {model_desc}"
+                )
             else:
                 model = infer_model(model)
-
+                logger.info(f"[Setup] Initialized a {type(model)} from {model_desc}")
+        elif isinstance(model, Model):
+            logger.info(
+                f"[Setup] AppConfig will be buid with a fully supplied model ({type(model)})"
+            )
         cls._instance = AppConfig(
             model=model,
             output_dir=output_dir,

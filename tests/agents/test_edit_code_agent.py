@@ -4,7 +4,6 @@ from pydantic_ai.models.test import TestModel
 
 from useagent.agents.edit_code.agent import init_agent
 from useagent.config import AppConfig
-from useagent.pydantic_models.artifacts.git import DiffEntry
 from useagent.pydantic_models.task_state import TaskState
 from useagent.state.git_repo import GitRepository
 from useagent.tasks.test_task import TestTask
@@ -17,7 +16,7 @@ new file mode 100644
 index 0000000..e69de29
 --- /dev/null
 +++ b/newfile.txt
-@@
+@@ -0,0 +1 @@
 +Hello world
 """
 
@@ -48,9 +47,10 @@ async def test_edit_agent_direct_output_no_tool_calls__example_scaffold_test(tmp
     It is to be a an example to easily copy paste for other agents and show how to access the history.
     For more complex tests, the tool calls must be faked, likely also the tools be overwritten with mocks.
     """
-    expected_output = DiffEntry(
-        diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE, notes="some notes"
-    )
+    # expected_output = DiffEntry(
+    #    diff_content=EXAMPLE_GIT_DIFF_NEW_FILE_ONE_LINE, notes="some notes"
+    # )
+    expected_output = "diff_0"
 
     test_model = TestModel(call_tools=[], custom_output_args=expected_output)
     config = AppConfig(model=test_model)

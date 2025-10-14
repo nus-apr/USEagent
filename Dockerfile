@@ -1,5 +1,6 @@
 ARG BASE_IMAGE=ubuntu:24.04
 ARG USEBENCH_ENABLED=true
+ARG COMMIT_SHA=""
 
 # ---- builder ----
 FROM ${BASE_IMAGE} AS builder
@@ -50,6 +51,7 @@ RUN mkdir -p /artifact/data && \
 
 # ---- runtime ----
 FROM ${BASE_IMAGE}
+ARG COMMIT_SHA
 LABEL maintainer.Yuntong="Yuntong Zhang <ang.unong@gmail.com>"
 LABEL maintainer.Leonhard="Leonhard Applis <leonhard.applis@protonmail.com>"
 
@@ -57,9 +59,11 @@ ARG USEBENCH_ENABLED
 ENV USEBENCH_ENABLED=${USEBENCH_ENABLED}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates tzdata curl git openssh-client python3 python3-venv lsb-release make tree ripgrep && \
+    ca-certificates tzdata curl wget git openssh-client python3 python3-venv python3-dev build-essential lsb-release make tree ripgrep && \
     rm -rf /var/lib/apt/lists/*
 
+RUN wget -O /etc/apt/sources.list.d/gitlab-ci-local.sources https://gitlab-ci-local-ppa.firecow.dk/gitlab-ci-local.sources
+RUN apt-get update -y && apt-get install gitlab-ci-local -y
 # bring only the ready venv and migrated data
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /artifact/data /app/data
@@ -70,9 +74,14 @@ ENV TZ=Asia/Singapore
 
 # We saw that the agent sometimes re-iterated needlessly - given the experiment nature we can just install system packages. These are not production machines but throw-away containers. 
 ENV PIP_BREAK_SYSTEM_PACKAGES=1 
+RUN [ -n "$COMMIT_SHA" ] && mkdir -p /output && printf "%s\n" "$COMMIT_SHA" > /commit.sha || true
 
 RUN apt-get update && apt-get install -y --no-install-recommends sudo && rm -rf /var/lib/apt/lists/*
 RUN useradd -m -u 0 -o -g 0 app
 USER app
 
-WORKDIR /workspace
+RUN git config --global init.defaultBranch main
+
+# Most Tasks will work (not start!) in /tmp/working_dir, we can help some tools by setting this as default cwd
+RUN mkdir /tmp/working_dir
+WORKDIR /tmp/working_dir

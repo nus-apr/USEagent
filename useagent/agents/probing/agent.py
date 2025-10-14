@@ -4,6 +4,8 @@ from loguru import logger
 from pydantic_ai import Agent
 from pydantic_ai.tools import Tool
 
+import useagent.common.constants as constants
+from useagent.common.context_window import fit_messages_into_context_window
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
@@ -44,13 +46,17 @@ def init_agent(output_type, config: AppConfig | None = None, deps_type=None) -> 
         deps_type=deps_type,  # type: ignore
         output_type=output_type,
         retries=2,
-        output_retries=3,
+        output_retries=constants.PROBING_AGENT_OUTPUT_RETRIES,
         tools=[
             Tool(
-                make_bash_tool_for_agent("PROBE", bash_call_delay_in_seconds=0.4),
+                make_bash_tool_for_agent(
+                    "PROBE",
+                    bash_call_delay_in_seconds=constants.PROBING_AGENT_BASH_TOOL_DELAY,
+                ),
                 max_retries=4,
             ),
         ],
+        history_processors=[fit_messages_into_context_window],
     )
 
     logger.debug(
@@ -73,19 +79,6 @@ def init_agent(output_type, config: AppConfig | None = None, deps_type=None) -> 
             Do not treat commands that you know or have been presented with as a `checklist` that you have to fully investigate. 
             The chance that a project has multiple build or test commands is very unlikely, so after you have identified (and verified) a command continue to investigate other aspects.
             Unless you see it especially specified in e.g. a README or toml, you can assume the project does not contain a linting command.
-            """
-        return ""  # Toggle is off, do nothing.
-
-    @environment_probing_agent.instructions
-    def add_useagent_stopper_instructions() -> str:
-        # We have seen the (rare) case that useagent tried to work on itself.
-        if (
-            ConfigSingleton.is_initialized()
-            and ConfigSingleton.config.optimization_toggles["useagent-stopper-file"]
-        ):
-            return """
-            You are supposed to work on a different project than yourself (USEAgent). 
-            If you are seeing any folder called `useagent` or a file called `.useagent-stopper` you are in the wrong repository. 
             """
         return ""  # Toggle is off, do nothing.
 

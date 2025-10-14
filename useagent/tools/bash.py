@@ -4,6 +4,7 @@ Bash tool.
 
 import asyncio
 import os
+import re
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
@@ -11,12 +12,41 @@ from pathlib import Path
 
 from loguru import logger
 
+import useagent.common.constants as constants
+from useagent.common.command_utility import has_heredoc, validate_heredoc
 from useagent.common.context_window import fit_message_into_context_window
+from useagent.common.guardrails import useagent_guard_rail
 from useagent.config import ConfigSingleton
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ArgumentEntry, ToolErrorInfo
-from useagent.tools.common import useagent_guard_rail
+from useagent.tasks.swebench_task import SWEbenchTask
+
+
+def strip_downloading_lines(log_text: str) -> str:
+    """
+    Remove progress-style downloading / fetching lines
+    from logs of pip, apt-get, maven, npm, etc.
+    """
+    patterns = [
+        r"^\s*Downloading.*",  # pip, maven
+        r"^\s*Downloaded.*",  # pip, maven
+        r"^\s*Collecting.*",  # pip
+        r"^\s*Fetching.*",  # npm, yarn
+        r"^\s*Get:.*",  # apt-get
+        r"^\s*Hit:.*",  # apt-get
+        r"^\s*Ign:.*",  # apt-get
+        r"^\s*Reading package lists.*",  # apt-get
+        r"^\s*Resolving.*",  # curl/wget style
+        r"^\s*Receiving objects.*",  # git clone
+    ]
+    combined = re.compile("|".join(patterns), re.IGNORECASE)
+
+    filtered_lines = []
+    for line in log_text.splitlines():
+        if not combined.match(line):
+            filtered_lines.append(line)
+    return "\n".join(filtered_lines)
 
 
 class _BashSession:
@@ -26,10 +56,8 @@ class _BashSession:
     _process: asyncio.subprocess.Process
 
     command: str = "/bin/bash"
-    _output_delay: float = 0.1  # seconds
-    # DevNote: The timeout is quite large, but we have seen commands that need so long
-    # An example is `apt-get install openjdk-jdk-8` or similar large packages.
-    _timeout: float = 2400.0  # seconds
+
+    _timeout: float = constants.BASH_TOOL_DEFAULT_MAX_TIMEOUT
     _sentinel: str = "<<exit>>"
 
     def __init__(self):
@@ -40,6 +68,11 @@ class _BashSession:
     async def start(self, init_dir: str | None = None):
         if self._started:
             return
+
+        if not init_dir:
+            # Some processes really need a CWD, e.g. `rg` (see Issue #40)
+            # We may have a nice getcwd from our DockerFile, which we will retrieve with os.getcwd()
+            init_dir = os.getcwd()
 
         if (
             init_dir
@@ -72,9 +105,9 @@ class _BashSession:
         """Terminate the bash shell."""
         if not self._started:
             return ToolErrorInfo(message="Session has not started.")
-        if self._process.returncode is not None:
-            return
-        self._process.terminate()
+        # terminate only if still running
+        if self._process.returncode is None:
+            self._process.terminate()
         self._started = False
         if self._timed_out:
             self._timed_out = False
@@ -121,11 +154,50 @@ class _BashSession:
             assert self._process.stdout
             assert self._process.stderr
 
+            if (
+                ConfigSingleton.is_initialized()
+                and ConfigSingleton.config.optimization_toggles[
+                    "block-long-multiline-commands"
+                ]
+            ):
+                if (
+                    command.count("\n")
+                    > constants.BASH_TOOL_MAX_LINE_LENGTH_FOR_EOF_COMMANDS
+                    or len(command.splitlines())
+                    > constants.BASH_TOOL_MAX_LINE_LENGTH_FOR_EOF_COMMANDS
+                ):
+                    return ToolErrorInfo(
+                        message="You provided a large multi-line command. Such commands are currently intentionally de-actived, please refer from using them and prefer a sequence of short, simple commands, or consider different tools to write file-content. The command was not executed.",
+                        supplied_arguments=[ArgumentEntry("command", command)],
+                    )
+
+            if has_heredoc(command):
+                if not validate_heredoc(command):
+                    # DevNote: See Issue 29 and the related test-suite.
+                    return ToolErrorInfo(
+                        message="You tried to provide a command including a heredoc / EOF marker. Either due to your mistake, or a backend processing, the provided command does not result in a valid encoding and will not be executed. Consider if there are other strategies to achieve your goal (e.g. writing a file first with a different tool). If you need to perform the command you want to execute in exactly this matter, revisit its encoding with the background that it needs to be encoded to utf-8.",
+                        supplied_arguments=[ArgumentEntry("command", command)],
+                    )
+                logger.debug(
+                    "Received a command with an EOF marker - reducing timeout to only allow short commands"
+                )
+                self._timeout = constants.BASH_TOOL_REDUCED_TIMEOUT_FOR_EOF_COMMANDS
+
+            # See Issue #40, Hotfix
+            if (
+                command.startswith("rg")
+                or " rg " in command
+                or command.startswith("grep")
+                or " grep " in command
+                or command.startswith("find")
+            ):
+                self._timeout = constants.BASH_TOOL_REDUCED_TIMEOUT_FOR_RG_COMMANDS
+
             # Build the command by encoding the intial command and add our 'finish' sentinel after.
             effective_command = (
-                command.encode("UTF-8") + f"; echo '{self._sentinel}'\n".encode()
+                command.encode("UTF-8", "") + f"; echo '{self._sentinel}'\n".encode()
             )
-            # DevNote: Below is where the actual command is passed in
+            # DevNote: Below is where the actual command is passed in, this is our `run(effective_command)`
             self._process.stdin.write(effective_command)
 
             await self._process.stdin.drain()
@@ -158,9 +230,11 @@ class _BashSession:
                     output = stdout_buf.decode(errors="replace").replace(
                         self._sentinel, ""
                     )
+                    output = strip_downloading_lines(output)
                     stderr_content = stderr_buf.decode(errors="replace")
+                    stderr_content = strip_downloading_lines(stderr_content)
 
-                    if len(output) > 10000000:  # e.g., 10MB limit
+                    if len(output) > constants.BASH_TOOL_OUTPUT_MAX_LENGTH:
                         # DevNote: See Issue #31, we move this from a ValueError to a ToolOutPutError
                         logger.warning(
                             f"[Tool] Bash Tool tried to execute a command with large output (Command was {command})"
@@ -169,15 +243,6 @@ class _BashSession:
                             message="command exceeded a healthy output window (10MB)",
                             supplied_arguments=[ArgumentEntry("command", command)],
                         )
-                    # if we read directly from stdout/stderr, it will wait forever for
-                    # EOF. use the StreamReader buffer directly instead.
-                    # output = (
-                    #    self._process.stdout._buffer.decode()  # pyright: ignore[reportAttributeAccessIssue]
-                    # )  # pyright: ignore[reportAttributeAccessIssue]
-                    # if self._sentinel in output:
-                    #    # strip the sentinel and break
-                    #    output = output[: output.index(self._sentinel)]
-                    #    break
             except TimeoutError:
                 self._timed_out = True
                 logger.warning(
@@ -187,6 +252,10 @@ class _BashSession:
                     message=f"timed out: bash has not returned in {self._timeout} seconds and must be restarted",
                     supplied_arguments=[ArgumentEntry("command", command)],
                 )
+            finally:
+                self._timeout = (
+                    constants.BASH_TOOL_DEFAULT_MAX_TIMEOUT
+                )  # TimeOuts might have changed for EOF
             if output.endswith("\n"):
                 output = output[:-1]
             error = stderr_content
@@ -212,12 +281,20 @@ class _BashSession:
         # Possibly: Command outputs can be large / noisy, and exceed the context window.
         # We account for them by optionally shortening them, if configured (See Issue #30)
         output = (
-            fit_message_into_context_window(output)
+            fit_message_into_context_window(
+                output,
+                safety_buffer=constants.BASH_TOOL_MESSAGE_RESPONSE_CONTEXT_LENGTH_BUFFER,
+            )
             if isinstance(output, str)
             else output
         )
         error = (
-            fit_message_into_context_window(error) if isinstance(error, str) else error
+            fit_message_into_context_window(
+                error,
+                safety_buffer=constants.BASH_TOOL_MESSAGE_RESPONSE_CONTEXT_LENGTH_BUFFER,
+            )
+            if isinstance(error, str)
+            else error
         )
 
         return CLIResult(output=output, error=error)
@@ -316,6 +393,20 @@ class BashTool:
             )
             command = 'find . -type d -name ".*" -prune -o ' + command[6:]
 
+        # SWE Tasks might want to pull their patch from github. See Issue #46. Not always, but they might want to.
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles[
+                "swe-bench-block-git-clones"
+            ]
+            and ConfigSingleton.config.task_type == SWEbenchTask
+            and "git clone" in command.lower()
+        ):
+            logger.warning(
+                "[Tool] Bash Tool was called to make a git download in SWE Task! Not Executing and returning specialised ToolErrorInfo about it."
+            )
+            return make_git_clone_warning_errorinfo()
+
         transformed_command = self.command_transformer(command)
         return await self._session.run(transformed_command)
 
@@ -401,7 +492,7 @@ async def _bash_tool(
     # For most calls, this is not a big issue, because the calls will take a while etc.
     # But for some of our agents and tools, it can rapid-fire simple commands (like looking for dependencies, echoing things, etc.)
     # And we'll hit this limit. So, for some agents (Probing Agent, VCS Agent) we add a speed bumper. Also: See Issue #16
-    _PRINT_MAX_LENGTH_IN_LINES: int = 60
+    _PRINT_MAX_LENGTH_IN_LINES: int = 50
 
     if (
         ConfigSingleton.is_initialized()
@@ -425,21 +516,21 @@ async def _bash_tool(
         and ConfigSingleton.config.optimization_toggles["shorten-log-output"]
     ):
         output_by_lines = result.output.splitlines()
-        if len(output_by_lines) > _PRINT_MAX_LENGTH_IN_LINES:
+        if len(output_by_lines) > constants.COMMAND_OUTPUT_MAX_PRINT_CUT_OFF:
             to_log = "\n".join(
-                output_by_lines[: _PRINT_MAX_LENGTH_IN_LINES // 2]
+                output_by_lines[: constants.COMMAND_OUTPUT_MAX_PRINT_CUT_OFF // 2]
                 + [
                     "[[ shortened in log for readability, presented in full for agent ]]"
                 ]
-                + output_by_lines[-(_PRINT_MAX_LENGTH_IN_LINES // 2) :]
+                + output_by_lines[-(constants.COMMAND_OUTPUT_MAX_PRINT_CUT_OFF // 2) :]
             )
         else:
             to_log = result.output
         logger.info(
-            f"[Tool] bash_tool {'shortened' if len(output_by_lines) > _PRINT_MAX_LENGTH_IN_LINES else ''} result: output={to_log}, error={result.error}"
+            f"[Tool] bash_tool {'shortened' if len(output_by_lines) > constants.COMMAND_OUTPUT_MAX_PRINT_CUT_OFF else ''} result: output={to_log}, error={result.error}"
         )
     else:
-        if result.error == "bash has exited with returncode 2":
+        if result.error and result.error == "bash has exited with returncode 2":
             logger.warning(
                 f"[Tool] the provided bash command {command} resulted in a bash-internal timeout (return code 2)"
             )
@@ -448,7 +539,25 @@ async def _bash_tool(
                 message="Your command made the bash session timeout ('bash has exited with returncode 2'), no results could be retrieved and the bash has been restarted.",
                 supplied_arguments=[ArgumentEntry("command", str(command))],
             )
-
+        elif result.error and result.error == "bash has exited with returncode 127":
+            # DevNote: Sometimes the BashTool can reach an un-restorable case after poor commands (merging total commands in stdin). This will be seen by this error code.
+            # See Issue #36 on this. The source is currently unknown, but restarting the bash cannot harm on a normal unknown command.
+            logger.warning(
+                "[Tool] Bashtool has tried to execute an unkown command - restarting it to avoid getting stuck in unknown commands"
+            )
+            await _restart_bash_session_using_config_directory()
+            return ToolErrorInfo(
+                message="Your commands (possibly previous comands) lead to a faulty state in the bash tool. The BashTool has now been restarted. Please revisit your commands, and avoid commands with offset output.",
+                supplied_arguments=[ArgumentEntry("command", command)],
+            )
+        elif result.error and "bash has exited with returncode" in result.error.lower():
+            # DevNote: See the one above, #36 and #42. There can be any exit code, either good (0) or any other (1,100,xxx).
+            # Generate a more generic ToolError Message about it but definetely restart the bash.
+            await _restart_bash_session_using_config_directory()
+            return ToolErrorInfo(
+                message=f"Your commands (possibly previous comands) lead to a an exit in the bash tool {result.error}. The BashTool has now been restarted. Please revisit or retry your commands.",
+                supplied_arguments=[ArgumentEntry("command", command)],
+            )
         else:
             logger.info(
                 f"[Tool] bash_tool result: output={result.output}, error={result.error}"
@@ -465,16 +574,32 @@ async def _restart_bash_session_using_config_directory():
         )
 
     logger.debug("[Tool] Bash Session is being restarted")
+    # discard old session entirely
     _bash_tool_instance._session.stop()
+    _bash_tool_instance._session = _BashSession()
     bash_tool_init_dir: Path | None = (
         ConfigSingleton.config.task_type.get_default_working_dir()
         if ConfigSingleton.is_initialized()
         else None
     )
-    await _bash_tool_instance._session.start(init_dir=str(bash_tool_init_dir))
-    logger.debug(
-        f"[Tool] Successfully restarted Bash Tool. New session starts in {str(bash_tool_init_dir) if bash_tool_init_dir else '<<UNKNOWN>>'}"
+    await _bash_tool_instance._session.start(
+        init_dir=str(bash_tool_init_dir) if bash_tool_init_dir else None
     )
+    logger.debug(
+        f"[Tool] Successfully restarted Bash Tool. New session starts in "
+        f"{str(bash_tool_init_dir) if bash_tool_init_dir else '<<UNKNOWN>>'}"
+    )
+
+
+def make_git_clone_warning_errorinfo() -> ToolErrorInfo:
+    message: str = """
+    You were trying to clone a git repository, which is a invalid and deactivated option. 
+    This is intentionally invalidated by the responsible developers and you should never try to bypass this. 
+
+    If you are in need of a dependency, try different channels (such as package managers) to install them. 
+    If you were trying to access newer files of the same repository, you must instead try to operate only on the files you are given. 
+    """
+    return ToolErrorInfo(message=message)
 
 
 def get_bash_history() -> (

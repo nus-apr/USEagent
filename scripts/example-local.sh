@@ -12,7 +12,7 @@ if [[ "$1" == "--build" ]]; then
     #This will delete the image, but you will loose caching.
     docker image rm -f useagent-turbo:dev 2>/dev/null
   fi
-  DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
+  DOCKER_BUILDKIT=1 docker build --build-arg COMMIT_SHA="$(git rev-parse HEAD)" --ssh default -t useagent-turbo:dev .
 fi
 
 TASK_DESC='write a shell file that prints a vegan tiramisu recipe'
@@ -21,6 +21,9 @@ MODEL_NAME=google-gla:gemini-2.5-flash
 rm -rf ./useagent-turbo-tmp
 mkdir ./useagent-turbo-tmp
 echo "Hi, this is a simple file" > ./useagent-turbo-tmp/README.md
+cd ./useagent-turbo-tmp
+git init && git add . && git commit -m "Initial Commit"
+cd ..
 rm -rf ./useagent-turbo-tmp-out
 mkdir ./useagent-turbo-tmp-out
 

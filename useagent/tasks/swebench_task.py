@@ -9,6 +9,7 @@ from typing import Any
 from datasets import load_dataset
 from loguru import logger
 
+from useagent.config import ConfigSingleton
 from useagent.state.git_repo import GitRepository
 from useagent.tasks.task import Task
 
@@ -63,6 +64,7 @@ class SWEbenchTask(Task):
         self.issue_statement = issue_statement
         self.uid = instance_id
         self._working_dir = working_dir
+        self.gold_patch = meta.get("gold_patch", "")
 
         logger.info(
             f"[Setup] SWE-bench {instance_id}: cloning {self.repo}@{self.base_commit} into {working_dir}"
@@ -74,7 +76,50 @@ class SWEbenchTask(Task):
         logger.info(f"[Setup] Finished setting up {instance_id} into {working_dir}")
 
     def get_issue_statement(self) -> str:
-        return self.issue_statement
+        if (
+            ConfigSingleton.is_initialized()
+            and ConfigSingleton.config.optimization_toggles[
+                "swe-bench-additional-repair-instructions"
+            ]
+        ):
+
+            enriched_issue_statement: str = """
+            You are working on Open Source repositories and received an issue report, marked in its original form between <Issue> tags. 
+            The goal is to produce a patch that will resolve the issue. 
+            The patch must be applicable to the repository as you find it, i.e. it must be a single, fully-sufficient patch and not a combination of patches. 
+            
+            As first steps, you should investigate the projects structure and dependencies. You must ensure a 'workable' state of the project, 
+            i.e. you must be able to run tests and gather feedback on your actions. Do not attempt any changes before you can execute the tests. 
+            Before attempting a repair, find relevant code locations and the most relevant tests. 
+            Aim to verify your changes by identifying (or generating) relevant tests and execute them against your changes. 
+
+            Before finalizing your suggestion, reflect on alternative implementations that could lead to a resolution. 
+            Compare them against your initial attempt and explore them if they seem better. 
+            """
+            enriched_issue_statement += (
+                "\n<Issue>\n" + self.issue_statement + "\n</Issue>\n"
+            )
+
+            enriched_issue_statement += """
+            Additional Notes: 
+            - When revisiting or discarding attempts, pay attention to the git history. Your task is to produce an individual, standalone patch, so you might need to discard changes you have made to the repository. 
+            - Never report a patch for which you have not conducted at least some form of verification
+            - You can assume the issue is verified and can be solved. Never refrain from attempting a repair and never discard the problems mentions in the issue. 
+            - The environment you are starting from is a 'empty' Ubuntu 24.04 instance. You can (and should) make installs necessary to execute the project and its test-suite.
+            - Prefer simple patches over complex changes. Stay close to the project coding standard and to standard pythonic solutions. 
+            - Don't introduce too many code-comments. Keep it short and simple. prefer descriptive names.
+            - Executing the tests is a crucial element of this task, as otherwise you operate 'blind'. Never give up when you see errors during test-execution, and revisit the setup and installations until they are resolved. 
+            - Patch refers to a `git patch`. You have tools that generate and manage git patches for you.
+            - Assume the project must be executable and testable, and that you are capable of installing all necessary dependencies if you use the right commands. Think about where you could find dependencies that appear as missing in error messages. 
+            - You can (and should) use your tools to verify the validity of the patch-format
+            - Patches must target the projects source, and not target derivatives such as python files in virtual environments
+
+            REMEMBER: Running tests for the projects is crucial, and you must bring the project into an executable state to retrieve test results. NEVER suggest a patch that was not evaluated against the test-suite. 
+            """
+
+            return enriched_issue_statement
+        else:
+            return self.issue_statement
 
     def get_working_directory(self) -> Path:
         return self._working_dir
@@ -84,17 +129,17 @@ class SWEbenchTask(Task):
         return _default_working_dir
 
     # --- internals ---
-
     @staticmethod
     def _hf_row_to_meta(row: dict[str, Any]) -> dict[str, str]:
-        repo = row.get("repo") or row.get("repo_name") or row.get("repository") or ""
-        base_commit = row.get("base_commit") or row.get("commit") or ""
+        repo = row.get("repo") or row.get("repository") or ""
+        base_commit = (
+            row.get("base_commit") or row.get("environment_setup_commit") or ""
+        )
         issue_statement = (
             row.get("problem_statement")
-            or row.get("title")
-            or row.get("summary")
             or f"SWE-bench task {row.get('instance_id','')}"
         )
+        gold_patch = row.get("patch") or ""
         if not repo:
             raise ValueError("Dataset row missing repo")
         if not base_commit:
@@ -103,6 +148,7 @@ class SWEbenchTask(Task):
             "repo": repo,
             "base_commit": base_commit,
             "issue_statement": issue_statement,
+            "gold_patch": gold_patch,
         }
 
     @staticmethod
@@ -252,7 +298,7 @@ class SWEbenchTask(Task):
         instance_id: str = self.instance_id
         model_patch: str = result if result is not None else ""
 
-        if model_patch and model_patch.strip():
+        if model_patch.strip():
             logger.info(
                 f"[Task] Postprocessing SWEbench Task {instance_id}, storing a Patch with {len(model_patch)} LoC to {output_dir}/{instance_id}.json"
             )
@@ -261,15 +307,33 @@ class SWEbenchTask(Task):
                 f"[Task] Proprocessing SWEBench Task {instance_id} received an empty result - storing a empty result to {output_dir}/{instance_id}.json"
             )
 
-        entry: dict[str, Any] = {"model_patch": model_patch}
-        entry["model_name_or_path"] = "useagent-turbo-dev"
-
-        predictions: dict[str, Any] = {instance_id: entry}
+        entry: dict[str, Any] = {
+            "instance_id": instance_id,
+            "model_patch": model_patch,
+            "model_name_or_path": "useagent-turbo-dev",
+        }
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        out_path: Path = output_dir / f"{instance_id}.json"
-
-        # UTF-8, no BOM; normalize to '\n' to avoid platform-dependent newlines in the JSON file.
+        out_path: Path = output_dir / "swe_datapoint.json"
         with out_path.open("w", encoding="utf-8", newline="\n") as f:
-            json.dump(predictions, f, ensure_ascii=False)
+            json.dump(entry, f, ensure_ascii=False)
         logger.debug(f"[Task] finished writing SWEbench-Task {instance_id}")
+
+        issue_txt: str = getattr(self, "issue_statement", "")
+        gold_txt: str = getattr(self, "gold_patch", "")
+
+        (output_dir / "original_issue.txt").write_text(
+            issue_txt, encoding="utf-8", newline="\n"
+        )
+        (output_dir / "gold_patch.diff").write_text(
+            gold_txt, encoding="utf-8", newline="\n"
+        )
+
+        if not issue_txt.strip():
+            logger.warning(
+                "[Task] No issue description available; wrote empty original_issue.txt"
+            )
+        if not gold_txt.strip():
+            logger.warning(
+                "[Task] No gold patch available; wrote empty gold_patch.diff"
+            )

@@ -4,13 +4,15 @@ from typing import Union
 from pydantic_ai import Agent
 from pydantic_ai.tools import Tool
 
+import useagent.common.constants as constants
+from useagent.common.context_window import fit_messages_into_context_window
 from useagent.config import AppConfig, ConfigSingleton
 from useagent.microagents.decorators import (
     alias_for_microagents,
     conditional_microagents_triggers,
 )
 from useagent.microagents.management import load_microagents_from_project_dir
-from useagent.pydantic_models.artifacts.git import DiffEntry
+from useagent.pydantic_models.artifacts.git.diff import DiffEntry
 from useagent.pydantic_models.task_state import TaskState
 from useagent.tools.bash import make_bash_tool_for_agent
 from useagent.tools.git import (
@@ -19,7 +21,6 @@ from useagent.tools.git import (
     find_merge_conflicts,
     view_commit_as_diff,
 )
-from useagent.tools.meta import select_diff_from_diff_store, view_task_state
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
@@ -40,20 +41,22 @@ def init_agent(
         instructions=SYSTEM_PROMPT,
         deps_type=TaskState,
         output_type=Union[DiffEntry, str],
-        retries=2,
-        output_retries=5,
+        retries=constants.VCS_AGENT_RETRIES,
+        output_retries=constants.VCS_AGENT_OUTPUT_RETRIES,
         tools=[
             Tool(
-                make_bash_tool_for_agent("VCS", bash_call_delay_in_seconds=0.25),
+                make_bash_tool_for_agent(
+                    "VCS",
+                    bash_call_delay_in_seconds=constants.VCS_AGENT_BASH_TOOL_DELAY,
+                ),
                 max_retries=3,
             ),
             Tool(view_commit_as_diff),
             Tool(find_merge_conflicts),
             Tool(check_for_merge_conflict_markers),
             Tool(extract_diff),
-            Tool(select_diff_from_diff_store, takes_ctx=True, max_retries=3),
-            Tool(view_task_state, takes_ctx=True),
         ],
+        history_processors=[fit_messages_into_context_window],
     )
 
     @agent.instructions

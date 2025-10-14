@@ -1,5 +1,7 @@
 import asyncio
 import json
+import shlex
+import subprocess
 import time
 from pathlib import Path
 
@@ -8,6 +10,8 @@ import pytest
 from useagent.config import ConfigSingleton
 from useagent.pydantic_models.tools.cliresult import CLIResult
 from useagent.pydantic_models.tools.errorinfo import ToolErrorInfo
+from useagent.tasks.local_task import LocalTask
+from useagent.tasks.swebench_task import SWEbenchTask
 from useagent.tools.bash import (
     __reset_bash_tool,
     bash_tool,
@@ -459,6 +463,7 @@ PY
     # DevNote: These do have a result.error, because the syntax is not handled well. But not the observed issue in the experiments
 
 
+@pytest.mark.slow
 @pytest.mark.time_sensitive
 @pytest.mark.regression
 @pytest.mark.tool
@@ -519,7 +524,36 @@ async def test_restart_bash_session_using_config_directory_should_start_in_confi
 @pytest.mark.regression
 @pytest.mark.tool
 @pytest.mark.time_sensitive
-async def test_issue_29_python_here_doc_with_a_raw_string_markershould_execute_without_timeout(
+async def test_issue_29_python_here_doc_with_a_raw_string_markershould_execute_with_timeout(
+    tmp_path: Path, monkeypatch
+):
+    # See Issue 29, the raw string r'\n' becomes '\\n' after encoding, which then fails the EOF marker.
+    # THis one is extra strange, the .strip() makes it timeout ...
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-REG")
+
+    cmd = r"""
+/usr/bin/env python3 - <<'PY'
+import importlib.metadata as m, json
+pkgs = ["pytest","click","httpx","httpcore","openai","uvicorn","attrs","aiohttp","python-dotenv","coverage","jinja2","werkzeug","flit_core","tox","mypy","ruff","pre_commit"]
+out={}
+for p in pkgs:
+  try:
+    out[p]=m.version(p)
+  except Exception:
+    out[p]=None
+print(json.dumps(out))
+PY
+""".strip()
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(tool(cmd), timeout=5)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_issue_29_python_here_doc_with_a_raw_string_markershould_execute_and_give_a_CLIResult(
     tmp_path: Path, monkeypatch
 ):
     # See Issue 29, the raw string r'\n' becomes '\\n' after encoding, which then fails the EOF marker.
@@ -538,10 +572,9 @@ for p in pkgs:
     out[p]=None
 print(json.dumps(out))
 PY
-""".strip()
-
-    with pytest.raises(TimeoutError):
-        await asyncio.wait_for(tool(cmd), timeout=5)
+"""
+    result = await asyncio.wait_for(tool(cmd), timeout=5)
+    assert result and isinstance(result, CLIResult)
 
 
 @pytest.mark.asyncio
@@ -579,7 +612,7 @@ PY\n
 @pytest.mark.regression
 @pytest.mark.tool
 @pytest.mark.time_sensitive
-async def test_issue_29_python_here_doc_with_manual_specified_linebreak_with_raw_string_should_timeout_due_to_encoding(
+async def test_issue_29_python_here_doc_with_manual_specified_linebreak_with_raw_string_should_give_tool_error_due_to_encoding(
     tmp_path: Path, monkeypatch
 ):
     #  Issue 29, the raw string r'PY\n' turns through decode into 'PY\\n' breaking the EOF marker and logic.
@@ -599,8 +632,10 @@ for p in pkgs:
 print(json.dumps(out))
 PY\n
 """
-    with pytest.raises(TimeoutError):
-        await asyncio.wait_for(tool(cmd), timeout=5)
+    result = await asyncio.wait_for(tool(cmd), timeout=5)
+
+    assert isinstance(result, ToolErrorInfo)
+    assert "heredoc" in result.message.lower()
 
 
 @pytest.mark.asyncio
@@ -638,3 +673,696 @@ async def test_output_flood_should_abort_quickly_on_large_stdout(tmp_path: Path)
     result = await tool(cmd)
 
     assert isinstance(result, ToolErrorInfo)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_issue_29_python_here_doc_with_long_command_and_give_a_CLIResult(
+    tmp_path: Path, monkeypatch
+):
+    # See Issue 29, the raw string r'\n' becomes '\\n' after encoding, which then fails the EOF marker.
+    # Seen on 02.09.
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-REG")
+
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["block-long-multiline-commands"] = False
+
+    cmd: str = """
+cat > run_test.sh <<'SCRIPT'
+#!/usr/bin/env bash
+set -vxE
+
+# Non-interactive
+export DEBIAN_FRONTEND=noninteractive
+
+# Update and install common build/test dependencies
+apt-get update -y
+apt-get install -y --no-install-recommends \
+  build-essential git curl wget ca-certificates \
+  python3 python3-venv python3-pip \
+  nodejs npm \
+  default-jdk maven gradle \
+  golang-go cmake cargo pkg-config libssl-dev || true
+
+# Ensure pip tools
+python3 -m pip install --upgrade pip setuptools wheel pytest tox || true
+
+ROOT_DIR="$(pwd)"
+echo "Project root: ${ROOT_DIR}"
+
+# Track overall status
+STATUS=0
+
+# Python: look for indicators and run tests
+if [ -f "requirements.txt" ] || [ -f "pyproject.toml" ] || ls *.py >/dev/null 2>&1; then
+  echo "Detected potential Python project"
+  python3 -m venv .venv || true
+  . .venv/bin/activate || true
+  if [ -f "requirements.txt" ]; then
+    pip install -r requirements.txt || STATUS=1
+  fi
+  # install test tools if pytest present
+  pip install pytest || true
+  # Run pytest if tests directory or files exist
+  if [ -d "tests" ] || ls test_*.py >/dev/null 2>&1 || ls *_test.py >/dev/null 2>&1; then
+    pytest -q || STATUS=1
+  else
+    echo "No pytest tests detected"
+  fi
+  deactivate || true
+fi
+
+# Node.js: package.json -> npm test
+if [ -f "package.json" ]; then
+  echo "Detected Node.js project"
+  npm ci --no-audit --no-fund || STATUS=1
+  if npm test --silent; then
+    echo "npm tests completed"
+  else
+    echo "npm tests failed or not defined"
+    STATUS=1
+  fi
+fi
+
+# Maven: pom.xml
+if [ -f "pom.xml" ]; then
+  echo "Detected Maven project"
+  mvn -B test || STATUS=1
+fi
+
+# Gradle: build.gradle or settings.gradle
+if ls build.gradle* settings.gradle* >/dev/null 2>&1; then
+  echo "Detected Gradle project"
+  # Use Gradle wrapper if present
+  if [ -x ./gradlew ]; then
+    ./gradlew test || STATUS=1
+  else
+    gradle test || STATUS=1
+  fi
+fi
+
+# Go
+if [ -f "go.mod" ] || ls *.go >/dev/null 2>&1; then
+  echo "Detected Go project"
+  go test ./... || STATUS=1
+fi
+
+# Rust
+if [ -f "Cargo.toml" ]; then
+  echo "Detected Rust project"
+  cargo test || STATUS=1
+fi
+
+# C/C++ CMake
+if [ -f "CMakeLists.txt" ]; then
+  echo "Detected CMake project"
+  mkdir -p build && cd build
+  cmake .. || STATUS=1
+  make -j"$(nproc)" || STATUS=1
+  if command -v ctest >/dev/null 2>&1; then
+    ctest --output-on-failure || STATUS=1
+  fi
+  cd "${ROOT_DIR}"
+fi
+
+# If no known project files found, print helpful info
+if ! ( [ -f "requirements.txt" ] || [ -f "pyproject.toml" ] || [ -f "package.json" ] || [ -f "pom.xml" ] || ls build.gradle* settings.gradle* >/dev/null 2>&1 || [ -f "go.mod" ] || [ -f "Cargo.toml" ] || [ -f "CMakeLists.txt" ] ); then
+  echo "No recognized project type files found. Listing top-level files:"
+  ls -la
+fi
+
+exit ${STATUS}
+SCRIPT
+"""
+    result = await asyncio.wait_for(tool(cmd), timeout=15)
+    assert result and isinstance(result, CLIResult)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_block_long_commands_for_the_eof_files(tmp_path: Path, monkeypatch):
+    # Variation: We introduced a flag to filter any long command, this one should be cought by it.
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-REG")
+
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["block-long-multiline-commands"] = True
+
+    cmd: str = """
+cat > run_test.sh <<'SCRIPT'
+#!/usr/bin/env bash
+set -vxE
+
+# Non-interactive
+export DEBIAN_FRONTEND=noninteractive
+
+# Update and install common build/test dependencies
+apt-get update -y
+apt-get install -y --no-install-recommends \
+  build-essential git curl wget ca-certificates \
+  python3 python3-venv python3-pip \
+  nodejs npm \
+  default-jdk maven gradle \
+  golang-go cmake cargo pkg-config libssl-dev || true
+
+# Ensure pip tools
+python3 -m pip install --upgrade pip setuptools wheel pytest tox || true
+
+ROOT_DIR="$(pwd)"
+echo "Project root: ${ROOT_DIR}"
+
+# Track overall status
+STATUS=0
+
+# Python: look for indicators and run tests
+if [ -f "requirements.txt" ] || [ -f "pyproject.toml" ] || ls *.py >/dev/null 2>&1; then
+  echo "Detected potential Python project"
+  python3 -m venv .venv || true
+  . .venv/bin/activate || true
+  if [ -f "requirements.txt" ]; then
+    pip install -r requirements.txt || STATUS=1
+  fi
+  # install test tools if pytest present
+  pip install pytest || true
+  # Run pytest if tests directory or files exist
+  if [ -d "tests" ] || ls test_*.py >/dev/null 2>&1 || ls *_test.py >/dev/null 2>&1; then
+    pytest -q || STATUS=1
+  else
+    echo "No pytest tests detected"
+  fi
+  deactivate || true
+fi
+
+# Node.js: package.json -> npm test
+if [ -f "package.json" ]; then
+  echo "Detected Node.js project"
+  npm ci --no-audit --no-fund || STATUS=1
+  if npm test --silent; then
+    echo "npm tests completed"
+  else
+    echo "npm tests failed or not defined"
+    STATUS=1
+  fi
+fi
+
+# Maven: pom.xml
+if [ -f "pom.xml" ]; then
+  echo "Detected Maven project"
+  mvn -B test || STATUS=1
+fi
+
+# Gradle: build.gradle or settings.gradle
+if ls build.gradle* settings.gradle* >/dev/null 2>&1; then
+  echo "Detected Gradle project"
+  # Use Gradle wrapper if present
+  if [ -x ./gradlew ]; then
+    ./gradlew test || STATUS=1
+  else
+    gradle test || STATUS=1
+  fi
+fi
+
+# Go
+if [ -f "go.mod" ] || ls *.go >/dev/null 2>&1; then
+  echo "Detected Go project"
+  go test ./... || STATUS=1
+fi
+
+# Rust
+if [ -f "Cargo.toml" ]; then
+  echo "Detected Rust project"
+  cargo test || STATUS=1
+fi
+
+# C/C++ CMake
+if [ -f "CMakeLists.txt" ]; then
+  echo "Detected CMake project"
+  mkdir -p build && cd build
+  cmake .. || STATUS=1
+  make -j"$(nproc)" || STATUS=1
+  if command -v ctest >/dev/null 2>&1; then
+    ctest --output-on-failure || STATUS=1
+  fi
+  cd "${ROOT_DIR}"
+fi
+
+# If no known project files found, print helpful info
+if ! ( [ -f "requirements.txt" ] || [ -f "pyproject.toml" ] || [ -f "package.json" ] || [ -f "pom.xml" ] || ls build.gradle* settings.gradle* >/dev/null 2>&1 || [ -f "go.mod" ] || [ -f "Cargo.toml" ] || [ -f "CMakeLists.txt" ] ); then
+  echo "No recognized project type files found. Listing top-level files:"
+  ls -la
+fi
+
+exit ${STATUS}
+SCRIPT
+"""
+    result = await asyncio.wait_for(tool(cmd), timeout=15)
+    assert result and isinstance(result, ToolErrorInfo)
+
+
+@pytest.mark.slow
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_eof_sleep_command_should_timeout(tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"] = True
+
+    tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=0.1)
+    await tool("echo warmup")
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+
+    _bash_tool_instance._session._timeout = 2  # shorter than the sleep below
+
+    cmd = """
+/bin/bash - <<'SH'
+set -e
+sleep 10
+echo done
+SH
+"""
+    result = await tool(cmd)
+
+    assert isinstance(result, ToolErrorInfo)
+    assert "time" in result.message.lower()
+    assert _bash_tool_instance._session._timed_out
+
+
+@pytest.mark.slow
+@pytest.mark.asyncio
+@pytest.mark.regression
+@pytest.mark.tool
+@pytest.mark.time_sensitive
+async def test_eof_sleep_timeout_should_recover_and_reset_session(tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["bash-tool-speed-bumper"] = True
+
+    tool = make_bash_tool_for_agent(bash_call_delay_in_seconds=0.1)
+    await tool("echo warmup")
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+
+    # force short timeout to trigger
+    _bash_tool_instance._session._timeout = 2
+    cmd = """
+/bin/bash - <<'SH'
+set -e
+sleep 10
+echo done
+SH
+"""
+    result = await tool(cmd)
+    assert isinstance(result, ToolErrorInfo)
+    assert _bash_tool_instance._session._timed_out
+
+    # now run a simple hello command, expecting recovery
+    result2 = await tool("echo hello")
+    assert isinstance(result2, CLIResult)
+    assert "hello" in result2.output
+
+    # after restart, timeout should be reset to a sane default (e.g. >100s)
+    assert _bash_tool_instance._session._timeout > 100
+    assert not _bash_tool_instance._session._timed_out
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.regression
+async def test_meson_command_should_fail_with_exit_127_without_timeout(tmp_path: Path):
+    # See Issue 36 - BashTool can bring itself in a continious 127 state
+    # But this seems to be related to async behaviour, as below test shows.
+
+    host_check = subprocess.run(
+        ["bash", "-lc", "meson --version"],
+        capture_output=True,
+        text=True,
+    )
+    if host_check.returncode == 0:
+        pytest.skip("meson is available on the host; skipping test")
+
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-MESON")
+
+    result = await tool("meson --version")
+    result = await tool("meson --version")
+    assert isinstance(result, CLIResult)
+    assert not result.output or result.output.strip() == ""
+    assert isinstance(result.error, str) and "command not found" in result.error
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+    assert not _bash_tool_instance._session._timed_out
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.regression
+async def test_meson_command_should_error_command_not_found_without_timeout(
+    tmp_path: Path,
+):
+    # See Issue 36 - BashTool can bring itself in a continious 127 state
+    import shutil
+    import subprocess
+
+    if (
+        shutil.which("meson")
+        or subprocess.run(
+            ["bash", "-lc", "command -v meson >/dev/null 2>&1"]
+        ).returncode
+        == 0
+    ):
+        pytest.skip("meson is available on the host; skipping")
+
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-MESON")
+
+    result = await tool("meson --version")
+    assert isinstance(result, CLIResult)
+    assert (result.output is None) or (result.output.strip() == "")
+    assert isinstance(result.error, str) and "command not found" in result.error
+
+    import useagent.tools.bash as bash_file
+
+    assert bash_file._bash_tool_instance
+    assert not bash_file._bash_tool_instance._session._timed_out
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.regression
+async def test_meson_command_suppressed_stderr_should_finish_silently(tmp_path: Path):
+    # See Issue 36 - BashTool can bring itself in a continious 127 state
+    import shutil
+    import subprocess
+
+    if (
+        shutil.which("meson")
+        or subprocess.run(
+            ["bash", "-lc", "command -v meson >/dev/null 2>&1"]
+        ).returncode
+        == 0
+    ):
+        pytest.skip("meson is available on the host; skipping")
+
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-MESON")
+
+    result = await tool("meson --version 2>/dev/null")
+    assert isinstance(result, CLIResult)
+    assert result.error is None
+    assert isinstance(result.output, str) and "finished silently" in result.output
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.regression
+async def test_exit_127_should_restart_into_config_dir(tmp_path: Path, monkeypatch):
+    init_bash_tool(str(tmp_path))
+
+    # Ensure Config is initialized so restart uses task_type.get_default_working_dir()
+    from useagent.config import ConfigSingleton
+
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+
+    class _DummyTaskType:
+        def get_default_working_dir(self) -> Path:
+            return tmp_path
+
+    monkeypatch.setattr(
+        ConfigSingleton.config, "task_type", _DummyTaskType(), raising=True
+    )
+
+    tool = make_bash_tool_for_agent("AGENT-EXIT127")
+
+    warmup = await tool("echo warmup")
+    assert isinstance(warmup, CLIResult)
+
+    # Kill the shell with 127
+    _ = await tool("exit 127")
+
+    # First call after exit: wrapper surfaces returncode 127 and restarts
+    first_after = await tool("pwd")
+    assert isinstance(first_after, ToolErrorInfo)
+
+    # Second call: should succeed in restarted session, in tmp_path, and we get CLIResults.
+    second_after = await tool("pwd")
+    assert isinstance(second_after, CLIResult)
+    assert second_after.error is None
+    assert second_after.output.strip() == str(tmp_path)
+
+    import useagent.tools.bash as bash_file
+
+    _bash_tool_instance = bash_file._bash_tool_instance
+    assert _bash_tool_instance
+    assert not _bash_tool_instance._session._timed_out
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+async def test_stop_marks_session_stopped_even_if_proc_already_exited(tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-STOP")
+    await tool("exit 0")
+    import useagent.tools.bash as bash_file
+
+    sess = bash_file._bash_tool_instance._session
+    assert sess and sess._process.returncode is not None
+    sess.stop()
+    assert sess._started is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+async def test_restart_helper_recreates_session_process(tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    await tool("echo warmup")
+    import useagent.tools.bash as bash_file
+
+    s = bash_file._bash_tool_instance._session
+    pid_before = s._process.pid
+    await bash_file._restart_bash_session_using_config_directory()
+    pid_after = bash_file._bash_tool_instance._session._process.pid
+    assert pid_before != pid_after
+
+
+@pytest.mark.time_sensitive
+@pytest.mark.regression
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.timeout(20)  # in s
+async def test_issue_40_observed_timeouting_rg_command(tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    result = await tool(
+        """rg "pytest|tox|nox|ansible-test|setup" -n --hidden --glob '!venv' || true"""
+    )
+
+    assert result
+
+
+@pytest.mark.time_sensitive
+@pytest.mark.regression
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.timeout(20)  # in s
+async def test_issue_40_observed_timeouting_rg_command_variant_2(tmp_path: Path):
+    # Exact 2nd example we observed in logs
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    result = await tool(
+        """rg "pytest|unittest|tox|pdm run|uv run --group test|pytest" -n --hidden --glob '!venv' || true"""
+    )
+
+    assert result
+
+
+@pytest.mark.time_sensitive
+@pytest.mark.regression
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.timeout(20)  # in s
+async def test_issue_40_observed_timeouting_rg_command_without_hidden(
+    tmp_path: Path,
+):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    result = await tool(
+        """rg "pytest|tox|nox|ansible-test|setup" -n --glob '!venv' || true"""
+    )
+
+    assert result
+
+
+@pytest.mark.time_sensitive
+@pytest.mark.regression
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.timeout(20)  # in s
+async def test_issue_40_rg_with_scope_should_finish_fast(tmp_path: Path) -> None:
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    cmd = "rg \"pytest|tox|nox|ansible-test|setup\" -n --glob '!venv' . || true"
+    r = await tool(cmd)
+    assert isinstance(r, CLIResult)
+
+
+@pytest.mark.time_sensitive
+@pytest.mark.regression
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.timeout(20)  # in s
+async def test_issue_40_rg_with_cd_and_scoped_should_finish_fast(
+    tmp_path: Path,
+) -> None:
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-RESTART")
+    cmd = (
+        f"cd {shlex.quote(str(tmp_path))} && "
+        "env -u RIPGREP_CONFIG_PATH rg --no-config "
+        "\"pytest|tox|nox|ansible-test|setup\" -n --glob '!venv' . || true"
+    )
+    r = await tool(cmd)
+    assert isinstance(r, CLIResult)
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.parametrize("code", [0, 1, 100, 127, 110, 141])
+async def test_issue_42_nonzero_exit_should_surface_then_recover(
+    tmp_path: Path, code: int
+):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-EXITCODES")
+
+    # Call 1: Kill the Shell - It will finish successfully and give us a result about finishing silently
+    res1 = await tool(f"exit {code}")
+    print(res1)
+    assert isinstance(res1, CLIResult)
+
+    # Call 2: Will see the stopped shell, print error and restart
+    res2 = await tool("echo hello")
+    assert isinstance(res2, ToolErrorInfo)
+
+    # Call 3: Shell was restarted after Call 2, and is back up and normal again.
+    res3 = await tool("echo hello")
+    assert isinstance(res3, CLIResult)
+    assert "hello" in res3.output
+
+
+@pytest.mark.asyncio
+@pytest.mark.tool
+@pytest.mark.parametrize("code", [0, 1, 100, 127, 110, 141])
+async def test_issue_42_nonzero_exit_wrapped_in_bash_should_surface_then_recover(
+    tmp_path: Path, code: int
+):
+    init_bash_tool(str(tmp_path))
+    tool = make_bash_tool_for_agent("AGENT-EXITCODES")
+
+    res1 = await tool(f"bash -c 'exit {code}'")
+    print(res1)
+    assert isinstance(res1, CLIResult)
+
+    # DevNote: When wrapped in bash, only the sub-sub-process is killed, not our bash.
+    # So we get immediate results, and no need to restart anything.
+    res2 = await tool("echo hello")
+    assert isinstance(res2, CLIResult)
+
+
+@pytest.mark.online
+@pytest.mark.parametrize(
+    "url",
+    [
+        "git@github.com:octocat/Hello-World.git",
+        "https://github.com/octocat/Hello-World.git",
+    ],
+)
+@pytest.mark.asyncio
+async def test_git_clone_blocked_when_swebench_toggle_on(url: str, tmp_path: Path):
+    init_bash_tool(str(tmp_path))
+
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+
+    ConfigSingleton.config.optimization_toggles["swe-bench-block-git-clones"] = True
+    ConfigSingleton.config.task_type = SWEbenchTask
+
+    dest = tmp_path / "repo"
+    cmd = f"git clone {url} {dest}"
+    tool = make_bash_tool_for_agent("AGENT")
+    res = await tool(cmd)
+
+    assert isinstance(res, ToolErrorInfo)
+    assert "clone" in res.message.lower() or "blocked" in res.message.lower()
+
+
+@pytest.mark.online
+@pytest.mark.parametrize(
+    "url",
+    [
+        "git@github.com:octocat/Hello-World.git",
+        "https://github.com/octocat/Hello-World.git",
+    ],
+)
+@pytest.mark.asyncio
+async def test_git_clone_allowed_when_toggle_off_even_for_swebench(
+    url: str, tmp_path: Path
+):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["swe-bench-block-git-clones"] = False
+    ConfigSingleton.config.task_type = SWEbenchTask
+
+    dest = tmp_path / "repo"
+    cmd = f"git clone {url} {dest}"
+    tool = make_bash_tool_for_agent("AGENT")
+    res = await tool(cmd)
+
+    assert not isinstance(res, ToolErrorInfo)
+    # repo should exist if cloning actually ran
+    assert dest.exists() and any(dest.iterdir())
+
+
+@pytest.mark.online
+@pytest.mark.parametrize(
+    "url",
+    [
+        "git@github.com:octocat/Hello-World.git",
+        "https://github.com/octocat/Hello-World.git",
+    ],
+)
+@pytest.mark.asyncio
+async def test_git_clone_allowed_when_local_task_even_if_toggle_on(
+    url: str, tmp_path: Path
+):
+    init_bash_tool(str(tmp_path))
+    ConfigSingleton.init("ollama:llama3.3", provider_url="http://localhost:11434/v1")
+    ConfigSingleton.config.optimization_toggles["swe-bench-block-git-clones"] = True
+    # Local (non-SWEbench) task
+    ConfigSingleton.config.task_type = LocalTask
+
+    tool = make_bash_tool_for_agent("AGENT")
+
+    dest = tmp_path / "repo"
+    cmd = f"git clone {url} {dest}"
+    res = await tool(cmd)
+
+    assert not isinstance(res, ToolErrorInfo)
+    assert dest.exists() and any(dest.iterdir())

@@ -1,6 +1,7 @@
 from pydantic import field_validator
 from pydantic.dataclasses import dataclass
 
+from useagent.pydantic_models.artifacts.git.diff_store import DiffEntryKey
 from useagent.pydantic_models.common.constrained_types import NonEmptyStr
 
 
@@ -9,8 +10,8 @@ class CodeChange:
     explanation: NonEmptyStr
     # DevNote:
     # Initially we had a DiffEntry here, but it was very hard for the Meta-Agent to formulate this dataclass then.
-    # We now use the diff_id and resolve it later.
-    diff_id: NonEmptyStr
+    # We now use the diff_id and resolve it later. (Also see #44 for a rundown of issues)
+    diff_id: DiffEntryKey
     doubts: NonEmptyStr | None
 
     @field_validator("diff_id")
@@ -26,6 +27,8 @@ class CodeChange:
 
         - explanation (Non Empty String): Describe what you have done, why you consider the change sufficient and explain reasons that you have done to explore its validity.
         - diff_id (Non Empty String): the diff_id to identify a git diff code change that you consider fit to solve the task you were given. Should match a pattern of diff_0, diff_1, ... as present in your diff-store. 
-        - doubts (Non Empty String, or None): Optionally, if you think there are any counter arguments to what you have done, or necessary steps missed, or other anomalies, present them here. Keep this based on facts, and do not raise generic doubts.
+        - doubts (Non Empty String, or None): Optionally, if you think there are any counter arguments to what you have done, or necessary steps missed, or other anomalies, present them here. 
+                Keep this based on facts, and do not raise generic doubts. If there are doubts about installations and dependencies, stick to your environment and don't extrapolate to possible different environments.
+                When describing your doubts, do not use any references or links to previous messages - describe all elements, their locations, etc. as if to a person that sees this conversation and artifact from a blank slate. 
 
         """
