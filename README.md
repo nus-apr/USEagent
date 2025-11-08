@@ -1,114 +1,33 @@
+# USEAgent
+
 ## Set up
 
-[Install UV](https://docs.astral.sh/uv/getting-started/installation/)
+It is **strongly recommended not to run USEagent outside of docker containers**, prefer to start a USEAgent Container and mount relevant files in as a copy.
 
-### Without USEBench (Default)
-```shell
-# install base dependencies
-uv sync
-```
-
-### With USEBench Enabled
-```shell
-# install dependencies including usebench
-uv sync --extra usebench
-
-# set environment variable to enable USEBench
-export USEBENCH_ENABLED=true
-
-# usebench migration (you can specify a place to store the dataset)
-uv run usebench-migration ./data
-```
-
-*Note*: USEBench is optional and disabled by default. When running in Docker, USEBench is enabled by default but can be disabled with `--build-arg USEBENCH_ENABLED=false`. USEBench is used to provide docker-images and texts - its docker-using APIs are not used.
-The full work will be done on-top of the buggy usebench image.
-
-## Docker
-
-((the ssh key is necessary for now, due to usebench being private))
-Build image with just the agent:
+Build **docker image** with just the agent:
 
 ```shell
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_ed25519
-
-# with USEBench enabled (default)
-DOCKER_BUILDKIT=1 docker build --ssh default -t useagent-turbo:dev .
-
-# without USEBench
 DOCKER_BUILDKIT=1 docker build --build-arg USEBENCH_ENABLED=false -t useagent-turbo:dev .
 ```
 
-Build image on top of existing image (useful when running on benchmarks):
+Build image on top of existing image (useful when running on benchmarks, example script assumes you have a `my.project.to_work_on` image):
 
 ```shell
-DOCKER_BUILDKIT=1 docker build --build-arg BASE_IMAGE=usebench.sweb.eval.x86_64.django__django-10914 --ssh default -t useagent-turbo:dev .
+DOCKER_BUILDKIT=1 docker build --build-arg BASE_IMAGE=my.project.to_work_on --ssh default -t useagent-turbo:dev .
 ```
 
+For working on USEBench, see [notes on usebench](./resources/USEBench-Instructions.md).
+If you are in a sufficiently containerized environment, you may want to use USEagent directly:
 
-### Development setup
-
-Install app + dev dependencies:
+[Install UV](https://docs.astral.sh/uv/getting-started/installation/)
 
 ```shell
-uv sync --extra dev
+uv sync
+uv build
+uv run <<args>>
 ```
 
-If you want to add a new optional development dependency, do:
-
-```shell
-uv add --optional dev <package>
-```
-
-#### Before commiting changes
-
-Install pre-commit hooks:
-
-```shell
-uv run pre-commit install
-```
-
-The pre-commit hooks will run before any commit is made.
-Please make sure there is no pre-commit errors before code is pushed.
-
-You can also run the pre-commit hooks manually with:
-
-```shell
-uv run pre-commit run --all-files
-```
-
-
-
-## Run
-
-Start a container:
-
-### USEBENCH
-
-*Note*: The `usebench` subcommand requires USEBench to be enabled. If disabled, it will provide instructions on how to enable it.
-
-```shell
-docker run -it --name useagent-turbo-test useagent-turbo:dev
-```
-
-Run agent in the container. Assuming at path `/useagent`:
-
-```shell
-export GEMINI_API_KEY=...
-PYTHONPATH=. useagent usebench --model google-gla:gemini-2.0-flash --task-id swe_django__django-10914 --output-dir /output
-```
-
-```shell
-export OPENAI_API_KEY=...
-PYTHONPATH=. useagent usebench --model openai:gpt-4o --task-id swe_django__django-10914 --output-dir /output
-```
-
-Cleanup:
-```shell
-docker rm useagent-turbo-test && docker image rm useagent-turbo:dev
-```
-
-### LOCAL
+## Run LOCAL
 
 Example run in a (fresh) local folder:
 
@@ -124,7 +43,9 @@ docker run --rm \
   useagent local --model google-gla:gemini-2.0-flash --task-description 'write a shell file that prints a vegan tiramisu recipe' --output-dir /output --project-directory /input"
 ```
 
-### Github
+Inside the docker container, there will be a working-copy of your project created, so any files you mount in are *safe* and will remain unchanged.
+
+## Run on Github Repository
 
 Example will checkout the repository:
 
@@ -138,7 +59,13 @@ docker run --rm \
   useagent github --model google-gla:gemini-2.0-flash --task-description 'write a shell file that prints a vegan tiramisu recipe' --repo-url https://github.com/octocat/Hello-World.git --output-dir /output"
 ```
 
-### CONFIGURATION
+## Run Other / Examples
+
+There are more [example scripts](./scripts/) as well as [scripts to run on benchmarks](./scripts/experiments/).
+
+They assume that the correct key (see below) are in a `.env` file and available in the runtime.
+
+## CONFIGURATION
 
 **Supported `--model`s:**
 
@@ -150,33 +77,24 @@ docker run --rm \
 
 See more [at pydantic API Documentation](https://ai.pydantic.dev/models/)
 
-**Locally Hosted OLLama** _(assuming there is one running)_,
-see more examples [at the pydantic OpenAI documentation](https://ai.pydantic.dev/models/openai/)
-
-```shell
-docker run -it --network=host --name useagent-turbo-test useagent-turbo:dev
-```
-
-*Linux*
-```shell
-PYTHONPATH=. uv run useagent usebench --model llama3.3:70b  --provider-url http://localhost:11434/v1 --task-id swe_django__django-10914 --output-dir /output
-```
-*Macos*
-```shell
-PYTHONPATH=. uv run useagent usebench --model llama3.2 --provider-url http://host.docker.internal:11434 --task-id swe_django__django-10914 --output-dir /output
-```
-
-*Note:* 
-You can also `uv build` and `uv run` this project - this is not recommended and meant to be used in and for the docker images. 
-
-## Tests
-
-```shell
-uv sync --extra dev
-uv run python -m pytest tests
-```
-
 ## Licence / Terms of Agreement
 
-We provide a local copy of the `gemma-3-4b-it` model, which comes with a [terms of usage](./useagent/common/tokenizers/gemma-3-4b-it/TERMS_OF_USAGE.md). 
-Any usage or distribution must comply with them. 
+Code within this project follows the [Apache 2.0 License](./LICENSE).
+
+We further provide a local copy of the `gemma-3-4b-it` model, which comes with [terms of usage](./useagent/common/tokenizers/gemma-3-4b-it/TERMS_OF_USAGE.md).
+Any usage or distribution must comply with them.
+
+## Sources & Citation
+
+A preprint is [available on arxiv](https://arxiv.org/abs/2506.14683).
+
+For now, to cite please use:
+
+```
+@article{applis2025unified,
+  title={Unified Software Engineering agent as AI Software Engineer},
+  author={Applis, Leonhard and Zhang, Yuntong and Liang, Shanchao and Jiang, Nan and Tan, Lin and Roychoudhury, Abhik},
+  journal={arXiv preprint arXiv:2506.14683},
+  year={2025}
+}
+```
