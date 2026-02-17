@@ -50,7 +50,7 @@ def test_initialization_with_whitespace_string_gives_error():
 async def test_using_tool_without_initialization_throws_assertion_error(tmp_path):
     file = tmp_path / "new_file.txt"
     content = "This is a new file."
-    with pytest.raises(AssertionError):
+    with pytest.raises(RuntimeError):
         await create(str(file), content)
 
 
@@ -63,5 +63,5 @@ async def test_using_tool_without_initialization_throws_assertion_error_explicit
     __reset_project_dir()
     file = tmp_path / "new_file.txt"
     content = "This is a new file."
-    with pytest.raises(AssertionError):
+    with pytest.raises(RuntimeError):
         await create(str(file), content)

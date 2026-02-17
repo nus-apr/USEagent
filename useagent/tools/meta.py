@@ -393,16 +393,15 @@ async def vcs(
         usage_limits=UsageLimits(request_limit=constants.VCS_AGENT_REQUEST_LIMIT),
     )
 
-    match vcs_result.output:
-        case vcs_result.output.startswith("diff_"):
-            diff_key: DiffEntryKey = vcs_result.output
-            logger.info(f"[MetaAgent] vcs_agent diff-key result: {diff_key}")
-        case str():
-            logger.info(
-                f"[MetaAgent] VCS-agent returned a string-response: {vcs_result.output}"
-            )
-        case None:
-            logger.info("[MetaAgent] VCS-agent returned `None`")
+    if isinstance(vcs_result.output, str) and vcs_result.output.startswith("diff_"):
+        diff_key: DiffEntryKey = vcs_result.output
+        logger.info(f"[MetaAgent] vcs_agent diff-key result: {diff_key}")
+    elif isinstance(vcs_result.output, str):
+        logger.info(
+            f"[MetaAgent] VCS-agent returned a string-response: {vcs_result.output}"
+        )
+    elif vcs_result.output is None:
+        logger.info("[MetaAgent] VCS-agent returned `None`")
     USAGE_TRACKER.add(vcs_agent.name, vcs_result.usage())
     return vcs_result.output
 

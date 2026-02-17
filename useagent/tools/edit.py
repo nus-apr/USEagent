@@ -30,7 +30,8 @@ def init_edit_tools(project_dir: str):
 
 
 def _make_path_absolute(path: str) -> Path:
-    assert _project_dir is not None, "Project directory must be initialized first."
+    if _project_dir is None:
+        raise RuntimeError("Project directory must be initialized first.")
     if os.path.isabs(path):
         return Path(path)
     return _project_dir / path
@@ -46,7 +47,7 @@ def _read_file(path: Path) -> str | ToolErrorInfo:
         )
 
 
-def _write_file(path: Path, file: str):
+def _write_file(path: Path, file: str) -> ToolErrorInfo | None:
     try:
         path.write_text(file)
     except Exception as e:
@@ -61,7 +62,7 @@ def _make_output(
     file_descriptor: str,
     init_line: int = 1,
     expand_tabs: bool = True,
-):
+) -> str:
     file_content = maybe_truncate(file_content)
     if expand_tabs:
         file_content = file_content.expandtabs()
@@ -227,7 +228,9 @@ async def create(file_path: str, file_text: str) -> CLIResult | ToolErrorInfo:
             supplied_arguments=supplied_arguments,
         )
 
-    _write_file(path, file_text)
+    write_err = _write_file(path, file_text)
+    if write_err is not None:
+        return write_err
     if not path.exists():
         logger.error(f"[Tool] Creating File at {path} failed")
     else:
@@ -313,7 +316,9 @@ async def str_replace(file_path: str, old_str: str, new_str: str):
 
     new_file_content = file_content.replace(old_str, new_str)
 
-    _write_file(path, new_file_content)
+    write_err = _write_file(path, new_file_content)
+    if write_err is not None:
+        return write_err
 
     replacement_line = file_content.split(old_str)[0].count("\n")
     start_line = max(0, replacement_line - SNIPPET_LINES)
@@ -410,8 +415,8 @@ def replace_file(file_content: str, file_path: str | Path) -> CLIResult | ToolEr
             try:
                 if tmp_path.exists():
                     tmp_path.unlink(missing_ok=True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[Tool] Failed to clean up temp file {tmp_path}: {e}")
             return ToolErrorInfo(
                 message=_write_err.message,
                 supplied_arguments=supplied_arguments,
@@ -427,8 +432,10 @@ def replace_file(file_content: str, file_path: str | Path) -> CLIResult | ToolEr
             try:
                 if tmp_path.exists():
                     tmp_path.unlink(missing_ok=True)
-            except Exception:
-                pass
+            except Exception as cleanup_err:
+                logger.debug(
+                    f"[Tool] Failed to clean up temp file {tmp_path}: {cleanup_err}"
+                )
             return ToolErrorInfo(
                 message=f"Failed to replace file atomically: {e}",
                 supplied_arguments=supplied_arguments,
@@ -526,7 +533,9 @@ async def insert(
     new_file_text = "\n".join(new_file_text_lines)
     snippet = "\n".join(snippet_lines)
 
-    _write_file(path, new_file_text)
+    write_err = _write_file(path, new_file_text)
+    if write_err is not None:
+        return write_err
 
     success_msg = f"The file {path} has been edited. "
     success_msg += _make_output(

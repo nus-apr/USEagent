@@ -150,9 +150,12 @@ class _BashSession:
                 return guard_rail_tool_error
 
             # we know these are not None because we created the process with PIPEs
-            assert self._process.stdin
-            assert self._process.stdout
-            assert self._process.stderr
+            if not self._process.stdin:
+                raise RuntimeError("Process stdin is unexpectedly None.")
+            if not self._process.stdout:
+                raise RuntimeError("Process stdout is unexpectedly None.")
+            if not self._process.stderr:
+                raise RuntimeError("Process stderr is unexpectedly None.")
 
             if (
                 ConfigSingleton.is_initialized()
@@ -452,7 +455,8 @@ def make_bash_tool_for_agent(
             CLIResult: The result of the command execution.
         """
         logger.info(f"[{agent_name} - Tool] Invoked bash_tool with command: {command}")
-        assert _bash_tool_instance is not None, "bash_tool_instance is not initialized."
+        if _bash_tool_instance is None:
+            raise RuntimeError("bash_tool_instance is not initialized.")
         try:
             # DevNote:
             # It might be possible to have a `restart bash tool`, but to be honest why would you ever not want to restart it?
@@ -486,7 +490,8 @@ bash_tool: Callable[[NonEmptyStr], Awaitable[CLIResult | ToolErrorInfo]] = (
 async def _bash_tool(
     command: NonEmptyStr, delay_in_seconds: float = 0.0
 ) -> CLIResult | ToolErrorInfo:
-    assert _bash_tool_instance, "Bash Tool Instance was not set!"
+    if not _bash_tool_instance:
+        raise RuntimeError("Bash Tool Instance was not set!")
     # DevNote:
     # Depending on your Provider and Account, there might be a limit on how many requests you can send to the model per second / minute.
     # For most calls, this is not a big issue, because the calls will take a while etc.

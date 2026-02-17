@@ -24,7 +24,7 @@ def test_init_sets_instance():
 @pytest.mark.tool
 async def test_using_tool_without_initialization_raises_assertion(tmp_path):
     __reset_bash_tool()
-    with pytest.raises(AssertionError):
+    with pytest.raises(RuntimeError):
         await bash_tool("echo hello")
 
 

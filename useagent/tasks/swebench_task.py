@@ -176,13 +176,18 @@ class SWEbenchTask(Task):
                     )
                     if row:
                         break
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        f"[Setup] Failed to load split '{s}' from {dataset}: {e}"
+                    )
         if row is None:
             raise ValueError(
                 f"[Setup] Instance {instance_id} not found in {dataset}/{split}"
             )
         return self._hf_row_to_meta(row)  # type: ignore[arg-type]
+
+    def _run_git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", "-C", str(self._working_dir), *args], check=check)
 
     def _materialize_repo(self) -> None:
         if self._working_dir.exists():
@@ -200,66 +205,23 @@ class SWEbenchTask(Task):
         # create a local branch at that commit. No remote branches are fetched,
         # so no newer commits are present.
         subprocess.run(["git", "init", str(self._working_dir)], check=True)
-        subprocess.run(
-            ["git", "-C", str(self._working_dir), "remote", "add", "origin", repo_url],
-            check=True,
-        )
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(self._working_dir),
-                "fetch",
-                "--no-tags",
-                "--prune",
-                "origin",
-                self.base_commit,
-            ],
-            check=True,
-        )
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(self._working_dir),
-                "checkout",
-                "-B",
-                self._default_branch_name,
-                self.base_commit,
-            ],
-            check=True,
-        )
+        self._run_git("remote", "add", "origin", repo_url)
+        self._run_git("fetch", "--no-tags", "--prune", "origin", self.base_commit)
+        self._run_git("checkout", "-B", self._default_branch_name, self.base_commit)
         # Ensure the branch is local-only (no upstream), avoiding accidental pulls of newer commits.
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(self._working_dir),
-                "config",
-                f"branch.{self._default_branch_name}.remote",
-            ],
+        self._run_git(
+            "config", f"branch.{self._default_branch_name}.remote", check=False
+        )
+        self._run_git(
+            "config",
+            "--unset",
+            f"branch.{self._default_branch_name}.remote",
             check=False,
         )
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(self._working_dir),
-                "config",
-                "--unset",
-                f"branch.{self._default_branch_name}.remote",
-            ],
-            check=False,
-        )
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(self._working_dir),
-                "config",
-                "--unset",
-                f"branch.{self._default_branch_name}.merge",
-            ],
+        self._run_git(
+            "config",
+            "--unset",
+            f"branch.{self._default_branch_name}.merge",
             check=False,
         )
 
@@ -278,7 +240,8 @@ class SWEbenchTask(Task):
             seen.add(s)
             try:
                 ds = load_dataset(dataset, split=s)
-            except Exception:
+            except Exception as e:
+                logger.debug(f"[Setup] Failed to load split '{s}' from {dataset}: {e}")
                 continue
             if any(r.get("instance_id") == instance_id for r in ds):  # type: ignore
                 return

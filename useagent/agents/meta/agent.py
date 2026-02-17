@@ -47,6 +47,15 @@ from useagent.tools.meta import (  # Agent-State Tools; Agent-Agent Tools
 
 SYSTEM_PROMPT = (Path(__file__).parent / "system_prompt.md").read_text()
 
+_NO_DOUBT_PREFIXES = {"none", "no", "n/a", "no doubt", "no doubts"}
+
+
+def _has_real_doubts(doubts: str | None) -> bool:
+    if not doubts:
+        return False
+    cleaned = doubts.strip().rstrip(".").lower()
+    return cleaned not in _NO_DOUBT_PREFIXES
+
 
 @conditional_microagents_triggers(load_microagents_from_project_dir())
 @alias_for_microagents("META")
@@ -56,7 +65,10 @@ def init_agent(
 ) -> Agent[TaskState, CodeChange | Answer]:
     if config is None:
         config = ConfigSingleton.config
-    assert config is not None
+    if config is None:
+        raise RuntimeError(
+            "AppConfig must not be None when initializing the meta agent."
+        )
 
     meta_agent = Agent(
         config.model,
@@ -171,10 +183,7 @@ def agent_loop(
             DOUBT_REITERATION < constants.MAX_DOUBT_REITERATIONS
             and result.output
             and result.output.doubts
-            and result.output.doubts.lower() != "none"
-            and result.output.doubts.lower() != "none."
-            and result.output.doubts.lower() != "no"
-            and result.output.doubts.lower() != "no."
+            and _has_real_doubts(result.output.doubts)
         ):
             try:
                 # TODO: store the result? To have something in case of timeout?
